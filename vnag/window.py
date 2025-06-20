@@ -1,4 +1,5 @@
 from typing import cast
+import markdown
 
 from PySide6 import QtWidgets, QtGui, QtCore
 
@@ -74,6 +75,34 @@ class MainWindow(QtWidgets.QMainWindow):
         central_widget.setLayout(vbox)
         self.setCentralWidget(central_widget)
 
+    def append_message(self, role: str, content: str) -> None:
+        """在会话历史组件中添加消息"""
+        self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
+
+        if role == "user":
+            # 用户内容不需要被渲染
+            escaped_content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+
+            html = f"""
+            <p><b>👤 User:</b></p>
+            <div style="padding: 10px;">{escaped_content}</div>
+            <br>
+            """
+            self.history_widget.insertHtml(html)
+        elif role == "assistant":
+            # AI返回内容以Markdown渲染
+            html_content = markdown.markdown(content, extensions=['fenced_code', 'codehilite'])
+
+            html = f"""
+            <p><b>🤖 Assistant:</b></p>
+            {html_content}
+            <br>
+            """
+            self.history_widget.insertHtml(html)
+
+        # 确保滚动条滚动到最新消息
+        self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
+
     def init_menu(self) -> None:
         """初始化菜单"""
         menu_bar: QtWidgets.QMenuBar = self.menuBar()
@@ -86,7 +115,6 @@ class MainWindow(QtWidgets.QMainWindow):
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
         help_menu.addAction("关于", self.show_about)
-
 
     def connect_gateway(self) -> None:
         """连接网关"""
@@ -106,26 +134,25 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def send_message(self) -> None:
         """发送消息"""
-        text: str = self.input_widget.toPlainText()
+        text: str = self.input_widget.toPlainText().strip()
+        if not text:
+            return
         self.input_widget.clear()
 
-        self.chat_history.append({
-            "role": "user",
-            "content": text
-        })
+        user_message: dict[str, str] = {"role": "user", "content": text}
+        self.chat_history.append(user_message)
+        self.append_message("user", text)
 
-        self.history_widget.append("--------------------------------")
-        self.history_widget.append(text)
+        self.status_label.setText("AI服务正在思考中...")
+        QtWidgets.QApplication.processEvents()
 
         content: str | None = self.gateway.invoke_model(self.chat_history)
-        if content:
-            self.history_widget.append("--------------------------------")
-            self.history_widget.append(content)
 
-            self.chat_history.append({
-                "role": "assistant",
-                "content": content
-            })
+        self.status_label.setText("AI服务连接已完成初始化")
+
+        if content:
+            self.chat_history.append({"role": "assistant", "content": content})
+            self.append_message("assistant", content)
 
         self.save_history()
 
@@ -140,9 +167,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if chat_history:
             self.chat_history = chat_history
 
+        self.history_widget.clear()
         for message in self.chat_history:
-            self.history_widget.append("--------------------------------")
-            self.history_widget.append(message["content"])
+            self.append_message(message["role"], message["content"])
 
     def clear_history(self) -> None:
         """清空会话历史"""

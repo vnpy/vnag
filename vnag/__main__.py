@@ -16,7 +16,7 @@ def create_qapp() -> QtWidgets.QApplication:
     qapp.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyside6"))
 
     # 设置字体
-    font: QtGui.QFont = QtGui.QFont("微软雅黑", 12)
+    font: QtGui.QFont = QtGui.QFont("微软雅黑", 13)
     qapp.setFont(font)
 
     # 设置图标
