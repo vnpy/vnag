@@ -15,6 +15,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.gateway: AgentGateway = AgentGateway()
 
+        self.chat_history: list[dict[str, str]] = []
+
         self.init_ui()
 
     def init_ui(self) -> None:
@@ -31,10 +33,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.history_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.history_widget.setReadOnly(True)
 
-        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送")
+        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送请求")
         self.send_button.clicked.connect(self.send_message)
         self.send_button.setFixedWidth(300)
         self.send_button.setFixedHeight(50)
+
+        self.clear_button: QtWidgets.QPushButton = QtWidgets.QPushButton("清空历史")
+        self.clear_button.clicked.connect(self.clear_history)
+        self.clear_button.setFixedWidth(300)
+        self.clear_button.setFixedHeight(50)
 
         hbox1 = QtWidgets.QHBoxLayout()
         hbox1.addWidget(QtWidgets.QLabel("会话历史"))
@@ -45,6 +52,7 @@ class MainWindow(QtWidgets.QMainWindow):
         hbox2.addStretch()
 
         hbox3 = QtWidgets.QHBoxLayout()
+        hbox3.addWidget(self.clear_button)
         hbox3.addStretch()
         hbox3.addWidget(self.send_button)
 
@@ -71,7 +79,7 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog: ConnectionDialog = ConnectionDialog()
         n: int = dialog.exec_()
 
-        if n != dialog.Accepted:
+        if n != dialog.DialogCode.Accepted:
             return
 
         self.gateway.init(
@@ -85,17 +93,35 @@ class MainWindow(QtWidgets.QMainWindow):
         text: str = self.input_widget.toPlainText()
         self.input_widget.clear()
 
+        self.chat_history.append({
+            "role": "user",
+            "content": text
+        })
+
         self.history_widget.append("--------------------------------")
         self.history_widget.append(text)
 
-        messages: list[dict[str, str]] = [
-            {"role": "user", "content": text}
-        ]
-
-        content: str | None = self.gateway.invoke_model(messages)
+        content: str | None = self.gateway.invoke_model(self.chat_history)
         if content:
             self.history_widget.append("--------------------------------")
             self.history_widget.append(content)
+
+            self.chat_history.append({
+                "role": "assistant",
+                "content": content
+            })
+
+    def clear_history(self) -> None:
+        """清空会话历史"""
+        qmessage: QtWidgets.QMessageBox = QtWidgets.QMessageBox.question(
+            self,
+            "清空历史",
+            "确定要清空历史吗？",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        )
+        if qmessage == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.chat_history.clear()
+            self.history_widget.clear()
 
 
 class ConnectionDialog(QtWidgets.QDialog):
