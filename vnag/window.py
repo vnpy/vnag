@@ -1,6 +1,6 @@
 from typing import cast
 
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtGui, QtCore
 
 from .gateway import AgentGateway
 from .utility import load_json, save_json, AGENT_DIR
@@ -45,6 +45,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clear_button.setFixedWidth(300)
         self.clear_button.setFixedHeight(50)
 
+        self.status_label: QtWidgets.QLabel = QtWidgets.QLabel("尚未初始化AI服务连接")
+        self.status_label.setFixedWidth(300)
+
         hbox1 = QtWidgets.QHBoxLayout()
         hbox1.addWidget(QtWidgets.QLabel("会话历史"))
         hbox1.addStretch()
@@ -55,6 +58,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         hbox3 = QtWidgets.QHBoxLayout()
         hbox3.addWidget(self.clear_button)
+        hbox3.addStretch()
+        hbox3.addWidget(self.status_label)
         hbox3.addStretch()
         hbox3.addWidget(self.send_button)
 
@@ -75,6 +80,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         sys_menu: QtWidgets.QMenu = menu_bar.addMenu("系统")
         sys_menu.addAction("连接", self.connect_gateway)
+        sys_menu.addSeparator()
+        sys_menu.addAction("退出", self.close)
+
+        help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
+        help_menu.addAction("官网", self.open_website)
+        help_menu.addAction("关于", self.show_about)
+
 
     def connect_gateway(self) -> None:
         """连接网关"""
@@ -89,6 +101,8 @@ class MainWindow(QtWidgets.QMainWindow):
             api_key=dialog.api_key,
             model_name=dialog.model_name
         )
+
+        self.status_label.setText("AI服务连接已完成初始化")
 
     def send_message(self) -> None:
         """发送消息"""
@@ -144,6 +158,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
             self.chat_history.clear()
             self.save_history()
+
+    def show_about(self) -> None:
+        """显示关于"""
+        QtWidgets.QMessageBox.information(
+            self,
+            "关于",
+            (
+                "VeighNa Agent\n"
+                "\n"
+                f"版本号：{__version__}\n"
+                "\n"
+                f"运行目录：{AGENT_DIR}"
+            )
+        )
+
+    def open_website(self) -> None:
+        """打开官网"""
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://www.github.com/vnpy/vnag"))
 
 
 class ConnectionDialog(QtWidgets.QDialog):
