@@ -1,5 +1,6 @@
-from PySide6 import QtWidgets
+from typing import cast
 
+from PySide6 import QtWidgets
 
 from .gateway import AgentGateway
 from .utility import load_json, save_json, AGENT_DIR
@@ -18,6 +19,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.chat_history: list[dict[str, str]] = []
 
         self.init_ui()
+        self.load_history()
 
     def init_ui(self) -> None:
         """初始化UI"""
@@ -111,17 +113,37 @@ class MainWindow(QtWidgets.QMainWindow):
                 "content": content
             })
 
+        self.save_history()
+
+    def save_history(self) -> None:
+        """保存会话历史"""
+        save_json("chat_history.json", self.chat_history)
+
+    def load_history(self) -> None:
+        """加载会话历史"""
+        chat_history: list[dict[str, str]] | None = cast(list[dict[str, str]], load_json("chat_history.json"))
+
+        if chat_history:
+            self.chat_history = chat_history
+
+        for message in self.chat_history:
+            self.history_widget.append("--------------------------------")
+            self.history_widget.append(message["content"])
+
     def clear_history(self) -> None:
         """清空会话历史"""
-        qmessage: QtWidgets.QMessageBox = QtWidgets.QMessageBox.question(
+        i: int = QtWidgets.QMessageBox.question(
             self,
             "清空历史",
             "确定要清空历史吗？",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
-        if qmessage == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.chat_history.clear()
+
+        if i == QtWidgets.QMessageBox.StandardButton.Yes:
             self.history_widget.clear()
+
+            self.chat_history.clear()
+            self.save_history()
 
 
 class ConnectionDialog(QtWidgets.QDialog):
