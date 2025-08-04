@@ -41,9 +41,9 @@ class AgentGateway:
         self.load_history()
 
     def invoke_model(
-        self, 
-        messages: list[dict[str, str]], 
-        use_rag: bool = False, 
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool = False,
         user_files: list[str] | None = None
     ) -> str | None:
         """统一模型调用接口（向后兼容 + 新功能）"""
@@ -77,9 +77,9 @@ class AgentGateway:
         return completion.choices[0].message.content
 
     def invoke_streaming(
-        self, 
-        messages: list[dict[str, str]], 
-        use_rag: bool = False, 
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool = False,
         user_files: list[str] | None = None
     ) -> Generator[str, None, None] | None:
         """统一流式调用接口"""
@@ -89,7 +89,7 @@ class AgentGateway:
         if not self.model_name:
             return None
 
-        # 预处理消息  
+        # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
 
         # 直接从配置文件读取设置
@@ -115,7 +115,12 @@ class AgentGateway:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
-    def send_message(self, message: str, use_rag: bool = True, user_files: list[str] | None = None) -> str | None:
+    def send_message(
+        self, 
+        message: str, 
+        use_rag: bool = True, 
+        user_files: list[str] | None = None
+    ) -> str | None:
         """发送消息并获取回复（框架核心接口）"""
         if not message.strip():
             return None
@@ -155,7 +160,6 @@ class AgentGateway:
         """加载对话历史"""
         if self._session_manager:
             self.chat_history = self._session_manager.load_session()
-
 
     def new_session(self) -> str:
         """创建新会话"""
@@ -200,9 +204,9 @@ class AgentGateway:
         self._session_manager = SessionManager()
 
     def _prepare_messages(
-        self, 
-        messages: list[dict[str, str]], 
-        use_rag: bool, 
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool,
         user_files: list[str] | None
     ) -> list[dict[str, str]]:
         """内部方法：预处理消息"""

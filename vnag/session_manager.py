@@ -71,7 +71,10 @@ class SessionManager:
         messages = self.messages_table.search(Query().session_id == self.current_session_id)
         messages.sort(key=lambda x: x['timestamp'])
         
-        return [{'role': msg['role'], 'content': msg['content']} for msg in messages]
+        return [
+            {'role': msg['role'], 'content': msg['content']} 
+            for msg in messages
+        ]
 
     def get_all_sessions(self) -> list[dict]:
         """获取所有未删除的会话"""
@@ -149,18 +152,23 @@ class SessionManager:
             'updated_at': datetime.now().isoformat()
         }, Session.id == session_id)
         
-        
-    def load_session(self, session_id: str | None = None) -> list[dict[str, str]]:
+    def load_session(
+        self, 
+        session_id: str | None = None
+    ) -> list[dict[str, str]]:
         """加载会话历史（gateway接口）"""
         target_session_id = session_id or self.get_current_session_id()
         
         messages = self.messages_table.search(Query().session_id == target_session_id)
         messages.sort(key=lambda x: x['timestamp'])
         
-        chat_history = [{'role': msg['role'], 'content': msg['content']} for msg in messages]
+        chat_history = [
+            {'role': msg['role'], 'content': msg['content']} 
+            for msg in messages
+        ]
         
         return chat_history
-        
+    
     def _ensure_current_session(self) -> None:
         """确保有当前会话"""
         if not self.current_session_id:

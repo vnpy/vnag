@@ -1,7 +1,7 @@
-from typing import Generator
+from collections.abc import Generator
+from pathlib import Path
 
 from .document_service import DocumentService
-from .gateway import AgentGateway
 from .vector_service import VectorService
 
 
@@ -31,10 +31,10 @@ class RAGService:
         from .utility import AGENT_DIR
         # docs目录应该与.vnag目录同级
         docs_dir = AGENT_DIR.parent / "docs"
-        
+
         if not docs_dir.exists():
             return
-            
+
         # 只收集md文件，保持简单
         doc_files = list(docs_dir.glob("**/*.md"))
         
@@ -46,7 +46,7 @@ class RAGService:
         """添加文档到知识库"""
         if not file_paths:
             return False
-            
+
         all_chunks = []
         for file_path in file_paths:
             chunks = self.document_service.process_file(file_path)
@@ -62,11 +62,10 @@ class RAGService:
         """处理用户提交的文件（直接读取文本，不做向量化处理）"""
         if not user_files:
             return ""
-            
+
         user_content = ""
         for file_path in user_files:
             try:
-                from pathlib import Path
                 path = Path(file_path)
                 
                 # 只支持简单的文本文件，直接读取
@@ -81,18 +80,22 @@ class RAGService:
         return user_content
 
 
-    def prepare_rag_messages(self, messages: list[dict[str, str]], user_files: list[str] | None = None) -> list[dict[str, str]]:
+    def prepare_rag_messages(
+        self, 
+        messages: list[dict[str, str]], 
+        user_files: list[str] | None = None
+    ) -> list[dict[str, str]]:
         """准备RAG增强的消息"""
         if not messages:
             return messages
-            
+
         # 提取最后一个用户问题
         last_message = messages[-1]
         if last_message.get("role") != "user":
             return messages
-            
+
         question = last_message["content"]
-        
+
         # 检索知识库文档
         # k=3: 检索3个最相关文档，平衡回答质量和token消耗
         relevant_docs = self.vector_service.similarity_search(question, k=3)
@@ -126,11 +129,17 @@ class RAGService:
         )
         
         # 返回处理后的消息
-        new_messages = messages[:-1] + [{"role": "user", "content": rag_prompt}]
+        new_messages = messages[:-1] + [
+            {"role": "user", "content": rag_prompt}
+        ]
         
         return new_messages
 
-    def prepare_file_messages(self, messages: list[dict[str, str]], user_files: list[str] | None = None) -> list[dict[str, str]]:
+    def prepare_file_messages(
+        self, 
+        messages: list[dict[str, str]], 
+        user_files: list[str] | None = None
+    ) -> list[dict[str, str]]:
         """只处理用户文件的消息（不使用知识库）"""
         if not messages or not user_files:
             return messages
@@ -152,7 +161,9 @@ class RAGService:
         final_question = f"{question}\n\n参考文件内容：{user_content}"
         
         # 返回处理后的消息
-        new_messages = messages[:-1] + [{"role": "user", "content": final_question}]
+        new_messages = messages[:-1] + [
+            {"role": "user", "content": final_question}
+        ]
         
         return new_messages
 

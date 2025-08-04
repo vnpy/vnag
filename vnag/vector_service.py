@@ -5,7 +5,7 @@ from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 
 from .document_service import DocumentChunk
-from .utility import get_folder_path, load_json
+from .utility import get_folder_path
 
 
 class VectorService:
@@ -42,7 +42,7 @@ class VectorService:
         embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
 
         # 生成ID
-        ids = [f"{chunk.metadata['filename']}_{chunk.metadata['chunk_index']}" 
+        ids = [f"{chunk.metadata['filename']}_{chunk.metadata['chunk_index']}"
                for chunk in chunks]
 
         # 添加到ChromaDB
@@ -54,7 +54,11 @@ class VectorService:
         )
 
 
-    def similarity_search(self, query: str, k: int = 5) -> list[dict[str, Any]]:
+    def similarity_search(
+        self, 
+        query: str, 
+        k: int = 5
+    ) -> list[dict[str, Any]]:
         """相似性搜索"""
         if self.collection.count() == 0:
             return []
@@ -74,8 +78,10 @@ class VectorService:
             for i, doc in enumerate(results['documents'][0]):
                 documents.append({
                     'text': doc,
-                    'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
-                    'distance': results['distances'][0][i] if results['distances'] else 0.0
+                    'metadata': results['metadatas'][0][i] 
+                               if results['metadatas'] else {},
+                    'distance': results['distances'][0][i] 
+                             if results['distances'] else 0.0
                 })
 
         return documents

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 import markdown
 
 from PySide6 import QtWidgets, QtGui, QtCore
@@ -45,7 +45,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def init_widgets(self) -> None:
         """初始化中央控件"""
-        desktop: QtCore.QRect = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        desktop: QtCore.QRect = (
+        QtWidgets.QApplication.primaryScreen().availableGeometry()
+    )
         
         # 创建主分割布局
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
@@ -84,8 +86,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_base_url = QtWidgets.QLineEdit(self.base_url)
         self.config_api_key = QtWidgets.QLineEdit(self.api_key)
         self.config_model_name = QtWidgets.QLineEdit(self.model_name)
-        self.config_max_tokens = QtWidgets.QLineEdit(str(self.max_tokens) if self.max_tokens else "")
-        self.config_temperature = QtWidgets.QLineEdit(str(self.temperature) if self.temperature else "")
+        self.config_max_tokens = QtWidgets.QLineEdit(
+            str(self.max_tokens) if self.max_tokens else ""
+        )
+        self.config_temperature = QtWidgets.QLineEdit(
+            str(self.temperature) if self.temperature else ""
+        )
         
         # 添加到表单
         config_form.addRow("服务地址:", self.config_base_url)
@@ -177,7 +183,10 @@ class MainWindow(QtWidgets.QMainWindow):
         main_splitter.addWidget(right_widget)
         
         # 设置初始分割比例
-        main_splitter.setSizes([int(desktop.width() * 0.3), int(desktop.width() * 0.7)])
+        main_splitter.setSizes([
+            int(desktop.width() * 0.3), 
+            int(desktop.width() * 0.7)
+        ])
         
         # 设置为中央控件
         self.setCentralWidget(main_splitter)
@@ -191,7 +200,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if role == "user":
             # 用户内容不需要被渲染
-            escaped_content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            escaped_content = (content.replace("&", "&amp;")
+                             .replace("<", "&lt;")
+                             .replace(">", "&gt;")
+                             .replace("\n", "<br>"))
 
             html = f"""
             <p><b>💬 User</b></p>
@@ -201,7 +213,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.history_widget.insertHtml(html)
         elif role == "assistant":
             # AI返回内容以Markdown渲染
-            html_content = markdown.markdown(content, extensions=['fenced_code', 'codehilite'])
+            html_content = markdown.markdown(
+                content, 
+                extensions=['fenced_code', 'codehilite']
+            )
 
             html = f"""
             <p><b>✨ Assistant</b></p>
@@ -280,7 +295,9 @@ class MainWindow(QtWidgets.QMainWindow):
             current_id = None
             if current_item:
                 try:
-                    current_id = current_item.data(QtCore.Qt.ItemDataRole.UserRole)
+                    current_id = current_item.data(
+                    QtCore.Qt.ItemDataRole.UserRole
+                )
                 except RuntimeError:
                     # 如果项已被删除，忽略错误
                     pass
@@ -294,7 +311,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # 添加到列表
             for session in sessions:
                 title = session.get('title', '未命名会话')
-                created_at = session.get('created_at', '')[:16].replace('T', ' ')
+                created_at = (session.get('created_at', '')[:16]
+                              .replace('T', ' '))
                 item_text = f"{title} ({created_at})"
                 
                 item = QtWidgets.QListWidgetItem(item_text)
@@ -387,7 +405,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def open_website(self) -> None:
         """打开官网"""
-        QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://www.github.com/vnpy/vnag"))
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl("https://www.github.com/vnpy/vnag")
+        )
         
     def show_model_selector(self) -> None:
         """显示模型选择对话框"""
@@ -542,10 +562,14 @@ class RagSwitchButton(QtWidgets.QWidget):
         
         if self._checked:
             # 开启状态：按钮在右侧
-            button_rect.moveCenter(QtCore.QPoint(rect.right() - radius, rect.center().y()))
+            button_rect.moveCenter(QtCore.QPoint(
+                rect.right() - radius, rect.center().y()
+            ))
         else:
             # 关闭状态：按钮在左侧
-            button_rect.moveCenter(QtCore.QPoint(rect.left() + radius, rect.center().y()))
+            button_rect.moveCenter(QtCore.QPoint(
+                rect.left() + radius, rect.center().y()
+            ))
         
         painter.setBrush(QtGui.QBrush(QtGui.QColor(255, 255, 255)))
         painter.drawEllipse(button_rect)
@@ -559,9 +583,13 @@ class RagSwitchButton(QtWidgets.QWidget):
         
         # 直接在开关内部绘制文字
         if self._checked:
-            painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "RAG ON")
+            painter.drawText(
+                rect, QtCore.Qt.AlignmentFlag.AlignCenter, "RAG ON"
+            )
         else:
-            painter.drawText(rect, QtCore.Qt.AlignmentFlag.AlignCenter, "RAG OFF")
+            painter.drawText(
+                rect, QtCore.Qt.AlignmentFlag.AlignCenter, "RAG OFF"
+            )
 
 
 
@@ -653,7 +681,12 @@ class ModelSelectorDialog(QtWidgets.QDialog):
 class SessionListDialog(QtWidgets.QDialog):
     """会话列表对话框"""
 
-    def __init__(self, sessions: list[dict], gateway: AgentGateway, parent=None) -> None:
+    def __init__(
+        self, 
+        sessions: list[dict], 
+        gateway: AgentGateway, 
+        parent=None
+    ) -> None:
         """构造函数"""
         super().__init__(parent)
         
