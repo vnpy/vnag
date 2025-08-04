@@ -1,12 +1,8 @@
-import logging
 from typing import Generator
 
 from .document_service import DocumentService
 from .gateway import AgentGateway
 from .vector_service import VectorService
-
-
-logger = logging.getLogger(__name__)
 
 
 RAG_PROMPT_TEMPLATE = """基于以下上下文信息回答用户问题。如果上下文中没有相关信息，请说明无法从提供的文档中找到答案。
@@ -29,25 +25,22 @@ class RAGService:
         self.vector_service = VectorService()
 
         self._init_knowledge_base()
-        logger.info("RAG service initialized")
 
     def _init_knowledge_base(self) -> None:
         """初始化知识库"""
         from .utility import AGENT_DIR
-        docs_dir = AGENT_DIR / "docs"
+        # docs目录应该与.vnag目录同级
+        docs_dir = AGENT_DIR.parent / "docs"
         
         if not docs_dir.exists():
             return
             
-        # 收集所有支持的文档文件
-        doc_files = []
-        for pattern in ["**/*.md", "**/*.txt", "**/*.pdf", "**/*.docx"]:
-            doc_files.extend(docs_dir.glob(pattern))
+        # 只收集md文件，保持简单
+        doc_files = list(docs_dir.glob("**/*.md"))
         
         if doc_files and self.vector_service.get_document_count() == 0:
             file_paths = [str(f) for f in doc_files]
             self.add_documents(file_paths)
-            logger.info(f"Initialized knowledge base with {len(file_paths)} documents")
 
     def add_documents(self, file_paths: list[str]) -> bool:
         """添加文档到知识库"""
@@ -56,27 +49,35 @@ class RAGService:
             
         all_chunks = []
         for file_path in file_paths:
-            logger.info(f"Processing document: {file_path}")
             chunks = self.document_service.process_file(file_path)
             all_chunks.extend(chunks)
 
         if all_chunks:
             self.vector_service.add_documents(all_chunks)
-            logger.info(f"Successfully added {len(file_paths)} documents with {len(all_chunks)} chunks")
             return True
 
         return False
 
     def _process_user_files(self, user_files: list[str] | None) -> str:
-        """处理用户提交的文件"""
+        """处理用户提交的文件（直接读取文本，不做向量化处理）"""
         if not user_files:
             return ""
             
         user_content = ""
         for file_path in user_files:
-            chunks = self.document_service.process_file(file_path)
-            user_content += f"\n\n用户提交文件 {file_path}:\n"
-            user_content += "\n".join([chunk.text for chunk in chunks])
+            try:
+                from pathlib import Path
+                path = Path(file_path)
+                
+                # 只支持简单的文本文件，直接读取
+                if path.suffix.lower() in ['.md', '.txt']:
+                    content = path.read_text(encoding='utf-8')
+                    user_content += f"\n\n用户提交文件 {path.name}:\n{content}"
+                else:
+                    user_content += f"\n\n用户提交文件 {path.name}: (不支持的文件格式)"
+            except Exception:
+                user_content += f"\n\n用户提交文件 {file_path}: (读取失败)"
+                
         return user_content
 
 
@@ -93,6 +94,7 @@ class RAGService:
         question = last_message["content"]
         
         # 检索知识库文档
+        # k=3: 检索3个最相关文档，平衡回答质量和token消耗
         relevant_docs = self.vector_service.similarity_search(question, k=3)
         
         # 处理用户提交的文件
@@ -126,7 +128,6 @@ class RAGService:
         # 返回处理后的消息
         new_messages = messages[:-1] + [{"role": "user", "content": rag_prompt}]
         
-        logger.info(f"RAG messages prepared with {len(relevant_docs)} knowledge base docs and {len(user_files or [])} user files")
         return new_messages
 
     def prepare_file_messages(self, messages: list[dict[str, str]], user_files: list[str] | None = None) -> list[dict[str, str]]:
@@ -153,7 +154,6 @@ class RAGService:
         # 返回处理后的消息
         new_messages = messages[:-1] + [{"role": "user", "content": final_question}]
         
-        logger.info(f"File messages prepared with {len(user_files)} user files")
         return new_messages
 
     def get_document_count(self) -> int:
@@ -163,4 +163,3 @@ class RAGService:
     def clear_documents(self) -> None:
         """清空知识库"""
         self.vector_service.clear_documents()
-        logger.info("Knowledge base cleared")

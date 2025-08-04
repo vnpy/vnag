@@ -26,32 +26,22 @@
 - **服务类**: 作为gateway的内部组件，不对外直接暴露
 
 ### 组件职责划分
-- **AgentGateway**: 核心业务层，整合所有AI相关功能，包括对话管理、RAG服务等
-- **RAGService**: gateway内部组件，只负责消息预处理，不直接调用模型
-- **DocumentService**: gateway内部组件，处理文档解析和分块
-- **VectorService**: gateway内部组件，处理向量存储和检索
+- **AgentGateway**: 核心业务层，整合所有AI相关功能，包括对话管理、RAG服务、会话管理等
+- **RAGService**: gateway内部组件，负责RAG消息预处理，内部管理DocumentService和VectorService
+- **DocumentService**: RAGService内部组件，处理文档解析和分块（.md/.txt/.pdf/.docx）
+- **VectorService**: RAGService内部组件，处理向量存储和检索（ChromaDB + BGE）
 - **SessionManager**: gateway内部组件，管理对话会话和历史记录
-- **TokenMonitor**: gateway内部组件，监控token使用量
 - **window.py**: 纯UI展示层，只负责界面显示和用户交互，不包含任何业务逻辑
 
 ### 配置管理
-```python
-from .utility import get_file_path, load_json, save_json
-config_path = get_file_path("rag_config.json")
-```
-
-### 日志记录
-```python
-import logging
-logger = logging.getLogger(__name__)
-```
+使用统一的 gateway_setting.json 文件管理所有配置参数。
 
 ### 组件规范
 - 会话存储：TinyDB轻量级JSON数据库，文件放在.vnag目录下
 - 向量存储：ChromaDB持久化存储，文件放在.vnag目录下
 - 界面：继承PySide6==6.8.2.1，保持vnag简洁风格
 - 服务：轻量级服务类，private方法用下划线前缀
-- 配置：JSON格式，使用vnag的utility函数
+- 配置：JSON格式，使用vnag的utility组件
 
 ## 项目结构
 
@@ -60,18 +50,18 @@ vnag/
 ├── vnag/
 │   ├── __init__.py
 │   ├── __main__.py            # 应用入口
-│   ├── window.py              # 主界面（扩展RAG功能+会话管理）
-│   ├── gateway.py             # AI网关（增强流式响应）
-│   ├── utility.py             # 工具函数（扩展配置管理）
-│   ├── setting.py             # 配置管理（新增）
-│   ├── rag_service.py         # RAG核心服务（新增）
-│   ├── document_service.py    # 文档处理服务（新增）
-│   ├── vector_service.py      # 向量存储服务（新增）
-│   ├── session_manager.py     # 会话管理服务（新增）
-│   ├── token_monitor.py       # Token监控服务（新增）
+│   ├── window.py              # 纯UI展示层（最小化修改）
+│   ├── gateway.py             # 核心业务层（完整AI对话系统）
+│   ├── utility.py             # 工具函数
+│   ├── setting.py             # 配置管理
+│   ├── rag_service.py         # RAG消息预处理组件
+│   ├── document_service.py    # 文档处理服务（支持md/txt/pdf/docx）
+│   ├── vector_service.py      # 向量存储服务（ChromaDB + BGE）
+│   ├── session_manager.py     # 会话管理组件（TinyDB）
 │   └── logo.ico
-├── docs/                      # 示例知识库（从rag_system复制）
-├── vnag_prompt.md             # VNAG系统Prompt模板（新增）
+├── docs/                      # 知识库目录（与.vnag同级，只支持md文件）
+├── test_framework.py          # 框架独立运行测试
+├── vnag_prompt.md             # VNAG系统Prompt模板
 ├── pyproject.toml
 ├── README.md
 ├── CLAUDE.md                  # 本开发规范
@@ -81,10 +71,8 @@ vnag/
 ## RAG功能扩展规范
 
 ### 文档格式支持
-支持以下格式的文档导入和处理：
-- **.md, .txt** - 纯文本格式
-- **.pdf** - 使用pypdf库解析
-- **.docx** - 使用python-docx库解析
+- **知识库**: 只支持.md文件（docs目录，自动向量化）  
+- **用户文件**: 支持.md/.txt/.pdf/.docx（直接加入上下文，不向量化）
 
 ### 服务类设计原则
 1. **单一职责**: 每个服务类只负责一个核心功能
@@ -93,86 +81,36 @@ vnag/
 4. **错误处理**: 明确的异常类型和错误信息
 
 ### Gateway统一接口设计
-```python
-class AgentGateway:
-    """核心业务层 - 完整的AI对话系统"""
-    def __init__(self) -> None:
-        # 内部组件，外部不直接访问
-        self._rag_service: RAGService | None = None
-        self._document_service: DocumentService | None = None
-        self._vector_service: VectorService | None = None
-        self._session_manager: SessionManager | None = None
-        self._token_monitor: TokenMonitor | None = None
-        
-        # 对话状态（框架独立运行）
-        self.chat_history: list[dict[str, str]] = []
-    
-    def init(self, base_url: str, api_key: str, model_name: str) -> None:
-        """初始化连接和所有内部服务组件"""
-        pass
-    
-    def send_message(self, message: str, use_rag: bool = True, user_files: list[str] | None = None) -> str | None:
-        """发送消息并获取回复（框架核心接口）"""
-        # 添加用户消息到历史
-        # 调用模型获取回复
-        # 添加助手回复到历史
-        # 保存会话
-        pass
-        
-    def get_chat_history(self) -> list[dict[str, str]]:
-        """获取当前对话历史"""
-        return self.chat_history
-        
-    def clear_history(self) -> None:
-        """清空对话历史"""
-        pass
-    
-    def invoke_model(self, messages: list[dict[str, str]], 
-                    use_rag: bool = False, 
-                    user_files: list[str] | None = None) -> str | None:
-        """底层模型调用接口（供内部使用）"""
-        pass
-        
-    def invoke_streaming(self, messages: list[dict[str, str]], 
-                        use_rag: bool = False, 
-                        user_files: list[str] | None = None) -> Generator[str, None, None] | None:
-        """底层流式调用接口（供内部使用）"""
-        pass
+AgentGateway 类是系统的核心，提供统一的接口与大语言模型交互：
 
-class SessionManager:
-    """gateway内部组件，管理对话会话"""
-    def save_session(self, chat_history: list[dict]) -> None:
-        """保存会话到持久化存储"""
-        pass
-    
-    def load_session(self, session_id: str = None) -> list[dict]:
-        """加载会话历史"""
-        pass
-```
+- **初始化**: 支持基本连接参数（base_url、api_key、model_name）
+- **消息处理**: 支持普通消息和RAG增强消息
+- **会话管理**: 支持创建、切换、删除会话
+- **模型调用**: 支持同步和流式响应
+- **参数处理**: 可选参数如max_tokens和temperature只在有值时传递
 
 ### 配置管理规范
 ```python
-# .vnag/rag_config.json
+# setting.py 中的默认 SETTINGS
+SETTINGS: dict = {
+    "base_url": "https://api.openai.com/v1",
+    "api_key": "",
+    "model_name": "anthropic/claude-3.7-sonnet",
+    "max_tokens": 2000,
+    "temperature": 0.7,
+    "document.chunk_size": 1000,
+    "document.chunk_overlap": 200,
+    "embedding.model_name": "BAAI/bge-large-zh-v1.5",
+    "embedding.device": "cpu"
+}
+
+# gateway_setting.json 实际配置
 {
-    "llm": {
-        "base_url": "https://api.openai.com/v1",
-        "api_key": "",
-        "model": "gpt-3.5-turbo",
-        "max_tokens": 2000,
-        "temperature": 0.7
-    },
-    "embedding": {
-        "model_name": "BAAI/bge-large-zh-v1.5",
-        "device": "cpu"
-    },
-    "vector_store": {
-        "persist_directory": "chroma_db"
-    },
-    "document": {
-        "chunk_size": 1000,
-        "chunk_overlap": 200,
-        "supported_formats": [".md", ".txt", ".pdf", ".docx"]
-    }
+    "base_url": "https://api.openai.com/v1",
+    "api_key": "your_api_key",
+    "model_name": "anthropic/claude-3.7-sonnet",
+    "max_tokens": 2000,
+    "temperature": 0.7
 }
 ```
 
@@ -184,37 +122,22 @@ class SessionManager:
 3. **Cherry Studio体验**: 流畅的聊天交互体验
 4. **用户友好**: 清晰的状态提示和进度反馈
 
+### 界面布局
+- **左侧面板**: 分为"会话"和"配置"两个标签页
+- **右侧面板**: 聊天显示区域和输入区域
+- **RAG开关按钮**: 显示"RAG ON"/"RAG OFF"文本
+
+
 ### RAG工作模式
 - **可选模式**: 通过Switch开关按钮控制RAG功能开启/关闭（默认开启）
-- **RAG开启**: 知识库检索 + 用户文件 + RAG模板
+- **RAG开启**: 知识库检索（docs/*.md文件） + 用户文件 + RAG模板
 - **RAG关闭**: 只处理用户文件，不检索知识库，不使用RAG模板
-- **智能上下文**: 用户上传文件在两种模式下都会加入对话上下文
-- **统一接口**: 所有模式都通过gateway统一调用，保持架构清晰
+- **智能上下文**: 用户上传文件直接加入对话上下文（不做向量化处理）
+- **统一接口**: 所有模式都通过gateway统一调用
+- **LLM选择**: 支持查询OpenAI API获取可用模型列表
 
 ### 历史对话存储
-使用TinyDB轻量级JSON数据库：
-```python
-# .vnag/chat_sessions.json - TinyDB数据库文件
-{
-  "sessions": [
-    {
-      "id": "uuid-string",
-      "title": "会话标题", 
-      "created_at": "2024-01-01T00:00:00",
-      "updated_at": "2024-01-01T00:00:00",
-      "deleted": false
-    }
-  ],
-  "messages": [
-    {
-      "session_id": "uuid-string",
-      "role": "user|assistant",
-      "content": "消息内容",
-      "timestamp": "2024-01-01T00:00:00"
-    }
-  ]
-}
-```
+使用TinyDB轻量级JSON数据库存储会话历史记录，支持会话的创建、切换和删除操作。会话数据包含基本会话信息和消息内容，通过会话ID关联。
 
 ## 已完成功能清单
 
@@ -222,7 +145,7 @@ class SessionManager:
 - [x] 复制rag_system示例文档到vnag/docs/
 - [x] 扩展utility.py配置管理
 - [x] 增强gateway.py流式响应
-- [x] 扩展window.py界面功能（RAG开关+文件选择+会话管理）
+- [x] 扩展window.py界面功能（RAG开关+文件选择+会话管理+配置界面）
 - [x] 添加依赖项到pyproject.toml（TinyDB替代Peewee）
 
 ### ✅ RAG核心功能实现
@@ -233,7 +156,6 @@ class SessionManager:
 
 ### ✅ 完整系统功能
 - [x] 会话管理TinyDB升级（替代JSON文件存储）
-- [x] Token使用监控（80%预警机制）
 - [x] RAG可选模式（Switch开关控制）
 - [x] 用户文件上传和处理
 - [x] 代码简化和优化

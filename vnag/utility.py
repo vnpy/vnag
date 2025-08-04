@@ -49,7 +49,8 @@ def load_json(filename: str) -> dict | list | None:
             data: dict = json.load(f)
         return data
     else:
-        return None
+        save_json(filename, {})
+        return {}
 
 
 def save_json(filename: str, data: dict | list) -> None:

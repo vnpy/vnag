@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime
 from typing import Optional
 from uuid import uuid4
@@ -6,9 +5,6 @@ from uuid import uuid4
 from tinydb import TinyDB, Query
 
 from .utility import get_file_path
-
-
-logger = logging.getLogger(__name__)
 
 
 class SessionManager:
@@ -22,7 +18,6 @@ class SessionManager:
         self.messages_table = self.db.table('messages')
         self.current_session_id: Optional[str] = None
         
-        logger.info(f"Session manager initialized with database: {self.db_path}")
         
         # 自动加载或创建默认会话
         self._ensure_current_session()
@@ -41,7 +36,6 @@ class SessionManager:
         self.sessions_table.insert(session_data)
         self.current_session_id = session_id
         
-        logger.info(f"Created new session: {session_id} - {title}")
         return session_id
 
     def get_current_session_id(self) -> str:
@@ -91,7 +85,6 @@ class SessionManager:
         
         if session and not session.get('deleted', False):
             self.current_session_id = session_id
-            logger.info(f"Switched to session: {session_id}")
             return True
         
         return False
@@ -124,7 +117,6 @@ class SessionManager:
         if self.current_session_id:
             Message = Query()
             self.messages_table.remove(Message.session_id == self.current_session_id)
-            logger.info(f"Cleared current session: {self.current_session_id}")
 
     def new_session(self) -> str:
         """创建新会话并切换"""
@@ -157,7 +149,6 @@ class SessionManager:
             'updated_at': datetime.now().isoformat()
         }, Session.id == session_id)
         
-        logger.info(f"Session saved with {len(chat_history)} messages")
         
     def load_session(self, session_id: str | None = None) -> list[dict[str, str]]:
         """加载会话历史（gateway接口）"""
@@ -168,7 +159,6 @@ class SessionManager:
         
         chat_history = [{'role': msg['role'], 'content': msg['content']} for msg in messages]
         
-        logger.info(f"Session loaded with {len(chat_history)} messages")
         return chat_history
         
     def _ensure_current_session(self) -> None:

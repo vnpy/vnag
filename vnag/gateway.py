@@ -2,6 +2,7 @@ from typing import Generator
 
 from openai import OpenAI
 from openai.types.chat.chat_completion import ChatCompletion
+from .utility import load_json
 
 
 class AgentGateway:
@@ -48,14 +49,30 @@ class AgentGateway:
         """统一模型调用接口（向后兼容 + 新功能）"""
         if not self.client:
             return None
+        
+        if not self.model_name:
+            return None
 
         # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
 
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=processed_messages       # type: ignore
-        )
+        # 直接从配置文件读取设置
+        settings = load_json("gateway_setting.json")
+        
+        # 准备API调用参数
+        params = {
+            "model": self.model_name,
+            "messages": processed_messages      # type: ignore
+        }
+        
+        # 只有在设置中有值时才添加可选参数
+        if settings.get("max_tokens"):
+            params["max_tokens"] = int(settings["max_tokens"])
+        
+        if settings.get("temperature"):
+            params["temperature"] = float(settings["temperature"])
+        
+        completion: ChatCompletion = self.client.chat.completions.create(**params)
 
         return completion.choices[0].message.content
 
@@ -68,15 +85,31 @@ class AgentGateway:
         """统一流式调用接口"""
         if not self.client:
             return None
+        
+        if not self.model_name:
+            return None
 
         # 预处理消息  
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
 
-        stream = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=processed_messages,      # type: ignore
-            stream=True
-        )
+        # 直接从配置文件读取设置
+        settings = load_json("gateway_setting.json")
+        
+        # 准备API调用参数
+        params = {
+            "model": self.model_name,
+            "messages": processed_messages,      # type: ignore
+            "stream": True
+        }
+        
+        # 只有在设置中有值时才添加可选参数
+        if settings.get("max_tokens"):
+            params["max_tokens"] = int(settings["max_tokens"])
+        
+        if settings.get("temperature"):
+            params["temperature"] = float(settings["temperature"])
+        
+        stream = self.client.chat.completions.create(**params)
 
         for chunk in stream:
             if chunk.choices[0].delta.content:
@@ -103,6 +136,7 @@ class AgentGateway:
             assistant_message = {"role": "assistant", "content": content}
             self.chat_history.append(assistant_message)
             
+            
         # 保存会话
         self._save_session()
         
@@ -121,6 +155,36 @@ class AgentGateway:
         """加载对话历史"""
         if self._session_manager:
             self.chat_history = self._session_manager.load_session()
+
+
+    def new_session(self) -> str:
+        """创建新会话"""
+        if self._session_manager:
+            session_id = self._session_manager.new_session()
+            self.chat_history.clear()
+            return session_id
+        return ""
+
+    def get_all_sessions(self) -> list[dict]:
+        """获取所有会话"""
+        if self._session_manager:
+            return self._session_manager.get_all_sessions()
+        return []
+
+    def switch_session(self, session_id: str) -> bool:
+        """切换会话"""
+        if self._session_manager:
+            success = self._session_manager.switch_session(session_id)
+            if success:
+                self.load_history()
+            return success
+        return False
+
+    def delete_session(self, session_id: str) -> bool:
+        """删除会话"""
+        if self._session_manager:
+            return self._session_manager.delete_session(session_id)
+        return False
 
     def _save_session(self) -> None:
         """保存会话"""

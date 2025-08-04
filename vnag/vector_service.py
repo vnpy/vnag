@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 
 import chromadb
@@ -6,11 +5,7 @@ from chromadb.config import Settings as ChromaSettings
 from sentence_transformers import SentenceTransformer
 
 from .document_service import DocumentChunk
-from .setting import SETTINGS
-from .utility import get_folder_path
-
-
-logger = logging.getLogger(__name__)
+from .utility import get_folder_path, load_json
 
 
 class VectorService:
@@ -18,8 +13,9 @@ class VectorService:
 
     def __init__(self) -> None:
         """构造函数"""
-        self.persist_dir = get_folder_path(SETTINGS["vector_store.persist_directory"])
-        self.embedding_model = SentenceTransformer(SETTINGS["embedding.model_name"])
+        # 直接使用固定值
+        self.persist_dir = get_folder_path("chroma_db")
+        self.embedding_model = SentenceTransformer("BAAI/bge-large-zh-v1.5")
 
         # 初始化ChromaDB客户端
         self.client = chromadb.PersistentClient(
@@ -33,7 +29,6 @@ class VectorService:
             metadata={"hnsw:space": "cosine"}
         )
 
-        logger.info(f"Vector service initialized with {self.collection.count()} documents")
 
     def add_documents(self, chunks: list[DocumentChunk]) -> None:
         """添加文档分块到向量数据库"""
@@ -44,7 +39,6 @@ class VectorService:
         metadatas = [chunk.metadata for chunk in chunks]
 
         # 生成向量
-        logger.info(f"Generating embeddings for {len(texts)} chunks...")
         embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
 
         # 生成ID
@@ -59,12 +53,10 @@ class VectorService:
             ids=ids
         )
 
-        logger.info(f"Added {len(chunks)} chunks to vector store")
 
     def similarity_search(self, query: str, k: int = 5) -> list[dict[str, Any]]:
         """相似性搜索"""
         if self.collection.count() == 0:
-            logger.warning("Vector store is empty")
             return []
 
         # 生成查询向量
@@ -86,7 +78,6 @@ class VectorService:
                     'distance': results['distances'][0][i] if results['distances'] else 0.0
                 })
 
-        logger.info(f"Found {len(documents)} similar documents for query")
         return documents
 
     def get_document_count(self) -> int:
@@ -104,4 +95,3 @@ class VectorService:
             metadata={"hnsw:space": "cosine"}
         )
 
-        logger.info("Cleared all documents from vector store")

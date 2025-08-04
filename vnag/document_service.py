@@ -1,14 +1,10 @@
-import logging
 from pathlib import Path
 from typing import NamedTuple
 
 import pypdf
-from docx import Document as DocxDocument
+from docx.api import Document as DocxDocument
 
-from .setting import SETTINGS
-
-
-logger = logging.getLogger(__name__)
+from .utility import load_json
 
 
 class DocumentChunk(NamedTuple):
@@ -22,9 +18,12 @@ class DocumentService:
 
     def __init__(self) -> None:
         """构造函数"""
-        self.chunk_size: int = SETTINGS["document.chunk_size"]
-        self.chunk_overlap: int = SETTINGS["document.chunk_overlap"]
-        self.supported_formats: list[str] = SETTINGS["document.supported_formats"]
+        # 直接从配置文件读取设置
+        settings = load_json("gateway_setting.json")
+        self.chunk_size: int = settings.get("document.chunk_size", 1000)
+        self.chunk_overlap: int = settings.get("document.chunk_overlap", 200)
+        # 支持多格式（用户文件上传需要）
+        self.supported_formats: list[str] = [".md", ".txt", ".pdf", ".docx"]
 
     def process_file(self, file_path: str) -> list[DocumentChunk]:
         """处理单个文件"""
@@ -37,7 +36,6 @@ class DocumentService:
         if extension not in self.supported_formats:
             raise ValueError(f"Unsupported format: {extension}")
 
-        logger.info(f"Processing file: {file_path}")
 
         # 读取文本内容
         if extension in ['.md', '.txt']:
@@ -108,5 +106,4 @@ class DocumentService:
             # 考虑重叠
             start = end - self.chunk_overlap if end < text_length else end
 
-        logger.info(f"Created {len(chunks)} chunks from {metadata['filename']}")
         return chunks
