@@ -91,6 +91,20 @@ class AgentGateway:
 
         # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
+        
+        # 确保消息不为空
+        if not processed_messages or len(processed_messages) == 0:
+            return None
+            
+        # 确保至少有一条用户消息
+        has_user_message = False
+        for msg in processed_messages:
+            if msg.get("role") == "user":
+                has_user_message = True
+                break
+                
+        if not has_user_message:
+            return None
 
         # 直接从配置文件读取设置
         settings = load_json("gateway_setting.json")
@@ -109,11 +123,15 @@ class AgentGateway:
         if settings.get("temperature"):
             params["temperature"] = float(settings["temperature"])
 
-        stream = self.client.chat.completions.create(**params)
+        try:
+            stream = self.client.chat.completions.create(**params)
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            print(f"流式输出错误: {str(e)}")
+            return None
 
     def send_message(
         self,
@@ -213,15 +231,13 @@ class AgentGateway:
             return self._session_manager.restore_session(session_id)
         return False
 
-    def cleanup_deleted_sessions(self, days: int = 30) -> int:
+    def cleanup_deleted_sessions(self) -> int:
         """清理已删除的会话
-        Args:
-            days: 删除超过多少天的已删除会话
         Returns:
             清理的会话数量
         """
         if self._session_manager:
-            return self._session_manager.cleanup_deleted_sessions(days)
+            return self._session_manager.cleanup_deleted_sessions()
         return 0
 
     def _save_session(self) -> None:

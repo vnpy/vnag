@@ -6,6 +6,10 @@ from tinydb import TinyDB, Query
 from .utility import get_file_path
 
 
+# 已删除会话的保留天数
+DELETED_SESSION_RETENTION_DAYS = 30
+
+
 class SessionManager:
     """会话管理器（gateway内部组件）"""
 
@@ -24,11 +28,13 @@ class SessionManager:
     def create_session(self, title: str = "新会话") -> str:
         """创建新会话"""
         session_id = str(uuid4())
+        # 使用带毫秒的时间戳，避免重复
+        now = datetime.now().isoformat(timespec='milliseconds')
         session_data = {
             'id': session_id,
             'title': title,
-            'created_at': datetime.now().isoformat(),
-            'updated_at': datetime.now().isoformat(),
+            'created_at': now,
+            'updated_at': now,
             'deleted': False
         }
 
@@ -51,7 +57,7 @@ class SessionManager:
             'session_id': session_id,
             'role': role,
             'content': content,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(timespec='milliseconds')
         }
 
         self.messages_table.insert(message_data)
@@ -59,7 +65,7 @@ class SessionManager:
         # 更新会话的最后更新时间
         Session = Query()
         self.sessions_table.update({
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
 
     def get_current_history(self) -> list[dict[str, str]]:
@@ -96,7 +102,7 @@ class SessionManager:
         Session = Query()
         result = self.sessions_table.update({
             'title': title,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
 
         return len(result) > 0
@@ -106,7 +112,7 @@ class SessionManager:
         Session = Query()
         result = self.sessions_table.update({
             'deleted': True,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
 
         if len(result) > 0 and session_id == self.current_session_id:
@@ -141,14 +147,14 @@ class SessionManager:
                 'session_id': session_id,
                 'role': message['role'],
                 'content': message['content'],
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(timespec='milliseconds')
             }
             self.messages_table.insert(message_data)
 
         # 更新会话时间戳和自动生成标题
         Session = Query()
         update_data = {
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }
 
         # 如果会话有内容，尝试自动生成标题
@@ -197,17 +203,14 @@ class SessionManager:
                 # 创建默认会话
                 self.current_session_id = self.create_session("默认会话")
 
-    def cleanup_deleted_sessions(self, days: int = 30) -> int:
+    def cleanup_deleted_sessions(self) -> int:
         """清理已删除的会话
-
-        Args:
-            days: 删除超过多少天的已删除会话
 
         Returns:
             清理的会话数量
         """
         # 计算截止日期
-        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+        cutoff_date = (datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)).isoformat()
 
         # 查找需要删除的会话
         Session = Query()
@@ -242,7 +245,7 @@ class SessionManager:
         Session = Query()
         result = self.sessions_table.update({
             'deleted': False,
-            'updated_at': datetime.now().isoformat()
+            'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
 
         return len(result) > 0
