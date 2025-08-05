@@ -1,4 +1,4 @@
-from typing import Generator
+from collections.abc import Generator
 
 from openai import OpenAI
 from openai.types.chat.chat_completion import ChatCompletion
@@ -12,10 +12,10 @@ class AgentGateway:
         """构造函数"""
         self.client: OpenAI | None = None
         self.model_name: str = ""
-        
+
         # 对话状态（框架独立运行）
         self.chat_history: list[dict[str, str]] = []
-        
+
         # 内部组件（延迟初始化）
         self._rag_service = None
         self._session_manager = None
@@ -33,10 +33,10 @@ class AgentGateway:
         )
 
         self.model_name = model_name
-        
+
         # 初始化内部组件
         self._init_components()
-        
+
         # 加载历史会话
         self.load_history()
 
@@ -49,7 +49,7 @@ class AgentGateway:
         """统一模型调用接口（向后兼容 + 新功能）"""
         if not self.client:
             return None
-        
+
         if not self.model_name:
             return None
 
@@ -58,20 +58,20 @@ class AgentGateway:
 
         # 直接从配置文件读取设置
         settings = load_json("gateway_setting.json")
-        
+
         # 准备API调用参数
         params = {
             "model": self.model_name,
             "messages": processed_messages      # type: ignore
         }
-        
+
         # 只有在设置中有值时才添加可选参数
         if settings.get("max_tokens"):
             params["max_tokens"] = int(settings["max_tokens"])
-        
+
         if settings.get("temperature"):
             params["temperature"] = float(settings["temperature"])
-        
+
         completion: ChatCompletion = self.client.chat.completions.create(**params)
 
         return completion.choices[0].message.content
@@ -85,7 +85,7 @@ class AgentGateway:
         """统一流式调用接口"""
         if not self.client:
             return None
-        
+
         if not self.model_name:
             return None
 
@@ -94,21 +94,21 @@ class AgentGateway:
 
         # 直接从配置文件读取设置
         settings = load_json("gateway_setting.json")
-        
+
         # 准备API调用参数
         params = {
             "model": self.model_name,
             "messages": processed_messages,      # type: ignore
             "stream": True
         }
-        
+
         # 只有在设置中有值时才添加可选参数
         if settings.get("max_tokens"):
             params["max_tokens"] = int(settings["max_tokens"])
-        
+
         if settings.get("temperature"):
             params["temperature"] = float(settings["temperature"])
-        
+
         stream = self.client.chat.completions.create(**params)
 
         for chunk in stream:
@@ -116,35 +116,35 @@ class AgentGateway:
                 yield chunk.choices[0].delta.content
 
     def send_message(
-        self, 
-        message: str, 
-        use_rag: bool = True, 
+        self,
+        message: str,
+        use_rag: bool = True,
         user_files: list[str] | None = None
     ) -> str | None:
         """发送消息并获取回复（框架核心接口）"""
         if not message.strip():
             return None
-            
+
         # 添加用户消息到历史
         user_message = {"role": "user", "content": message}
         self.chat_history.append(user_message)
-        
+
         # 调用模型获取回复
         content = self.invoke_model(
             messages=self.chat_history,
             use_rag=use_rag,
             user_files=user_files
         )
-        
+
         # 添加助手回复到历史
         if content:
             assistant_message = {"role": "assistant", "content": content}
             self.chat_history.append(assistant_message)
-            
-            
+
+
         # 保存会话
         self._save_session()
-        
+
         return content
 
     def get_chat_history(self) -> list[dict[str, str]]:
@@ -190,6 +190,40 @@ class AgentGateway:
             return self._session_manager.delete_session(session_id)
         return False
 
+    def export_session(self, session_id: str | None = None) -> tuple[str, list[dict]]:
+        """导出会话
+        返回：(会话标题, 会话历史记录)
+        """
+        if self._session_manager:
+            return self._session_manager.export_session(session_id)
+        return ("未知会话", [])
+
+    def get_deleted_sessions(self) -> list[dict]:
+        """获取所有已删除的会话"""
+        if self._session_manager:
+            return self._session_manager.get_deleted_sessions()
+        return []
+
+    def restore_session(self, session_id: str) -> bool:
+        """恢复已删除的会话
+        Returns:
+            是否成功恢复
+        """
+        if self._session_manager:
+            return self._session_manager.restore_session(session_id)
+        return False
+
+    def cleanup_deleted_sessions(self, days: int = 30) -> int:
+        """清理已删除的会话
+        Args:
+            days: 删除超过多少天的已删除会话
+        Returns:
+            清理的会话数量
+        """
+        if self._session_manager:
+            return self._session_manager.cleanup_deleted_sessions(days)
+        return 0
+
     def _save_session(self) -> None:
         """保存会话"""
         if self._session_manager:
@@ -199,7 +233,7 @@ class AgentGateway:
         """初始化内部组件"""
         from .rag_service import RAGService
         from .session_manager import SessionManager
-        
+
         self._rag_service = RAGService(self)
         self._session_manager = SessionManager()
 
@@ -213,11 +247,11 @@ class AgentGateway:
         if not use_rag and not user_files:
             # 纯聊天模式：直接返回原始消息
             return messages
-            
+
         if not self._rag_service:
             # RAG组件未初始化，降级到普通聊天
             return messages
-            
+
         if use_rag:
             # RAG模式：知识库检索 + 用户文件
             return self._rag_service.prepare_rag_messages(messages, user_files)

@@ -55,8 +55,8 @@ class VectorService:
 
 
     def similarity_search(
-        self, 
-        query: str, 
+        self,
+        query: str,
         k: int = 5
     ) -> list[dict[str, Any]]:
         """相似性搜索"""
@@ -78,9 +78,9 @@ class VectorService:
             for i, doc in enumerate(results['documents'][0]):
                 documents.append({
                     'text': doc,
-                    'metadata': results['metadatas'][0][i] 
+                    'metadata': results['metadatas'][0][i]
                                if results['metadatas'] else {},
-                    'distance': results['distances'][0][i] 
+                    'distance': results['distances'][0][i]
                              if results['distances'] else 0.0
                 })
 

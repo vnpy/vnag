@@ -75,8 +75,8 @@ class DocumentService:
         return "\n".join([paragraph.text for paragraph in doc.paragraphs])
 
     def _create_chunks(
-        self, 
-        text: str, 
+        self,
+        text: str,
         metadata: dict[str, str]
     ) -> list[DocumentChunk]:
         """创建文档分块"""
