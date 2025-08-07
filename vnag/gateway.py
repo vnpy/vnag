@@ -1,8 +1,11 @@
 from collections.abc import Generator
 
-from openai import OpenAI
+from openai import OpenAI, AuthenticationError, RateLimitError, APIConnectionError, BadRequestError, APIStatusError
 from openai.types.chat.chat_completion import ChatCompletion
 from .utility import load_json
+
+from .rag_service import RAGService
+from .session_manager import SessionManager
 
 
 class AgentGateway:
@@ -81,30 +84,38 @@ class AgentGateway:
         messages: list[dict[str, str]],
         use_rag: bool = False,
         user_files: list[str] | None = None
-    ) -> Generator[str, None, None] | None:
+    ) -> Generator[str, None, None]:
         """统一流式调用接口"""
+        def empty_generator():
+            return
+            yield  # 使其成为生成器但不产生任何值
+
         if not self.client:
-            return None
+            yield "❌ LLM客户端未初始化，请检查配置"
+            return
 
         if not self.model_name:
-            return None
+            yield "❌ 模型名称未设置，请检查配置"
+            return
 
         # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
-        
+
         # 确保消息不为空
         if not processed_messages or len(processed_messages) == 0:
-            return None
-            
+            yield "❌ 消息处理失败，请检查输入内容"
+            return
+
         # 确保至少有一条用户消息
         has_user_message = False
         for msg in processed_messages:
             if msg.get("role") == "user":
                 has_user_message = True
                 break
-                
+
         if not has_user_message:
-            return None
+            yield "❌ 缺少用户消息，请检查消息格式"
+            return
 
         # 直接从配置文件读取设置
         settings = load_json("gateway_setting.json")
@@ -126,12 +137,35 @@ class AgentGateway:
         try:
             stream = self.client.chat.completions.create(**params)
 
+            # 流式输出处理
             for chunk in stream:
+                # 只处理内容部分
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
+
+        except AuthenticationError:
+            yield "❌ API密钥无效，请检查配置中的api_key设置"
+            return
+        except RateLimitError:
+            yield "❌ 请求频率超限，请稍后再试或检查API配额"
+            return
+        except APIConnectionError:
+            yield "❌ 无法连接到API服务器，请检查网络连接"
+            return
+        except BadRequestError as e:
+            yield f"❌ 请求参数错误: {e.message}"
+            return
+        except APIStatusError as e:
+            if e.status_code == 503:
+                yield "❌ 服务暂时不可用，请稍后重试"
+            elif e.status_code == 429:
+                yield "❌ 请求过于频繁，请稍后重试"
+            else:
+                yield f"❌ API错误 ({e.status_code}): {e.message}"
+            return
         except Exception as e:
-            print(f"流式输出错误: {str(e)}")
-            return None
+            yield f"❌ 未知错误: {str(e)}"
+            return
 
     def send_message(
         self,
@@ -158,7 +192,6 @@ class AgentGateway:
         if content:
             assistant_message = {"role": "assistant", "content": content}
             self.chat_history.append(assistant_message)
-
 
         # 保存会话
         self._save_session()
@@ -247,9 +280,6 @@ class AgentGateway:
 
     def _init_components(self) -> None:
         """初始化内部组件"""
-        from .rag_service import RAGService
-        from .session_manager import SessionManager
-
         self._rag_service = RAGService(self)
         self._session_manager = SessionManager()
 

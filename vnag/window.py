@@ -1,5 +1,6 @@
 from pathlib import Path
 import markdown
+import time
 from datetime import datetime
 
 from PySide6 import QtWidgets, QtGui, QtCore
@@ -152,11 +153,7 @@ class MainWindow(QtWidgets.QMainWindow):
         input_top_layout = QtWidgets.QHBoxLayout()
         input_top_layout.addStretch()
 
-        # Stream开关
-        self.stream_switch = StreamSwitchButton()
-        self.stream_switch.toggled.connect(self.toggle_stream_mode)
-        self.stream_switch.setChecked(False)  # 默认关闭
-        input_top_layout.addWidget(self.stream_switch)
+        # 移除Stream开关
 
         # RAG开关
         self.rag_switch = RagSwitchButton()
@@ -246,12 +243,16 @@ class MainWindow(QtWidgets.QMainWindow):
                              .replace(">", "&gt;")
                              .replace("\n", "<br>"))
 
-            html = f"""
-            <p><b>💬 User</b></p>
-            <div>{escaped_content}</div>
-            <br><br>
-            """
-            self.history_widget.insertHtml(html)
+            # 统一格式：User标题和内容都使用相同的行距
+            user_html = (
+                f'<div style="margin-bottom: 20px; display: block;">'
+                f'<div style="margin-bottom: 10px; font-weight: bold;">💬 User</div>'
+                f'<div style="margin-bottom: 10px;">{escaped_content}</div>'
+                f'</div>'
+            )
+            self.history_widget.insertHtml(user_html)
+            # 确保消息之间有换行
+            self.history_widget.insertPlainText('\n')
         elif role == "assistant":
             # AI返回内容以Markdown渲染
             html_content = markdown.markdown(
@@ -259,12 +260,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 extensions=['fenced_code', 'codehilite']
             )
 
-            html = f"""
-            <p><b>✨ Assistant</b></p>
-            {html_content}
-            <br><br>
-            """
-            self.history_widget.insertHtml(html)
+            # 统一格式：Assistant标题和内容都使用相同的行距
+            assistant_html = (
+                f'<div style="margin-bottom: 20px; display: block;">'
+                f'<div style="margin-bottom: 10px; font-weight: bold;">✨ Assistant</div>'
+                f'<div style="margin-bottom: 10px;">{html_content}</div>'
+                f'</div>'
+            )
+            self.history_widget.insertHtml(assistant_html)
+            # 确保消息之间有换行
+            self.history_widget.insertPlainText('\n')
 
         # 确保滚动条滚动到最新消息
         self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
@@ -296,82 +301,77 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 收集UI状态参数
         use_rag = self.rag_switch.isChecked()
-        use_stream = self.stream_switch.isChecked()
         user_files = self.selected_files if self.selected_files else None
+        # 所有对话都使用流式输出
+        use_stream = True
 
         # 添加用户消息到历史
         self.append_message("user", text)
 
-        if use_stream:
-            # 流式输出模式
-            try:
-                # 准备助手回复
-                self.append_message("assistant", "")
+        # 添加用户消息到gateway的聊天历史
+        user_message = {"role": "user", "content": text}
+        self.gateway.chat_history.append(user_message)
 
-                # 获取流式响应
-                stream = self.gateway.invoke_streaming(
-                    messages=self.gateway.get_chat_history(),
-                    use_rag=use_rag,
-                    user_files=user_files
-                )
-
-                if not stream:
-                    self.status_label.setText("消息发送失败")
-                    return
-
-                # 逐步显示回复
-                full_content = ""
-                for chunk in stream:
-                    full_content += chunk
-                    # 使用 Markdown 渲染
-                    html_content = markdown.markdown(
-                        full_content,
-                        extensions=['fenced_code', 'codehilite']
-                    )
-
-                    # 更新最后一个助手消息
-                    history = self.gateway.get_chat_history()
-                    if history and history[-1]["role"] == "assistant":
-                        history[-1]["content"] = full_content
-
-                    # 更新显示
-                    self.history_widget.clear()
-                    for msg in history[:-1]:  # 除了最后一条
-                        self.append_message(msg["role"], msg["content"])
-
-                    # 单独处理最后一条（流式输出的内容）
-                    self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
-                    self.history_widget.insertHtml(f"""
-                    <p><b>✨ Assistant</b></p>
-                    {html_content}
-                    <br><br>
-                    """)
-
-                    # 滚动到底部
-                    self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
-                    QtWidgets.QApplication.processEvents()
-
-                # 保存会话
-                self.gateway._save_session()
-                self.status_label.setText("就绪")
-
-            except Exception as e:
-                self.status_label.setText(f"流式输出错误: {str(e)}")
-        else:
-            # 标准模式
-            content: str | None = self.gateway.send_message(
-                message=text,
+        # 流式输出模式 (现在所有对话都是流式的)
+        try:
+            # 获取流式响应
+            stream = self.gateway.invoke_streaming(
+                messages=self.gateway.get_chat_history(),
                 use_rag=use_rag,
                 user_files=user_files
             )
 
-            if content is None:
-                self.status_label.setText("消息发送失败")
-            else:
-                self.status_label.setText("就绪")
+            # 添加空的助手消息到聊天历史，用于后续更新
+            assistant_message = {"role": "assistant", "content": ""}
+            self.gateway.chat_history.append(assistant_message)
 
-        # 刷新UI显示
-        self.refresh_display()
+            # 简化流式输出：直接使用append_message的格式
+            full_content = ""
+            
+            # 创建缓冲区，减少UI更新频率
+            chunk_buffer = ""
+            update_interval = 0.2  # 200ms更新一次
+            buffer_size_threshold = 20  # 缓冲区大小阈值
+            last_update_time = time.time()
+            
+            for chunk in stream:
+                # 正常内容处理
+                full_content += chunk
+                chunk_buffer += chunk
+                
+                # 控制UI更新频率
+                current_time = time.time()
+                if (current_time - last_update_time >= update_interval or 
+                    len(chunk_buffer) >= buffer_size_threshold or 
+                    any(mark in chunk for mark in ["。", ".", "\n", "!", "?", "！", "？"])):
+                    
+                    # 更新历史记录
+                    history = self.gateway.get_chat_history()
+                    if history and history[-1]["role"] == "assistant":
+                        history[-1]["content"] = full_content
+
+                    # 清空历史显示并重新渲染
+                    self.history_widget.clear()
+                    for message in self.gateway.get_chat_history():
+                        self.append_message(message["role"], message["content"])
+
+                    # 滚动到底部
+                    self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
+                    QtWidgets.QApplication.processEvents()
+                    
+                    # 重置缓冲区和计时器
+                    chunk_buffer = ""
+                    last_update_time = current_time
+                    time.sleep(0.01)
+            
+            # 保存会话
+            self.gateway._save_session()
+            self.status_label.setText("就绪")
+
+        except Exception as e:
+            self.status_label.setText(f"流式输出错误: {str(e)}")
+
+        # 流式模式不需要刷新UI，因为已经实时更新了
 
         # 清理选择的文件
         self.selected_files.clear()
@@ -640,14 +640,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 刷新会话列表
         self.refresh_session_list()
 
-    def toggle_stream_mode(self, checked: bool) -> None:
-        """切换流式输出模式"""
-        # 确保 status_label 已经初始化
-        if hasattr(self, "status_label"):
-            if checked:
-                self.status_label.setText("流式输出模式已开启")
-            else:
-                self.status_label.setText("流式输出模式已关闭")
+    # 移除toggle_stream_mode方法，因为我们现在总是使用流式输出
 
     def toggle_rag_mode(self, checked: bool) -> None:
         """切换RAG模式"""
@@ -869,85 +862,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
 
-class StreamSwitchButton(QtWidgets.QWidget):
-    """流式输出开关按钮"""
-
-    toggled = QtCore.Signal(bool)
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setFixedSize(100, 30)  # 调整宽度以容纳更长的文本
-        self._checked = False
-
-    def setChecked(self, checked: bool) -> None:
-        """设置选中状态"""
-        if self._checked != checked:
-            self._checked = checked
-            self.update()
-            self.toggled.emit(checked)
-
-    def isChecked(self) -> bool:
-        """获取选中状态"""
-        return self._checked
-
-    def mousePressEvent(self, event) -> None:
-        """鼠标点击事件"""
-        if event.button() == QtCore.Qt.LeftButton:
-            self.setChecked(not self._checked)
-
-    def paintEvent(self, event) -> None:
-        """绘制开关"""
-        painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-
-        # 开关背景
-        rect = self.rect().adjusted(2, 5, -2, -5)  # 减小上下边距
-        radius = rect.height() // 2
-
-        if self._checked:
-            # 开启状态：绿色背景
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(76, 175, 80)))
-        else:
-            # 关闭状态：灰色背景
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(117, 117, 117)))
-
-        painter.setPen(QtCore.Qt.NoPen)
-        painter.drawRoundedRect(rect, radius, radius)
-
-        # 开关圆形按钮
-        button_rect = QtCore.QRect()
-        button_rect.setSize(QtCore.QSize(rect.height() - 4, rect.height() - 4))
-
-        if self._checked:
-            # 开启状态：按钮在右侧
-            button_rect.moveCenter(QtCore.QPoint(
-                rect.right() - radius, rect.center().y()
-            ))
-        else:
-            # 关闭状态：按钮在左侧
-            button_rect.moveCenter(QtCore.QPoint(
-                rect.left() + radius, rect.center().y()
-            ))
-
-        painter.setBrush(QtGui.QBrush(QtGui.QColor(255, 255, 255)))
-        painter.drawEllipse(button_rect)
-
-        # 文字标签
-        painter.setPen(QtGui.QColor(255, 255, 255))  # 使用白色文字，更加醒目
-        font = painter.font()
-        font.setPointSize(7)  # 统一字体大小
-        font.setBold(True)
-        painter.setFont(font)
-
-        # 直接在开关内部绘制文字
-        if self._checked:
-            painter.drawText(
-                rect, QtCore.Qt.AlignmentFlag.AlignCenter, "STREAM ON"
-            )
-        else:
-            painter.drawText(
-                rect, QtCore.Qt.AlignmentFlag.AlignCenter, "STREAM OFF"
-            )
+# 移除StreamSwitchButton类，因为我们不再需要流式输出开关
 
 
 class RagSwitchButton(QtWidgets.QWidget):
@@ -1016,7 +931,7 @@ class RagSwitchButton(QtWidgets.QWidget):
         # 文字标签
         painter.setPen(QtGui.QColor(255, 255, 255))  # 使用白色文字，更加醒目
         font = painter.font()
-        font.setPointSize(7)  # 统一字体大小
+        font.setPointSize(8)  # 调大字号
         font.setBold(True)
         painter.setFont(font)
         
