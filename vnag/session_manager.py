@@ -203,20 +203,26 @@ class SessionManager:
                 # 创建默认会话
                 self.current_session_id = self.create_session("默认会话")
 
-    def cleanup_deleted_sessions(self) -> int:
+    def cleanup_deleted_sessions(self, force_all: bool = False) -> int:
         """清理已删除的会话
+
+        Args:
+            force_all: 是否强制清理所有已删除的会话（忽略30天限制）
 
         Returns:
             清理的会话数量
         """
-        # 计算截止日期
-        cutoff_date = (datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)).isoformat()
-
-        # 查找需要删除的会话
         Session = Query()
-        deleted_sessions = self.sessions_table.search(
-            (Session.deleted == True) & (Session.updated_at < cutoff_date)
-        )
+        
+        if force_all:
+            # 强制清理所有已删除的会话
+            deleted_sessions = self.sessions_table.search(Session.deleted == True)
+        else:
+            # 只清理超过30天的已删除会话
+            cutoff_date = (datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)).isoformat()
+            deleted_sessions = self.sessions_table.search(
+                (Session.deleted == True) & (Session.updated_at < cutoff_date)
+            )
 
         if not deleted_sessions:
             return 0

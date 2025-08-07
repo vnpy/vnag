@@ -264,13 +264,17 @@ class AgentGateway:
             return self._session_manager.restore_session(session_id)
         return False
 
-    def cleanup_deleted_sessions(self) -> int:
+    def cleanup_deleted_sessions(self, force_all: bool = False) -> int:
         """清理已删除的会话
+        
+        Args:
+            force_all: 是否强制清理所有已删除的会话（忽略30天限制）
+            
         Returns:
             清理的会话数量
         """
         if self._session_manager:
-            return self._session_manager.cleanup_deleted_sessions()
+            return self._session_manager.cleanup_deleted_sessions(force_all)
         return 0
 
     def _save_session(self) -> None:

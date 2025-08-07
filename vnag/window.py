@@ -35,7 +35,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
             # 自动清理30天前已删除的会话
-            self.gateway.cleanup_deleted_sessions()
+            self.gateway.cleanup_deleted_sessions(force_all=False)
 
         self.init_ui()
         self.refresh_display()
@@ -1337,8 +1337,8 @@ class TrashDialog(QtWidgets.QDialog):
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            # 清理所有超过30天的已删除会话
-            count = self.gateway.cleanup_deleted_sessions()
+            # 强制清理所有已删除的会话（忽略30天限制）
+            count = self.gateway.cleanup_deleted_sessions(force_all=True)
             if count > 0:
                 QtWidgets.QMessageBox.information(self, "成功", f"已清理 {count} 个会话")
                 self.accept()
