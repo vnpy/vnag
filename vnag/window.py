@@ -136,6 +136,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # ========== 右侧区域 ==========
         right_widget = QtWidgets.QWidget()
         right_layout = QtWidgets.QVBoxLayout(right_widget)
+        right_layout.setSpacing(2)
 
         # 历史消息显示区域
         self.history_widget = QtWidgets.QTextEdit()
@@ -145,6 +146,7 @@ class MainWindow(QtWidgets.QMainWindow):
         input_container = QtWidgets.QWidget()
         input_layout = QtWidgets.QVBoxLayout(input_container)
         input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.setSpacing(2)
 
         self.input_widget = QtWidgets.QTextEdit()
         self.input_widget.setMaximumHeight(desktop.height() // 4)
@@ -191,12 +193,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 旧的滚动区域文件显示已移除，改用下方的流式列表
 
-        # 新增：文件“药丸”列表（使用QListWidget流式模式）
-        self.file_list_widget = QtWidgets.QListWidget()
+        # 新增：文件“药丸”列表（使用QListWidget流式模式），嵌入输入框内部顶端（Cursor式）
+        self.file_list_widget = QtWidgets.QListWidget(self.input_widget)
         self.file_list_widget.setFlow(QtWidgets.QListView.Flow.LeftToRight)
-        self.file_list_widget.setWrapping(True)
+        self.file_list_widget.setWrapping(False)
         self.file_list_widget.setResizeMode(QtWidgets.QListView.ResizeMode.Adjust)
-        self.file_list_widget.setSpacing(6)
+        self.file_list_widget.setSpacing(4)
         self.file_list_widget.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         self.file_list_widget.setHorizontalScrollBarPolicy(
             QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
@@ -204,7 +206,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_list_widget.setVerticalScrollBarPolicy(
             QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        self.file_list_widget.setMaximumHeight(56)
+        self.file_list_widget.setFixedHeight(20)
         self.file_list_widget.setVisible(False)
         # 去除选中/焦点与边框的视觉干扰
         self.file_list_widget.setSelectionMode(
@@ -212,19 +214,28 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.file_list_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.file_list_widget.setStyleSheet(
-            "QListWidget { border: none; background: transparent; }"
+            "QListWidget { border: none; background: transparent; padding: 1px 0 1px 0; margin: 0; }"
             "QListWidget::item { border: none; margin: 0; padding: 0; }"
             "QListWidget::item:selected { background: transparent; }"
             "QListWidget::item:hover { background: transparent; }"
         )
         # 用于快速删除指定文件对应的条目
         self.file_item_map: dict[str, QtWidgets.QListWidgetItem] = {}
+        # 已选文件列表需在刷新显示前初始化
+        self.selected_files: list[str] = []
 
         # 组装输入区域
         input_layout.addLayout(input_top_layout)
-        input_layout.addWidget(self.file_list_widget)
         input_layout.addWidget(self.input_widget)
         input_layout.addLayout(input_bottom_layout)
+
+        # 将“药丸”列表覆盖在输入框视口之上，并监听输入框尺寸变化以同步定位
+        self.input_container = input_container
+        self.input_widget.installEventFilter(self)
+        # 先基于输入框字体计算药丸行高，再定位和刷新
+        self._recalc_pill_metrics()
+        self._position_file_pills()
+        self._refresh_file_pills_display()
 
         # 组装右侧布局
         right_layout.addWidget(self.history_widget)
@@ -244,8 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 设置为中央控件
         self.setCentralWidget(main_splitter)
 
-        # 初始化其他变量
-        self.selected_files: list[str] = []
+        # 初始化其他变量（已提前初始化 selected_files）
 
     def append_message(self, role: str, content: str) -> None:
         """在会话历史组件中添加消息"""
@@ -288,6 +298,225 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 确保滚动条滚动到最新消息
         self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
+
+    def eventFilter(self, watched, event):  # type: ignore[override]
+        """监听输入框大小变化以定位药丸列表"""
+        if watched is self.input_widget and event.type() in (
+            QtCore.QEvent.Type.Resize,
+            QtCore.QEvent.Type.Show,
+        ):
+            self._recalc_pill_metrics()
+            self._position_file_pills()
+            self._refresh_file_pills_display()
+        return super().eventFilter(watched, event)
+
+    def _position_file_pills(self) -> None:
+        """将药丸条固定在输入框内部顶部，文本从其下方开始（Cursor式）"""
+        if not hasattr(self, "file_list_widget"):
+            return
+        # 顶部留白等于“药丸条高度”
+        bar_h = getattr(self, "_pill_bar_height", self.file_list_widget.height())
+        top_margin = bar_h if (self.file_list_widget.isVisible()) else 0
+        self.input_widget.setViewportMargins(0, top_margin, 0, 0)
+        # 对齐到 QTextEdit 的可视区域
+        vp = self.input_widget.viewport()
+        vp_geom = vp.geometry()
+        # 列表高度=药丸高+2，条内垂直居中（不额外偏移）
+        list_h = min(bar_h, self._pill_height + 2) if top_margin > 0 else 0
+        y_offset = ((bar_h - list_h) // 2) if top_margin > 0 else 0
+        self.file_list_widget.setGeometry(
+            vp_geom.x(),
+            vp_geom.y() - top_margin + y_offset,
+            vp_geom.width(),
+            list_h,
+        )
+        self.file_list_widget.raise_()
+
+    def _recalc_pill_metrics(self) -> None:
+        """根据输入框字体度量行高，设置药丸行高和控件尺寸"""
+        fm = self.input_widget.fontMetrics()
+        # 输入框单行高度
+        self._line_height = max(20, fm.height())
+        # 回到你确认的版本：药丸≈0.85×行高（更饱满），条高≈1.5×行高
+        self._pill_height = max(16, int(round(self._line_height * 0.85)))
+        self._pill_bar_height = max(24, int(round(self._line_height * 1.5)))
+        if hasattr(self, "file_list_widget"):
+            self.file_list_widget.setFixedHeight(self._pill_bar_height)
+
+    def _format_tooltip_path(self, path: str) -> str:
+        """返回系统默认字号显示的完整路径（纯文本）"""
+        # 直接返回，不进行HTML包装，使用系统默认tooltip字号
+        return str(path)
+
+    def _create_pill_widget(self, file_path: str) -> QtWidgets.QWidget:
+        """创建单个文件药丸小部件"""
+        file_name = Path(file_path).name
+        display_name = (file_name[:17] + "...") if len(file_name) > 20 else file_name
+
+        pill = QtWidgets.QWidget()
+        ph = getattr(self, "_pill_height", 18)
+        # 药丸高度 = 目标高度（条内留白由条 padding 控制为上下各 2px）
+        pill.setFixedHeight(ph)
+        self._actual_pill_height = pill.height()
+        pill_layout = QtWidgets.QHBoxLayout(pill)
+        # 依据 pill 行高设置边距与间距，保证垂直居中
+        vpad = max(1, (pill.height() - 12) // 2)
+        pill_layout.setContentsMargins(6, vpad, 6, vpad)
+        pill_layout.setSpacing(3)
+
+        label = QtWidgets.QLabel(display_name)
+        # 字号：与输入框一致或小1，避免拥挤
+        base_pt = self.input_widget.font().pointSize()
+        if base_pt <= 0:
+            base_pt = 10
+        font = label.font()
+        font.setPointSize(max(6, base_pt - 4))
+        label.setFont(font)
+        label.setStyleSheet("color: white;")
+        label.setToolTip(self._format_tooltip_path(str(file_path)))
+
+        close_btn = QtWidgets.QPushButton("×")
+        btn_h = max(10, pill.height() - 6)
+        close_btn.setFixedSize(btn_h, btn_h)
+        close_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet("QPushButton { border: none; font-weight: bold; }")
+        close_btn.setToolTip("移除该文件")
+        close_btn.clicked.connect(lambda checked=False, fp=file_path: self._remove_file(fp))
+
+        pill.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        radius = max(6, pill.height() // 2)
+        pill.setStyleSheet(
+            f"background-color: #3C3C3C; color: white; border-radius: {radius}px;"
+        )
+        pill_layout.addWidget(label)
+        pill_layout.addWidget(close_btn)
+        return pill
+
+    def _create_more_button(self, hidden_count: int) -> QtWidgets.QPushButton:
+        """创建 n+ ‘更多’ 按钮"""
+        btn = QtWidgets.QPushButton(f"{hidden_count}+")
+        btn.setProperty("is_more_button", True)
+        ph = getattr(self, "_pill_height", 18)
+        btn.setFixedHeight(max(12, ph))
+        # 字号与药丸内文字一致
+        base_pt = self.input_widget.font().pointSize()
+        if base_pt <= 0:
+            base_pt = 10
+        f = btn.font()
+        f.setPointSize(max(6, base_pt - 4))
+        btn.setFont(f)
+        btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        radius = max(6, btn.height() // 2)
+        btn.setStyleSheet(
+            "QPushButton { border: none; background-color: #555; color: white;"
+            f"border-radius: {radius}px; padding: 0 6px; "
+            "}"
+        )
+        btn.setToolTip("查看所有已选文件")
+        btn.clicked.connect(self._show_all_selected_files)
+        return btn
+
+    def _refresh_file_pills_display(self) -> None:
+        """根据可用宽度刷新可见药丸，溢出折算为 n+"""
+        if not hasattr(self, "file_list_widget"):
+            return
+        lw = self.file_list_widget
+        lw.clear()
+
+        if not self.selected_files:
+            lw.setVisible(False)
+            return
+
+        lw.setVisible(True)
+        # 现在药丸位于输入框上方一行，无需额外定位
+        available_width = lw.width()
+        spacing = lw.spacing()
+
+        # 预计算每个药丸宽度
+        pill_widgets: list[QtWidgets.QWidget] = []
+        widths: list[int] = []
+        for fp in self.selected_files:
+            w = self._create_pill_widget(fp)
+            pill_widgets.append(w)
+            widths.append(w.sizeHint().width())
+
+        used = 0
+        visible_count = 0
+        total = len(pill_widgets)
+        for i, w in enumerate(widths):
+            next_used = (used + (spacing if visible_count > 0 else 0) + w)
+            if next_used <= available_width:
+                used = next_used
+                visible_count += 1
+            else:
+                break
+
+        hidden = total - visible_count
+        if hidden > 0:
+            # 让出空间给 n+
+            more_btn = self._create_more_button(hidden)
+            more_w = more_btn.sizeHint().width()
+            # 若放不下，回退可见数量直到能放下 n+
+            while visible_count > 0 and (used + (spacing if visible_count > 0 else 0) + more_w) > available_width:
+                used -= widths[visible_count - 1]
+                if visible_count > 1:
+                    used -= spacing
+                visible_count -= 1
+
+        # 添加可见药丸
+        for i in range(visible_count):
+            item = QtWidgets.QListWidgetItem()
+            item.setSizeHint(pill_widgets[i].sizeHint())
+            lw.addItem(item)
+            lw.setItemWidget(item, pill_widgets[i])
+
+        # 添加 n+
+        hidden = total - visible_count
+        if hidden > 0:
+            more_btn = self._create_more_button(hidden)
+            item = QtWidgets.QListWidgetItem()
+            item.setSizeHint(more_btn.sizeHint())
+            lw.addItem(item)
+            lw.setItemWidget(item, more_btn)
+
+        self._position_file_pills()
+
+    def _show_all_selected_files(self) -> None:
+        """弹出对话框显示所有已选文件，支持移除"""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("已选文件")
+        dialog.resize(520, 360)
+        vbox = QtWidgets.QVBoxLayout(dialog)
+        listw = QtWidgets.QListWidget()
+        for fp in self.selected_files:
+            item = QtWidgets.QListWidgetItem(str(fp))
+            listw.addItem(item)
+        btn_layout = QtWidgets.QHBoxLayout()
+        remove_btn = QtWidgets.QPushButton("移除所选")
+        close_btn = QtWidgets.QPushButton("关闭")
+        btn_layout.addWidget(remove_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+        vbox.addWidget(listw)
+        vbox.addLayout(btn_layout)
+
+        def do_remove() -> None:
+            selected = listw.selectedItems()
+            if not selected:
+                return
+            for it in selected:
+                path = it.text()
+                if path in self.selected_files:
+                    self.selected_files.remove(path)
+            self._refresh_file_pills_display()
+            # 重新填充列表
+            listw.clear()
+            for fp in self.selected_files:
+                listw.addItem(QtWidgets.QListWidgetItem(str(fp)))
+
+        remove_btn.clicked.connect(do_remove)
+        close_btn.clicked.connect(dialog.accept)
+        dialog.exec_()
 
     def init_menu(self) -> None:
         """初始化菜单"""
@@ -388,11 +617,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 流式模式不需要刷新UI，因为已经实时更新了
 
-        # 清理选择的文件
-        self.selected_files.clear()
-        self._clear_file_display()
-        if hasattr(self, "file_list_widget"):
-            self.file_list_widget.setVisible(False)
+        # 不清理选择的文件，保留药丸供多轮追问使用
+        self._position_file_pills()
 
     def _add_file_pill(self, file_path: str) -> None:
         """向文件列表添加一个“药丸”样式项"""
@@ -403,16 +629,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         pill = QtWidgets.QWidget()
         pill_layout = QtWidgets.QHBoxLayout(pill)
-        pill_layout.setContentsMargins(10, 4, 6, 4)
-        pill_layout.setSpacing(6)
+        pill_layout.setContentsMargins(8, 2, 6, 2)
+        pill_layout.setSpacing(4)
 
         label = QtWidgets.QLabel(display_name)
+        font = label.font()
+        font.setPointSize(max(7, font.pointSize() - 2))
+        label.setFont(font)
+        label.setToolTip(str(file_path))
         close_btn = QtWidgets.QPushButton("×")
-        close_btn.setFixedSize(16, 16)
+        close_btn.setFixedSize(12, 12)
         close_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         close_btn.setStyleSheet(
             "QPushButton { border: none; font-weight: bold; }"
         )
+        close_btn.setToolTip("移除该文件")
         label.setStyleSheet("color: white;")
         pill.setStyleSheet(
             "background-color: #3C3C3C; color: white;"
@@ -576,16 +807,14 @@ class MainWindow(QtWidgets.QMainWindow):
         
         if file_paths:
             # 累加添加新文件（去重）
-            added = 0
             for fp in file_paths:
                 if fp not in self.selected_files:
                     self.selected_files.append(fp)
-                    self._add_file_pill(fp)
-                    added += 1
 
-            # 显示新列表，隐藏旧滚动区
-            if self.selected_files:
-                self.file_list_widget.setVisible(True)
+            # 统一刷新可见药丸与 n+
+            self.file_list_widget.setVisible(bool(self.selected_files))
+            self._position_file_pills()
+            self._refresh_file_pills_display()
 
             # 显示数量（总数）
             self.status_label.setText(
@@ -599,18 +828,13 @@ class MainWindow(QtWidgets.QMainWindow):
         if file_path in self.selected_files:
             self.selected_files.remove(file_path)
 
-        # 从列表控件删除对应项
-        item = self.file_item_map.pop(file_path, None)
-        if item is not None:
-            row = self.file_list_widget.row(item)
-            self.file_list_widget.takeItem(row)
-
+        # 统一刷新显示与 n+
+        self._refresh_file_pills_display()
         if self.selected_files:
-            self.status_label.setText(
-                f"已选择 {len(self.selected_files)} 个文件"
-            )
+            self.status_label.setText(f"已选择 {len(self.selected_files)} 个文件")
         else:
             self.file_list_widget.setVisible(False)
+            self._position_file_pills()
             self.status_label.setText("就绪")
 
     def _clear_file_display(self) -> None:
