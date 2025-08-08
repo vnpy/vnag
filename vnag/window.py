@@ -189,25 +189,40 @@ class MainWindow(QtWidgets.QMainWindow):
         # 状态标签
         self.status_label = QtWidgets.QLabel("就绪")
 
-        # 文件显示区域（使用滚动区域）
-        self.file_display_area = QtWidgets.QScrollArea()
-        self.file_display_area.setWidgetResizable(True)
-        self.file_display_area.setMaximumHeight(40)
-        self.file_display_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        
-        # 内容容器
-        self.file_display_container = QtWidgets.QWidget()
-        self.file_display_layout = QtWidgets.QVBoxLayout(self.file_display_container)
-        self.file_display_layout.setContentsMargins(0, 0, 0, 0)
-        self.file_display_layout.setSpacing(2)
-        self.file_display_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-        
-        self.file_display_area.setWidget(self.file_display_container)
-        self.file_display_area.setVisible(False)  # 初始隐藏
+        # 旧的滚动区域文件显示已移除，改用下方的流式列表
+
+        # 新增：文件“药丸”列表（使用QListWidget流式模式）
+        self.file_list_widget = QtWidgets.QListWidget()
+        self.file_list_widget.setFlow(QtWidgets.QListView.Flow.LeftToRight)
+        self.file_list_widget.setWrapping(True)
+        self.file_list_widget.setResizeMode(QtWidgets.QListView.ResizeMode.Adjust)
+        self.file_list_widget.setSpacing(6)
+        self.file_list_widget.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.file_list_widget.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.file_list_widget.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.file_list_widget.setMaximumHeight(56)
+        self.file_list_widget.setVisible(False)
+        # 去除选中/焦点与边框的视觉干扰
+        self.file_list_widget.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.NoSelection
+        )
+        self.file_list_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.file_list_widget.setStyleSheet(
+            "QListWidget { border: none; background: transparent; }"
+            "QListWidget::item { border: none; margin: 0; padding: 0; }"
+            "QListWidget::item:selected { background: transparent; }"
+            "QListWidget::item:hover { background: transparent; }"
+        )
+        # 用于快速删除指定文件对应的条目
+        self.file_item_map: dict[str, QtWidgets.QListWidgetItem] = {}
 
         # 组装输入区域
         input_layout.addLayout(input_top_layout)
-        input_layout.addWidget(self.file_display_area)  # 添加文件显示区域
+        input_layout.addWidget(self.file_list_widget)
         input_layout.addWidget(self.input_widget)
         input_layout.addLayout(input_bottom_layout)
 
@@ -230,7 +245,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(main_splitter)
 
         # 初始化其他变量
-        self.selected_files = []
+        self.selected_files: list[str] = []
 
     def append_message(self, role: str, content: str) -> None:
         """在会话历史组件中添加消息"""
@@ -376,7 +391,47 @@ class MainWindow(QtWidgets.QMainWindow):
         # 清理选择的文件
         self.selected_files.clear()
         self._clear_file_display()
-        self.file_display_area.setVisible(False)
+        if hasattr(self, "file_list_widget"):
+            self.file_list_widget.setVisible(False)
+
+    def _add_file_pill(self, file_path: str) -> None:
+        """向文件列表添加一个“药丸”样式项"""
+        file_name = Path(file_path).name
+        display_name = (
+            (file_name[:17] + "...") if len(file_name) > 20 else file_name
+        )
+
+        pill = QtWidgets.QWidget()
+        pill_layout = QtWidgets.QHBoxLayout(pill)
+        pill_layout.setContentsMargins(10, 4, 6, 4)
+        pill_layout.setSpacing(6)
+
+        label = QtWidgets.QLabel(display_name)
+        close_btn = QtWidgets.QPushButton("×")
+        close_btn.setFixedSize(16, 16)
+        close_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        close_btn.setStyleSheet(
+            "QPushButton { border: none; font-weight: bold; }"
+        )
+        label.setStyleSheet("color: white;")
+        pill.setStyleSheet(
+            "background-color: #3C3C3C; color: white;"
+            "border-radius: 12px;"
+        )
+
+        pill_layout.addWidget(label)
+        pill_layout.addWidget(close_btn)
+
+        item = QtWidgets.QListWidgetItem()
+        item.setSizeHint(pill.sizeHint())
+        self.file_list_widget.addItem(item)
+        self.file_list_widget.setItemWidget(item, pill)
+
+        self.file_item_map[file_path] = item
+
+        close_btn.clicked.connect(
+            lambda checked=False, fp=file_path: self._remove_file(fp)
+        )
 
     def refresh_display(self) -> None:
         """刷新UI显示（从gateway获取数据）"""
@@ -520,52 +575,23 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         
         if file_paths:
-            # 清空之前的文件显示
-            self._clear_file_display()
+            # 累加添加新文件（去重）
+            added = 0
+            for fp in file_paths:
+                if fp not in self.selected_files:
+                    self.selected_files.append(fp)
+                    self._add_file_pill(fp)
+                    added += 1
 
-            self.selected_files = file_paths
+            # 显示新列表，隐藏旧滚动区
+            if self.selected_files:
+                self.file_list_widget.setVisible(True)
 
-            # 为每个文件创建一个小框
-            for file_path in file_paths:
-                file_name = Path(file_path).name
-                if len(file_name) > 20:  # 限制文件名长度
-                    display_name = file_name[:17] + "..."
-                else:
-                    display_name = file_name
-
-                # 创建文件项容器
-                file_item = QtWidgets.QFrame()
-                file_item.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-                file_item.setStyleSheet("background-color: #3C3C3C; border-radius: 4px; color: white;")
-                file_item.setMaximumHeight(22)  # 更小的高度
-
-                # 文件项布局
-                item_layout = QtWidgets.QHBoxLayout(file_item)
-                item_layout.setContentsMargins(4, 0, 2, 0)
-                item_layout.setSpacing(0)
-
-                # 文件名称（不使用图标）
-                file_label = QtWidgets.QLabel(display_name)
-                file_label.setStyleSheet("color: white;")
-
-                # 关闭按钮
-                close_button = QtWidgets.QPushButton("×")
-                close_button.setFixedSize(14, 14)
-                close_button.setStyleSheet("QPushButton { border: none; color: white; font-weight: bold; }")
-                close_button.clicked.connect(lambda checked=False, fp=file_path: self._remove_file(fp))
-
-                # 添加到布局
-                item_layout.addWidget(file_label)
-                item_layout.addWidget(close_button)
-
-                # 添加到文件显示区域
-                self.file_display_layout.addWidget(file_item)
-
-            # 显示文件区域
-            self.file_display_area.setVisible(True)
-
-            # 显示简短提示
-            self.status_label.setText(f"已选择 {len(file_paths)} 个文件")
+            # 显示数量（总数）
+            self.status_label.setText(
+                f"已选择 {len(self.selected_files)} 个文件"
+                if self.selected_files else "就绪"
+            )
 
     def _remove_file(self, file_path: str) -> None:
         """移除选择的文件"""
@@ -573,58 +599,29 @@ class MainWindow(QtWidgets.QMainWindow):
         if file_path in self.selected_files:
             self.selected_files.remove(file_path)
 
-        # 重新构建文件显示区域
-        self._clear_file_display()
+        # 从列表控件删除对应项
+        item = self.file_item_map.pop(file_path, None)
+        if item is not None:
+            row = self.file_list_widget.row(item)
+            self.file_list_widget.takeItem(row)
 
-        # 如果还有文件，重新显示
         if self.selected_files:
-            for fp in self.selected_files:
-                file_name = Path(fp).name
-                if len(file_name) > 20:
-                    display_name = file_name[:17] + "..."
-                else:
-                    display_name = file_name
-
-                # 创建文件项容器
-                file_item = QtWidgets.QFrame()
-                file_item.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-                file_item.setStyleSheet("background-color: #3C3C3C; border-radius: 4px; color: white;")
-                file_item.setMaximumHeight(22)  # 更小的高度
-
-                # 文件项布局
-                item_layout = QtWidgets.QHBoxLayout(file_item)
-                item_layout.setContentsMargins(4, 0, 2, 0)
-                item_layout.setSpacing(0)
-
-                # 文件名称（不使用图标）
-                file_label = QtWidgets.QLabel(display_name)
-                file_label.setStyleSheet("color: white;")
-
-                # 关闭按钮
-                close_button = QtWidgets.QPushButton("×")
-                close_button.setFixedSize(14, 14)
-                close_button.setStyleSheet("QPushButton { border: none; color: white; font-weight: bold; }")
-                close_button.clicked.connect(lambda checked=False, fp=fp: self._remove_file(fp))
-
-                # 添加到布局
-                item_layout.addWidget(file_label)
-                item_layout.addWidget(close_button)
-
-                # 添加到文件显示区域
-                self.file_display_layout.addWidget(file_item)
-
-            self.status_label.setText(f"已选择 {len(self.selected_files)} 个文件")
+            self.status_label.setText(
+                f"已选择 {len(self.selected_files)} 个文件"
+            )
         else:
-            self.file_display_area.setVisible(False)
+            self.file_list_widget.setVisible(False)
             self.status_label.setText("就绪")
 
     def _clear_file_display(self) -> None:
         """清空文件显示区域"""
-        # 清除所有子控件
-        while self.file_display_layout.count():
-            item = self.file_display_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        # 清空文件“药丸”列表
+        if hasattr(self, "file_list_widget"):
+            self.file_list_widget.clear()
+        if hasattr(self, "file_item_map"):
+            self.file_item_map.clear()
+        if hasattr(self, "file_list_widget"):
+            self.file_list_widget.setVisible(False)
 
     def new_session(self) -> None:
         """新建会话"""
