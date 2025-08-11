@@ -1,5 +1,11 @@
-from openai import OpenAI
+from collections.abc import Generator
+
+from openai import OpenAI, AuthenticationError, RateLimitError, APIConnectionError, BadRequestError, APIStatusError
 from openai.types.chat.chat_completion import ChatCompletion
+from .utility import load_json
+
+from .rag_service import RAGService
+from .session_manager import SessionManager
 
 
 class AgentGateway:
@@ -10,13 +16,20 @@ class AgentGateway:
         self.client: OpenAI | None = None
         self.model_name: str = ""
 
+        # 对话状态（框架独立运行）
+        self.chat_history: list[dict[str, str]] = []
+
+        # 内部组件（延迟初始化）
+        self._rag_service = None
+        self._session_manager = None
+
     def init(
         self,
         base_url: str,
         api_key: str,
         model_name: str
     ) -> None:
-        """构造函数"""
+        """初始化连接和内部服务组件"""
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url
@@ -24,14 +37,274 @@ class AgentGateway:
 
         self.model_name = model_name
 
-    def invoke_model(self, messages: list[dict[str, str]]) -> str | None:
-        """调用模型返回结果"""
+        # 初始化内部组件
+        self._init_components()
+
+        # 加载历史会话
+        self.load_history()
+
+    def invoke_model(
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool = False,
+        user_files: list[str] | None = None
+    ) -> str | None:
+        """统一模型调用接口（向后兼容 + 新功能）"""
         if not self.client:
             return None
 
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages       # type: ignore
-        )
+        if not self.model_name:
+            return None
+
+        # 预处理消息
+        processed_messages = self._prepare_messages(messages, use_rag, user_files)
+
+        # 直接从配置文件读取设置
+        settings = load_json("gateway_setting.json")
+
+        # 准备API调用参数
+        params = {
+            "model": self.model_name,
+            "messages": processed_messages      # type: ignore
+        }
+
+        # 只有在设置中有值时才添加可选参数
+        if settings.get("max_tokens"):
+            params["max_tokens"] = int(settings["max_tokens"])
+
+        if settings.get("temperature"):
+            params["temperature"] = float(settings["temperature"])
+
+        completion: ChatCompletion = self.client.chat.completions.create(**params)
 
         return completion.choices[0].message.content
+
+    def invoke_streaming(
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool = False,
+        user_files: list[str] | None = None
+    ) -> Generator[str, None, None]:
+        """统一流式调用接口"""
+        def empty_generator():
+            return
+            yield  # 使其成为生成器但不产生任何值
+
+        if not self.client:
+            yield "❌ LLM客户端未初始化，请检查配置"
+            return
+
+        if not self.model_name:
+            yield "❌ 模型名称未设置，请检查配置"
+            return
+
+        # 预处理消息
+        processed_messages = self._prepare_messages(messages, use_rag, user_files)
+
+        # 确保消息不为空
+        if not processed_messages or len(processed_messages) == 0:
+            yield "❌ 消息处理失败，请检查输入内容"
+            return
+
+        # 确保至少有一条用户消息
+        has_user_message = False
+        for msg in processed_messages:
+            if msg.get("role") == "user":
+                has_user_message = True
+                break
+
+        if not has_user_message:
+            yield "❌ 缺少用户消息，请检查消息格式"
+            return
+
+        # 直接从配置文件读取设置
+        settings = load_json("gateway_setting.json")
+
+        # 准备API调用参数
+        params = {
+            "model": self.model_name,
+            "messages": processed_messages,      # type: ignore
+            "stream": True
+        }
+
+        # 只有在设置中有值时才添加可选参数
+        if settings.get("max_tokens"):
+            params["max_tokens"] = int(settings["max_tokens"])
+
+        if settings.get("temperature"):
+            params["temperature"] = float(settings["temperature"])
+
+        try:
+            stream = self.client.chat.completions.create(**params)
+
+            # 流式输出处理
+            for chunk in stream:
+                # 只处理内容部分
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
+        except AuthenticationError:
+            yield "❌ API密钥无效，请检查配置中的api_key设置"
+            return
+        except RateLimitError:
+            yield "❌ 请求频率超限，请稍后再试或检查API配额"
+            return
+        except APIConnectionError:
+            yield "❌ 无法连接到API服务器，请检查网络连接"
+            return
+        except BadRequestError as e:
+            yield f"❌ 请求参数错误: {e.message}"
+            return
+        except APIStatusError as e:
+            if e.status_code == 503:
+                yield "❌ 服务暂时不可用，请稍后重试"
+            elif e.status_code == 429:
+                yield "❌ 请求过于频繁，请稍后重试"
+            else:
+                yield f"❌ API错误 ({e.status_code}): {e.message}"
+            return
+        except Exception as e:
+            yield f"❌ 未知错误: {str(e)}"
+            return
+
+    def send_message(
+        self,
+        message: str,
+        use_rag: bool = True,
+        user_files: list[str] | None = None
+    ) -> str | None:
+        """发送消息并获取回复（框架核心接口）"""
+        if not message.strip():
+            return None
+
+        # 添加用户消息到历史
+        user_message = {"role": "user", "content": message}
+        self.chat_history.append(user_message)
+
+        # 调用模型获取回复
+        content = self.invoke_model(
+            messages=self.chat_history,
+            use_rag=use_rag,
+            user_files=user_files
+        )
+
+        # 添加助手回复到历史
+        if content:
+            assistant_message = {"role": "assistant", "content": content}
+            self.chat_history.append(assistant_message)
+
+        # 保存会话
+        self._save_session()
+
+        return content
+
+    def get_chat_history(self) -> list[dict[str, str]]:
+        """获取当前对话历史"""
+        return self.chat_history.copy()
+
+    def clear_history(self) -> None:
+        """清空对话历史"""
+        self.chat_history.clear()
+        self._save_session()
+
+    def load_history(self) -> None:
+        """加载对话历史"""
+        if self._session_manager:
+            self.chat_history = self._session_manager.load_session()
+
+    def new_session(self) -> str:
+        """创建新会话"""
+        if self._session_manager:
+            session_id = self._session_manager.new_session()
+            self.chat_history.clear()
+            return session_id
+        return ""
+
+    def get_all_sessions(self) -> list[dict]:
+        """获取所有会话"""
+        if self._session_manager:
+            return self._session_manager.get_all_sessions()
+        return []
+
+    def switch_session(self, session_id: str) -> bool:
+        """切换会话"""
+        if self._session_manager:
+            success = self._session_manager.switch_session(session_id)
+            if success:
+                self.load_history()
+            return success
+        return False
+
+    def delete_session(self, session_id: str) -> bool:
+        """删除会话"""
+        if self._session_manager:
+            return self._session_manager.delete_session(session_id)
+        return False
+
+    def export_session(self, session_id: str | None = None) -> tuple[str, list[dict]]:
+        """导出会话
+        返回：(会话标题, 会话历史记录)
+        """
+        if self._session_manager:
+            return self._session_manager.export_session(session_id)
+        return ("未知会话", [])
+
+    def get_deleted_sessions(self) -> list[dict]:
+        """获取所有已删除的会话"""
+        if self._session_manager:
+            return self._session_manager.get_deleted_sessions()
+        return []
+
+    def restore_session(self, session_id: str) -> bool:
+        """恢复已删除的会话
+        Returns:
+            是否成功恢复
+        """
+        if self._session_manager:
+            return self._session_manager.restore_session(session_id)
+        return False
+
+    def cleanup_deleted_sessions(self, force_all: bool = False) -> int:
+        """清理已删除的会话
+        
+        Args:
+            force_all: 是否强制清理所有已删除的会话（忽略30天限制）
+            
+        Returns:
+            清理的会话数量
+        """
+        if self._session_manager:
+            return self._session_manager.cleanup_deleted_sessions(force_all)
+        return 0
+
+    def _save_session(self) -> None:
+        """保存会话"""
+        if self._session_manager:
+            self._session_manager.save_session(self.chat_history)
+
+    def _init_components(self) -> None:
+        """初始化内部组件"""
+        self._rag_service = RAGService(self)
+        self._session_manager = SessionManager()
+
+    def _prepare_messages(
+        self,
+        messages: list[dict[str, str]],
+        use_rag: bool,
+        user_files: list[str] | None
+    ) -> list[dict[str, str]]:
+        """内部方法：预处理消息"""
+        if not use_rag and not user_files:
+            # 纯聊天模式：直接返回原始消息
+            return messages
+
+        if not self._rag_service:
+            # RAG组件未初始化，降级到普通聊天
+            return messages
+
+        if use_rag:
+            # RAG模式：知识库检索 + 用户文件
+            return self._rag_service.prepare_rag_messages(messages, user_files)
+        else:
+            # 文件模式：只处理用户文件
+            return self._rag_service.prepare_file_messages(messages, user_files)
