@@ -1,10 +1,8 @@
-from typing import Any
-
 from .utility import load_json
 
 
 # RAG系统默认配置
-SETTINGS: dict[str, Any] = {
+SETTINGS: dict = {
     "base_url": "https://openrouter.ai/api/v1",
     "api_key": "",
     "model_name": "anthropic/claude-3.7-sonnet",
