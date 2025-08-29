@@ -17,25 +17,20 @@ class MainWindow(QtWidgets.QMainWindow):
         """构造函数"""
         super().__init__()
 
-        # 加载配置
-        settings = load_json("gateway_setting.json") or {}
-        self.base_url = settings.get("base_url", "")
-        self.api_key = settings.get("api_key", "")
-        self.model_name = settings.get("model_name", "")
-        self.max_tokens = settings.get("max_tokens", "")
-        self.temperature = settings.get("temperature", "")
-
         # 初始化网关
         self.gateway: AgentGateway = AgentGateway()
-        if self.base_url and self.api_key and self.model_name:
-            self.gateway.init(
-                base_url=self.base_url,
-                api_key=self.api_key,
-                model_name=self.model_name
-            )
 
-            # 自动清理30天前已删除的会话
-            self.gateway.cleanup_deleted_sessions(force_all=False)
+        # 从gateway获取配置
+        self.base_url = self.gateway.settings.get("base_url", "")
+        self.api_key = self.gateway.settings.get("api_key", "")
+        self.model_name = self.gateway.settings.get("model_name", "")
+        self.max_tokens = self.gateway.settings.get("max_tokens", "")
+        self.temperature = self.gateway.settings.get("temperature", "")
+
+        self.gateway.init()
+
+        # 自动清理30天前已删除的会话
+        self.gateway.cleanup_deleted_sessions(force_all=False)
 
         self.init_ui()
         self.refresh_display()
@@ -49,9 +44,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def init_widgets(self) -> None:
         """初始化中央控件"""
-        desktop: QtCore.QRect = (
-        QtWidgets.QApplication.primaryScreen().availableGeometry()
-    )
+        desktop: QtCore.QRect = (QtWidgets.QApplication.primaryScreen().availableGeometry())
 
         # 创建主分割布局
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
@@ -571,24 +564,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # 简化流式输出：直接使用append_message的格式
             full_content = ""
-            
+
             # 创建缓冲区，减少UI更新频率
             chunk_buffer = ""
             update_interval = 0.2  # 200ms更新一次
             buffer_size_threshold = 20  # 缓冲区大小阈值
             last_update_time = time.time()
-            
+
             for chunk in stream:
                 # 正常内容处理
                 full_content += chunk
                 chunk_buffer += chunk
-                
+
                 # 控制UI更新频率
                 current_time = time.time()
                 if (current_time - last_update_time >= update_interval or 
                     len(chunk_buffer) >= buffer_size_threshold or 
                     any(mark in chunk for mark in ["。", ".", "\n", "!", "?", "！", "？"])):
-                    
+
                     # 更新历史记录
                     history = self.gateway.get_chat_history()
                     if history and history[-1]["role"] == "assistant":
@@ -602,12 +595,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     # 滚动到底部
                     self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
                     QtWidgets.QApplication.processEvents()
-                    
+
                     # 重置缓冲区和计时器
                     chunk_buffer = ""
                     last_update_time = current_time
                     time.sleep(0.01)
-            
+
             # 保存会话
             self.gateway._save_session()
             self.status_label.setText("就绪")
@@ -1025,65 +1018,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 sender.setText("显示")
 
     def save_config(self) -> None:
-        """保存配置并立即应用"""
-        # 读取现有配置
-        settings = load_json("gateway_setting.json") or {}
-
-        # 获取界面输入的配置
-        new_base_url = self.config_base_url.text()
-        new_api_key = self.config_api_key.text()
-        new_model_name = self.config_model_name.text()
-        new_max_tokens = self.config_max_tokens.text().strip()
-        new_temperature = self.config_temperature.text().strip()
-
-        # 更新配置
-        settings["base_url"] = new_base_url
-        settings["api_key"] = new_api_key
-        settings["model_name"] = new_model_name
-
-        # 处理可选参数
-        if new_max_tokens:
-            settings["max_tokens"] = int(new_max_tokens)
-        else:
-            settings["max_tokens"] = ""
-
-        if new_temperature:
-            settings["temperature"] = float(new_temperature)
-        else:
-            settings["temperature"] = ""
-
-        # 保存配置
-        save_json("gateway_setting.json", settings)
-
-        # 更新实例属性
-        self.base_url = new_base_url
-        self.api_key = new_api_key
-        self.model_name = new_model_name
-        self.max_tokens = new_max_tokens
-        self.temperature = new_temperature
-
-        # 如果配置有效，重新初始化网关
-        if self.base_url and self.api_key and self.model_name:
-            self.gateway.init(
-                base_url=self.base_url,
-                api_key=self.api_key,
-                model_name=self.model_name
-            )
-
-            QtWidgets.QMessageBox.information(
-                self,
-                "配置已保存",
-                "配置已保存并立即应用。"
-            )
-        else:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "配置不完整",
-                "配置已保存，但API连接信息不完整，无法初始化连接。"
-            )
-
-
-# 移除StreamSwitchButton类，因为我们不再需要流式输出开关
+        """保存配置"""
+        settings = {
+            "base_url": self.config_base_url.text(),
+            "api_key": self.config_api_key.text(),
+            "model_name": self.config_model_name.text(),
+            "max_tokens": int(self.config_max_tokens.text()),
+            "temperature": float(self.config_temperature.text())
+        }
+        
+        self.gateway.settings.update(settings)
+        save_json("gateway_setting.json", self.gateway.settings)
+        
+        QtWidgets.QMessageBox.information(self, "配置已保存", "配置已保存。")
 
 
 class RagSwitchButton(QtWidgets.QWidget):

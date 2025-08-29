@@ -13,29 +13,41 @@ class AgentGateway:
 
     def __init__(self) -> None:
         """构造函数"""
-        self.client: OpenAI | None = None
+        self.client: OpenAI
         self.model_name: str = ""
+        # 直接加载配置
+        self.settings = load_json("gateway_setting.json")
 
         # 对话状态（框架独立运行）
         self.chat_history: list[dict[str, str]] = []
 
         # 内部组件（延迟初始化）
-        self._rag_service = None
-        self._session_manager = None
+        self._rag_service: RAGService
+        self._session_manager: SessionManager
 
-    def init(
-        self,
-        base_url: str,
-        api_key: str,
-        model_name: str
-    ) -> None:
+    def init(self) -> None:
         """初始化连接和内部服务组件"""
+        # 从配置获取连接参数
+        base_url = self.settings.get("base_url", "")
+        api_key = self.settings.get("api_key", "")
+        model_name = self.settings.get("model_name", "")
+
+        if not base_url or not api_key or not model_name:
+            print("❌ 配置不完整，请检查以下配置项：")
+            if not base_url:
+                print("  - base_url: API地址未设置")
+            if not api_key:
+                print("  - api_key: API密钥未设置")
+            if not model_name:
+                print("  - model_name: 模型名称未设置")
+            return
+
+        self.model_name = model_name
+
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url
         )
-
-        self.model_name = model_name
 
         # 初始化内部组件
         self._init_components()
@@ -59,21 +71,18 @@ class AgentGateway:
         # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
 
-        # 直接从配置文件读取设置
-        settings = load_json("gateway_setting.json")
-
         # 准备API调用参数
         params = {
             "model": self.model_name,
-            "messages": processed_messages      # type: ignore
+            "messages": processed_messages
         }
 
-        # 只有在设置中有值时才添加可选参数
-        if settings.get("max_tokens"):
-            params["max_tokens"] = int(settings["max_tokens"])
+        # 使用实例变量中的配置
+        if self.settings.get("max_tokens"):
+            params["max_tokens"] = int(self.settings["max_tokens"])
 
-        if settings.get("temperature"):
-            params["temperature"] = float(settings["temperature"])
+        if self.settings.get("temperature"):
+            params["temperature"] = float(self.settings["temperature"])
 
         completion: ChatCompletion = self.client.chat.completions.create(**params)
 
@@ -117,22 +126,19 @@ class AgentGateway:
             yield "❌ 缺少用户消息，请检查消息格式"
             return
 
-        # 直接从配置文件读取设置
-        settings = load_json("gateway_setting.json")
-
         # 准备API调用参数
         params = {
             "model": self.model_name,
-            "messages": processed_messages,      # type: ignore
+            "messages": processed_messages,
             "stream": True
         }
 
-        # 只有在设置中有值时才添加可选参数
-        if settings.get("max_tokens"):
-            params["max_tokens"] = int(settings["max_tokens"])
+        # 使用实例变量中的配置
+        if self.settings.get("max_tokens"):
+            params["max_tokens"] = int(self.settings["max_tokens"])
 
-        if settings.get("temperature"):
-            params["temperature"] = float(settings["temperature"])
+        if self.settings.get("temperature"):
+            params["temperature"] = float(self.settings["temperature"])
 
         try:
             stream = self.client.chat.completions.create(**params)
@@ -266,10 +272,9 @@ class AgentGateway:
 
     def cleanup_deleted_sessions(self, force_all: bool = False) -> int:
         """清理已删除的会话
-        
         Args:
             force_all: 是否强制清理所有已删除的会话（忽略30天限制）
-            
+
         Returns:
             清理的会话数量
         """

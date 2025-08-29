@@ -1,7 +1,9 @@
 from pathlib import Path
+from typing import Any
 
 from .document_service import DocumentService
 from .vector_service import VectorService
+from .utility import AGENT_DIR
 
 
 RAG_PROMPT_TEMPLATE = """基于以下上下文信息回答用户问题。如果上下文中没有相关信息，请说明无法从提供的文档中找到答案。
@@ -17,17 +19,16 @@ RAG_PROMPT_TEMPLATE = """基于以下上下文信息回答用户问题。如果�
 class RAGService:
     """RAG消息预处理服务（gateway内部组件）"""
 
-    def __init__(self, gateway) -> None:
+    def __init__(self, gateway: Any) -> None:
         """构造函数"""
         self.gateway = gateway  # 仅用于循环引用，不直接调用
-        self.document_service = DocumentService()
+        self.document_service = DocumentService(gateway.settings)
         self.vector_service = VectorService()
 
         self._init_knowledge_base()
 
     def _init_knowledge_base(self) -> None:
         """初始化知识库"""
-        from .utility import AGENT_DIR
         # docs目录应该与.vnag目录同级
         docs_dir = AGENT_DIR.parent / "docs"
 
@@ -77,7 +78,6 @@ class RAGService:
                 user_content += f"\n\n用户提交文件 {file_path}: (读取失败)"
 
         return user_content
-
 
     def prepare_rag_messages(
         self,

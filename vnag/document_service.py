@@ -4,9 +4,6 @@ from typing import NamedTuple
 import pypdf
 from docx.api import Document as DocxDocument
 
-from .utility import load_json
-
-
 class DocumentChunk(NamedTuple):
     """文档分块"""
     text: str
@@ -16,10 +13,9 @@ class DocumentChunk(NamedTuple):
 class DocumentService:
     """文档处理服务"""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: dict) -> None:
         """构造函数"""
-        # 直接从配置文件读取设置
-        settings = load_json("gateway_setting.json")
+        # 使用传入的配置
         self.chunk_size: int = settings.get("document.chunk_size", 1000)
         self.chunk_overlap: int = settings.get("document.chunk_overlap", 200)
         # 支持多格式（用户文件上传需要）
@@ -35,7 +31,6 @@ class DocumentService:
         extension = path.suffix.lower()
         if extension not in self.supported_formats:
             raise ValueError(f"Unsupported format: {extension}")
-
 
         # 读取文本内容
         if extension in ['.md', '.txt']:
