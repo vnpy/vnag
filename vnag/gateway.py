@@ -13,7 +13,7 @@ class AgentGateway:
 
     def __init__(self) -> None:
         """构造函数"""
-        self.client: OpenAI
+        self.client: OpenAI | None = None
         self.model_name: str = ""
         # 直接加载配置
         self.settings = load_json("gateway_setting.json")
@@ -62,6 +62,7 @@ class AgentGateway:
         user_files: list[str] | None = None
     ) -> str | None:
         """统一模型调用接口（向后兼容 + 新功能）"""
+        # 说明：当前UI层默认只调用 invoke_streaming，非流式路径主要用于备用，尚未补充细粒度异常捕获。
         if not self.client:
             return None
 

@@ -21,7 +21,6 @@ class SessionManager:
         self.messages_table = self.db.table('messages')
         self.current_session_id: str | None = None
 
-
         # 自动加载或创建默认会话
         self._ensure_current_session()
 
@@ -213,7 +212,7 @@ class SessionManager:
             清理的会话数量
         """
         Session = Query()
-        
+
         if force_all:
             # 强制清理所有已删除的会话
             deleted_sessions = self.sessions_table.search(Session.deleted == True)

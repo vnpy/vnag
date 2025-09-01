@@ -29,7 +29,6 @@ class VectorService:
             metadata={"hnsw:space": "cosine"}
         )
 
-
     def add_documents(self, chunks: list[DocumentChunk]) -> None:
         """添加文档分块到向量数据库"""
         if not chunks:
@@ -52,7 +51,6 @@ class VectorService:
             metadatas=metadatas,
             ids=ids
         )
-
 
     def similarity_search(
         self,
@@ -88,7 +86,8 @@ class VectorService:
 
     def get_document_count(self) -> int:
         """获取文档数量"""
-        return self.collection.count()
+        document_count: int = self.collection.count()
+        return document_count
 
     def clear_documents(self) -> None:
         """清空所有文档"""
@@ -100,4 +99,3 @@ class VectorService:
             name="documents",
             metadata={"hnsw:space": "cosine"}
         )
-

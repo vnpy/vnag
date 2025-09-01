@@ -6,7 +6,7 @@ from datetime import datetime
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .gateway import AgentGateway
-from .utility import AGENT_DIR, load_json, save_json
+from .utility import AGENT_DIR, save_json
 from . import __version__
 
 
@@ -661,7 +661,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """刷新UI显示（从gateway获取数据）"""
         # 从gateway获取对话历史
         chat_history = self.gateway.get_chat_history()
-        
+
         # 更新UI显示
         self.history_widget.clear()
         for message in chat_history:
@@ -761,7 +761,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def clear_history(self) -> None:
         """清空会话历史（UI交互）"""
-        i: int = QtWidgets.QMessageBox.question(
+        i: QtWidgets.QMessageBox.StandardButton = QtWidgets.QMessageBox.question(
             self,
             "清空历史",
             "确定要清空历史吗？",
@@ -771,7 +771,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if i == QtWidgets.QMessageBox.StandardButton.Yes:
             # 业务逻辑交给gateway
             self.gateway.clear_history()
-            
+
             # 刷新UI显示
             self.refresh_display()
 
@@ -797,7 +797,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "",
             "支持的文档 (*.md *.txt *.pdf *.docx);;所有文件 (*)"
         )
-        
+
         if file_paths:
             # 累加添加新文件（去重）
             for fp in file_paths:
@@ -906,20 +906,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self, "确认删除", "确定要删除这个会话吗？",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
-        
+
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             # 检查是否是当前会话
             is_current = self.gateway._session_manager.current_session_id == session_id
-            
+
             if self.gateway.delete_session(session_id):
                 # 刷新会话列表
                 self.refresh_session_list()
-                
+
                 # 如果删除的是当前会话，则清空历史显示
                 if is_current:
                     self.history_widget.clear()
                     self.status_label.setText("请从左侧选择一个会话或创建新会话")
-                
+
                 QtWidgets.QMessageBox.information(self, "成功", "会话已删除")
 
     def export_session(self, session_id: str, title: str) -> None:
@@ -1026,62 +1026,63 @@ class MainWindow(QtWidgets.QMainWindow):
             "max_tokens": int(self.config_max_tokens.text()),
             "temperature": float(self.config_temperature.text())
         }
-        
+
         self.gateway.settings.update(settings)
         save_json("gateway_setting.json", self.gateway.settings)
-        
+
         QtWidgets.QMessageBox.information(self, "配置已保存", "配置已保存。")
 
 
 class RagSwitchButton(QtWidgets.QWidget):
     """RAG开关按钮"""
-    
+
     toggled = QtCore.Signal(bool)
-    
-    def __init__(self, parent=None) -> None:
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
         super().__init__(parent)
         self.setFixedSize(100, 30)  # 调整宽度以容纳更长的文本
         self._checked = False
-        
+
     def setChecked(self, checked: bool) -> None:
         """设置选中状态"""
         if self._checked != checked:
             self._checked = checked
             self.update()
             self.toggled.emit(checked)
-    
+
     def isChecked(self) -> bool:
         """获取选中状态"""
         return self._checked
-    
-    def mousePressEvent(self, event) -> None:
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         """鼠标点击事件"""
         if event.button() == QtCore.Qt.LeftButton:
             self.setChecked(not self._checked)
-    
-    def paintEvent(self, event) -> None:
+
+    def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         """绘制开关"""
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        
+
         # 开关背景
         rect = self.rect().adjusted(2, 5, -2, -5)  # 减小上下边距
         radius = rect.height() // 2
-        
+
         if self._checked:
             # 开启状态：绿色背景
             painter.setBrush(QtGui.QBrush(QtGui.QColor(76, 175, 80)))
         else:
             # 关闭状态：灰色背景
             painter.setBrush(QtGui.QBrush(QtGui.QColor(117, 117, 117)))
-        
+
         painter.setPen(QtCore.Qt.NoPen)
         painter.drawRoundedRect(rect, radius, radius)
-        
+
         # 开关圆形按钮
         button_rect = QtCore.QRect()
         button_rect.setSize(QtCore.QSize(rect.height() - 4, rect.height() - 4))
-        
+
         if self._checked:
             # 开启状态：按钮在右侧
             button_rect.moveCenter(QtCore.QPoint(
@@ -1092,17 +1093,17 @@ class RagSwitchButton(QtWidgets.QWidget):
             button_rect.moveCenter(QtCore.QPoint(
                 rect.left() + radius, rect.center().y()
             ))
-        
+
         painter.setBrush(QtGui.QBrush(QtGui.QColor(255, 255, 255)))
         painter.drawEllipse(button_rect)
-        
+
         # 文字标签
         painter.setPen(QtGui.QColor(255, 255, 255))  # 使用白色文字，更加醒目
         font = painter.font()
         font.setPointSize(8)  # 调大字号
         font.setBold(True)
         painter.setFont(font)
-        
+
         # 直接在开关内部绘制文字
         if self._checked:
             painter.drawText(
@@ -1114,13 +1115,16 @@ class RagSwitchButton(QtWidgets.QWidget):
             )
 
 
-
-
-
 class ModelSelectorDialog(QtWidgets.QDialog):
     """模型选择对话框"""
 
-    def __init__(self, base_url: str, api_key: str, current_model: str = "", parent=None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        current_model: str = "",
+        parent: QtWidgets.QWidget | None = None
+    ) -> None:
         """构造函数"""
         super().__init__(parent)
 
@@ -1191,12 +1195,12 @@ class ModelSelectorDialog(QtWidgets.QDialog):
         """加载模型列表"""
         self.model_list.clear()
         self.status_label.setText("正在加载模型列表...")
-            
+
         try:
             from openai import OpenAI
             client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             models = client.models.list()
-            
+
             model_ids = [model.id for model in models.data]
             model_ids.sort()
 
@@ -1244,7 +1248,7 @@ class SessionListDialog(QtWidgets.QDialog):
         self,
         sessions: list[dict],
         gateway: AgentGateway,
-        parent=None
+        parent: QtWidgets.QWidget | None = None
     ) -> None:
         """构造函数"""
         super().__init__(parent)
@@ -1258,46 +1262,46 @@ class SessionListDialog(QtWidgets.QDialog):
         """初始化UI"""
         self.setWindowTitle("会话列表")
         self.setFixedSize(600, 400)
-        
+
         # 会话列表
         self.session_list = QtWidgets.QListWidget()
-        
+
         for session in self.sessions:
             title = session.get('title', '未命名会话')
             created_at = session.get('created_at', '')[:16].replace('T', ' ')
             item_text = f"{title} ({created_at})"
-            
+
             item = QtWidgets.QListWidgetItem(item_text)
             item.setData(QtCore.Qt.ItemDataRole.UserRole, session['id'])
             self.session_list.addItem(item)
-        
+
         # 按钮
         button_layout = QtWidgets.QHBoxLayout()
-        
+
         switch_button = QtWidgets.QPushButton("切换")
         switch_button.clicked.connect(self.switch_session)
-        
+
         delete_button = QtWidgets.QPushButton("删除")
         delete_button.clicked.connect(self.delete_session)
-        
+
         close_button = QtWidgets.QPushButton("关闭")
         close_button.clicked.connect(self.reject)
 
         export_button = QtWidgets.QPushButton("导出")
         export_button.clicked.connect(self.export_session)
-        
+
         button_layout.addWidget(switch_button)
         button_layout.addWidget(delete_button)
         button_layout.addWidget(export_button)
         button_layout.addStretch()
         button_layout.addWidget(close_button)
-        
+
         # 主布局
         main_layout = QtWidgets.QVBoxLayout()
         main_layout.addWidget(QtWidgets.QLabel("选择要切换的会话："))
         main_layout.addWidget(self.session_list)
         main_layout.addLayout(button_layout)
-        
+
         self.setLayout(main_layout)
 
     def switch_session(self) -> None:
@@ -1306,7 +1310,7 @@ class SessionListDialog(QtWidgets.QDialog):
         if not current_item:
             QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
             return
-        
+
         try:
             session_id = current_item.data(QtCore.Qt.ItemDataRole.UserRole)
             if self.gateway.switch_session(session_id):
@@ -1322,12 +1326,12 @@ class SessionListDialog(QtWidgets.QDialog):
         if not current_item:
             QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
             return
-        
+
         reply = QtWidgets.QMessageBox.question(
             self, "确认删除", "确定要删除这个会话吗？",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
         )
-        
+
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             try:
                 session_id = current_item.data(QtCore.Qt.ItemDataRole.UserRole)
@@ -1394,7 +1398,13 @@ class SessionListDialog(QtWidgets.QDialog):
 class TrashDialog(QtWidgets.QDialog):
     """回收站对话框"""
 
-    def __init__(self, deleted_sessions: list[dict], gateway: AgentGateway, parent=None) -> None:
+    def __init__(
+        self,
+        deleted_sessions: list[dict],
+        gateway: AgentGateway,
+        parent: QtWidgets.QWidget | None = None
+    ) -> None:
+        """构造函数"""
         super().__init__(parent)
         self.deleted_sessions = deleted_sessions
         self.gateway = gateway

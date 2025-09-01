@@ -4,6 +4,7 @@ from typing import NamedTuple
 import pypdf
 from docx.api import Document as DocxDocument
 
+
 class DocumentChunk(NamedTuple):
     """文档分块"""
     text: str
