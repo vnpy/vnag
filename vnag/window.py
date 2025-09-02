@@ -547,8 +547,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # 收集UI状态参数
         use_rag: bool = self.rag_switch.isChecked()
-        if self.select_files:
-            user_files: list | None = self.selected_files
+        user_files: list | None
+        if self.selected_files:
+            user_files = self.selected_files
         else:
             user_files = None
 
@@ -1204,7 +1205,7 @@ class ModelSelectorDialog(QtWidgets.QDialog):
 
         try:
             client: OpenAI = OpenAI(api_key=self.api_key, base_url=self.base_url)
-            models: list = client.models.list()
+            models = client.models.list()
 
             model_ids: list = [model.id for model in models.data]
             model_ids.sort()
