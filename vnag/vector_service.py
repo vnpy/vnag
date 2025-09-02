@@ -74,9 +74,9 @@ class VectorService:
         )
 
         # 简化类型处理，直接忽略索引类型检查
-        docs = results["documents"][0]  # type: ignore[index]
-        metas = results["metadatas"][0]  # type: ignore[index]
-        dists = results["distances"][0]  # type: ignore[index]
+        docs = results["documents"][0]
+        metas = results["metadatas"][0]
+        dists = results["distances"][0]
 
         pairs: zip = zip(docs, metas, dists, strict=True)
         documents: list[dict[str, Any]] = []

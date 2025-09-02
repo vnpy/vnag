@@ -1,5 +1,5 @@
 from pathlib import Path
-import markdown
+import markdown    # type: ignore[import-not-found]
 import time
 from datetime import datetime
 
@@ -299,7 +299,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._recalc_pill_metrics()
             self._position_file_pills()
             self._refresh_file_pills_display()
-        return super().eventFilter(watched, event)
+        return bool(super().eventFilter(watched, event))
 
     def _position_file_pills(self) -> None:
         """将药丸条固定在输入框内部顶部，文本从其下方开始（Cursor式）"""

@@ -96,14 +96,14 @@ class AgentGateway:
             stream: ChatCompletion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=processed_messages,
-                **kwargs,    # type: ignore
+                **kwargs,
             )
 
             # 流式输出处理
             for chunk in stream:
-                # 只处理内容部分（显式检查 None）    # OpenAI SDK 动态对象，运行时存在 choices/delta，因此静态忽略
-                if chunk.choices[0].delta.content is not None:  # type: ignore[attr-defined]
-                    yield chunk.choices[0].delta.content        # type: ignore[attr-defined]
+                # 只处理内容部分（显式检查 None）
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
 
         except Exception as e:
             yield f"请求错误: {str(e)}"
