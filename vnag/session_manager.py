@@ -116,7 +116,7 @@ class SessionManager:
 
     def get_all_sessions(self) -> list[dict]:
         """获取所有未删除的会话"""
-        sessions: list = self.sessions_table.search(where('deleted') == False)
+        sessions: list = self.sessions_table.search(where('deleted') == False)  # noqa: E712
         ordered: list = sorted(sessions, key=lambda x: x['updated_at'], reverse=True)
         return ordered
 
@@ -218,12 +218,11 @@ class SessionManager:
             清理的会话数量
         """
         if force_all:
-            deleted_sessions: list = self.sessions_table.search(where('deleted') == True)
-        else:
+            deleted_sessions: list = self.sessions_table.search(where('deleted') == True)  # noqa: E712
             cutoff_date: str = (
                 datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)
             ).isoformat()
-            expr = (where('deleted') == True) & (where('updated_at') < cutoff_date)
+            expr = (where('deleted') == True) & (where('updated_at') < cutoff_date)        # noqa: E712
             deleted_sessions = self.sessions_table.search(expr)
 
         if not deleted_sessions:
@@ -251,7 +250,7 @@ class SessionManager:
 
     def get_deleted_sessions(self) -> list[dict]:
         """获取所有已删除的会话"""
-        sessions: list = self.sessions_table.search(where('deleted') == True)
+        sessions: list = self.sessions_table.search(where('deleted') == True)  # noqa: E712
         ordered: list = sorted(sessions, key=lambda x: x['updated_at'], reverse=True)
         return ordered
 

@@ -102,8 +102,8 @@ class AgentGateway:
             # 流式输出处理
             for chunk in stream:
                 # 只处理内容部分（显式检查 None）
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+                if chunk.choices[0].delta.content is not None:  # type: ignore[attr-defined]
+                    yield chunk.choices[0].delta.content        # type: ignore[attr-defined]
 
         except Exception as e:
             yield f"请求错误: {str(e)}"

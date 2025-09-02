@@ -290,7 +290,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 确保滚动条滚动到最新消息
         self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
 
-    def eventFilter(self, watched: QtWidgets.QWidget, event: QtCore.QEvent) -> bool:
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """监听输入框大小变化以定位药丸列表"""
         if watched is self.input_widget and event.type() in (
             QtCore.QEvent.Type.Resize,
