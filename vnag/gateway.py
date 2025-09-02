@@ -101,7 +101,7 @@ class AgentGateway:
 
             # 流式输出处理
             for chunk in stream:
-                # 只处理内容部分（显式检查 None）
+                # 只处理内容部分（显式检查 None）    # OpenAI SDK 动态对象，运行时存在 choices/delta，因此静态忽略
                 if chunk.choices[0].delta.content is not None:  # type: ignore[attr-defined]
                     yield chunk.choices[0].delta.content        # type: ignore[attr-defined]
 

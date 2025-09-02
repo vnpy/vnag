@@ -1,5 +1,4 @@
 from pathlib import Path
-import pypdf
 
 from .document_service import DocumentService
 from .vector_service import VectorService
@@ -38,7 +37,9 @@ class RAGService:
             return False
 
         all_chunks: list = []
-        for file_path in file_paths:
+        total: int = len(file_paths)
+        for idx, file_path in enumerate(file_paths, start=1):
+            print(f"[RAG] 导入进度 {idx}/{total}: {Path(file_path).name}")
             chunks: list = self.document_service.process_file(file_path)
             all_chunks.extend(chunks)
 
@@ -49,7 +50,7 @@ class RAGService:
         return False
 
     def _process_user_files(self, user_files: list[str] | None) -> str:
-        """处理用户提交的文件（直接读取文本，不做向量化处理）"""
+        """处理用户提交的文件：统一使用 DocumentService.read_file_text 读取原文。"""
         if not user_files:
             return ""
 
@@ -57,21 +58,12 @@ class RAGService:
         for file_path in user_files:
             try:
                 path: Path = Path(file_path)
-
-                # 支持 md/txt 直接读取；pdf 逐页提取文本
-                suffix: str = path.suffix.lower()
-                if suffix in ['.md', '.txt']:
-                    content: str = path.read_text(encoding='utf-8')
-                    user_content += f"\n\n用户提交文件 {path.name}:\n{content}"
-                elif suffix == '.pdf':
-                    text: str = ""
-                    with open(path, 'rb') as f:
-                        reader = pypdf.PdfReader(f)
-                        for page in reader.pages:
-                            text += (page.extract_text() or "") + "\n"
-                    user_content += f"\n\n用户提交文件 {path.name}:\n{text}"
-                else:
-                    user_content += f"\n\n用户提交文件 {path.name}: (不支持的文件格式)"
+                content: str = self.document_service.read_file_text(str(path))
+                user_content += f"\n\n用户提交文件 {path.name}:\n{content}"
+            except ValueError:
+                # 不支持的文件格式
+                path = Path(file_path)
+                user_content += f"\n\n用户提交文件 {path.name}: (不支持的文件格式)"
             except Exception:
                 user_content += f"\n\n用户提交文件 {file_path}: (读取失败)"
 

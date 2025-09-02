@@ -780,7 +780,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "选择要分析的文件",
             "",
-            "支持的文档 (*.md *.txt *.pdf);;所有文件 (*)"
+            "支持的文档 (*.md *.txt *.pdf *.py);;所有文件 (*)"
         )
 
         if file_paths:

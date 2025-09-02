@@ -217,11 +217,12 @@ class SessionManager:
         Returns:
             清理的会话数量
         """
+        cutoff_date: str = (datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)).isoformat()
         if force_all:
+            # 强制：清理所有已标记删除的会话（忽略时间）
             deleted_sessions: list = self.sessions_table.search(where('deleted') == True)  # noqa: E712
-            cutoff_date: str = (
-                datetime.now() - timedelta(days=DELETED_SESSION_RETENTION_DAYS)
-            ).isoformat()
+        else:
+            # 非强制：仅清理超过保留期的已删除会话
             expr = (where('deleted') == True) & (where('updated_at') < cutoff_date)        # noqa: E712
             deleted_sessions = self.sessions_table.search(expr)
 
