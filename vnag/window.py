@@ -47,7 +47,7 @@ class MainWindow(QtWidgets.QMainWindow):
         desktop: QtCore.QRect = (QtWidgets.QApplication.primaryScreen().availableGeometry())
 
         # 创建主分割布局
-        main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
 
         # ========== 左侧区域 ==========
         left_widget = QtWidgets.QWidget()
@@ -256,10 +256,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if role == "user":
             # 用户内容不需要被渲染
-            escaped_content = (content.replace("&", "&amp;")
-                             .replace("<", "&lt;")
-                             .replace(">", "&gt;")
-                             .replace("\n", "<br>"))
+            escaped_content = (content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>"))
 
             # 统一格式：User标题和内容都使用相同的行距
             user_html = (
@@ -292,7 +289,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # 确保滚动条滚动到最新消息
         self.history_widget.moveCursor(QtGui.QTextCursor.MoveOperation.End)
 
-    def eventFilter(self, watched, event):  # type: ignore[override]
+    def eventFilter(self, watched: QtWidgets.QWidget, event: QtCore.QEvent) -> bool:
         """监听输入框大小变化以定位药丸列表"""
         if watched is self.input_widget and event.type() in (
             QtCore.QEvent.Type.Resize,
@@ -429,15 +426,15 @@ class MainWindow(QtWidgets.QMainWindow):
         pill_widgets: list[QtWidgets.QWidget] = []
         widths: list[int] = []
         for fp in self.selected_files:
-            w = self._create_pill_widget(fp)
-            pill_widgets.append(w)
-            widths.append(w.sizeHint().width())
+            pill_widget = self._create_pill_widget(fp)
+            pill_widgets.append(pill_widget)
+            widths.append(pill_widget.sizeHint().width())
 
         used = 0
         visible_count = 0
         total = len(pill_widgets)
-        for i, w in enumerate(widths):
-            next_used = (used + (spacing if visible_count > 0 else 0) + w)
+        for _i, width_val in enumerate(widths):
+            next_used = used + (spacing if visible_count > 0 else 0) + width_val
             if next_used <= available_width:
                 used = next_used
                 visible_count += 1
@@ -540,25 +537,17 @@ class MainWindow(QtWidgets.QMainWindow):
         use_rag = self.rag_switch.isChecked()
         user_files = self.selected_files if self.selected_files else None
 
-        # 添加用户消息到历史
-        self.append_message("user", text)
-
-        # 添加用户消息到gateway的聊天历史
-        user_message = {"role": "user", "content": text}
-        self.gateway.chat_history.append(user_message)
-
-        # 流式输出模式 (现在所有对话都是流式的)
+        # 流式输出模式
         try:
-            # 获取流式响应
-            stream = self.gateway.invoke_streaming(
-                messages=self.gateway.get_chat_history(),
-                use_rag=use_rag,
-                user_files=user_files
-            )
+            # 先在UI侧展示用户输入（仅UI层，不直接操作 gateway 历史）
+            self.append_message("user", text)
 
-            # 添加空的助手消息到聊天历史，用于后续更新
-            assistant_message = {"role": "assistant", "content": ""}
-            self.gateway.chat_history.append(assistant_message)
+            # 获取封装后的网关流
+            stream = self.gateway.send_message(
+                message=text,
+                use_rag=use_rag,
+                user_files=user_files,
+            )
 
             # 简化流式输出：直接使用append_message的格式
             full_content = ""
@@ -582,11 +571,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     or any(mark in chunk for mark in ["。", ".", "\n", "!", "?", "！", "？"])
                 ):
 
-                    # 更新历史记录
-                    history = self.gateway.get_chat_history()
-                    if history and history[-1]["role"] == "assistant":
-                        history[-1]["content"] = full_content
-
                     # 清空历史显示并重新渲染
                     self.history_widget.clear()
                     for message in self.gateway.get_chat_history():
@@ -601,8 +585,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     last_update_time = current_time
                     time.sleep(0.01)
 
-            # 保存会话
-            self.gateway._save_session()
+            # 保存会话由 gateway.send_message 末尾负责
             self.status_label.setText("就绪")
 
         except Exception as e:
@@ -735,8 +718,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # 添加到布局
                 right_layout = QtWidgets.QVBoxLayout()
-                right_layout.addWidget(time_label, alignment=QtCore.Qt.AlignRight)
-                right_layout.addWidget(menu_button, alignment=QtCore.Qt.AlignRight)
+                right_layout.addWidget(time_label, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+                right_layout.addWidget(menu_button, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
 
                 layout.addWidget(title_label, 1)  # 1表示伸展因子
                 layout.addLayout(right_layout, 0)  # 0表示不伸展
@@ -765,7 +748,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "清空历史",
             "确定要清空历史吗？",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
 
         if i == QtWidgets.QMessageBox.StandardButton.Yes:
@@ -786,7 +769,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"版本号：{__version__}\n"
                 "\n"
                 f"运行目录：{AGENT_DIR}"
-            )
+            ),
+            QtWidgets.QMessageBox.StandardButton.Ok
         )
 
     def select_files(self) -> None:
@@ -795,7 +779,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "选择要分析的文件",
             "",
-            "支持的文档 (*.md *.txt *.pdf *.docx);;所有文件 (*)"
+            "支持的文档 (*.md *.txt *.pdf);;所有文件 (*)"
         )
 
         if file_paths:
@@ -877,7 +861,7 @@ class MainWindow(QtWidgets.QMainWindow):
         deleted_sessions = self.gateway.get_deleted_sessions()
 
         if not deleted_sessions:
-            QtWidgets.QMessageBox.information(self, "回收站", "回收站为空")
+            QtWidgets.QMessageBox.information(self, "回收站", "回收站为空", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         dialog = TrashDialog(deleted_sessions, self.gateway, self)
@@ -890,7 +874,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self,
             "编辑标题",
             "请输入新标题:",
-            QtWidgets.QLineEdit.Normal,
+            QtWidgets.QLineEdit.EchoMode.Normal,
             current_title
         )
 
@@ -904,7 +888,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """删除会话"""
         reply = QtWidgets.QMessageBox.question(
             self, "确认删除", "确定要删除这个会话吗？",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
@@ -920,14 +904,14 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.history_widget.clear()
                     self.status_label.setText("请从左侧选择一个会话或创建新会话")
 
-                QtWidgets.QMessageBox.information(self, "成功", "会话已删除")
+                QtWidgets.QMessageBox.information(self, "成功", "会话已删除", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def export_session(self, session_id: str, title: str) -> None:
         """导出会话"""
         title, messages = self.gateway.export_session(session_id)
 
         if not messages:
-            QtWidgets.QMessageBox.information(self, "导出会话", "会话为空或不存在")
+            QtWidgets.QMessageBox.information(self, "导出会话", "会话为空或不存在", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         # 选择保存路径
@@ -957,10 +941,10 @@ class MainWindow(QtWidgets.QMainWindow):
                     f.write(f"## {role} ({timestamp})\n\n")
                     f.write(f"{msg['content']}\n\n")
 
-            QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}")
+            QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}", QtWidgets.QMessageBox.StandardButton.Ok)
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "导出失败", f"导出会话时发生错误: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "导出失败", f"导出会话时发生错误: {str(e)}", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def show_model_selector(self) -> None:
         """显示模型选择对话框"""
@@ -969,7 +953,9 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(
                 self,
                 "未配置API",
-                "请先在配置标签页中设置API连接信息。"
+                "请先在配置标签页中设置API连接信息。",
+                QtWidgets.QMessageBox.StandardButton.Ok
+
             )
             self.tab_widget.setCurrentIndex(1)  # 切换到配置标签页
             return
@@ -987,7 +973,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.information(
                     self,
                     "模型已选择",
-                    f"已选择模型: {model_name}\n请在配置页面点击保存按钮以应用更改。"
+                    f"已选择模型: {model_name}\n请在配置页面点击保存按钮以应用更改。",
+                    QtWidgets.QMessageBox.StandardButton.Ok
                 )
 
                 # 切换到配置标签页
@@ -1030,7 +1017,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.gateway.settings.update(settings)
         save_json("gateway_setting.json", self.gateway.settings)
 
-        QtWidgets.QMessageBox.information(self, "配置已保存", "配置已保存。")
+        QtWidgets.QMessageBox.information(self, "配置已保存", "配置已保存。", QtWidgets.QMessageBox.StandardButton.Ok)
 
 
 class RagSwitchButton(QtWidgets.QWidget):
@@ -1057,13 +1044,13 @@ class RagSwitchButton(QtWidgets.QWidget):
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
         """鼠标点击事件"""
-        if event.button() == QtCore.Qt.LeftButton:
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
             self.setChecked(not self._checked)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
         """绘制开关"""
         painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
         # 开关背景
         rect = self.rect().adjusted(2, 5, -2, -5)  # 减小上下边距
@@ -1076,7 +1063,7 @@ class RagSwitchButton(QtWidgets.QWidget):
             # 关闭状态：灰色背景
             painter.setBrush(QtGui.QBrush(QtGui.QColor(117, 117, 117)))
 
-        painter.setPen(QtCore.Qt.NoPen)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, radius, radius)
 
         # 开关圆形按钮
@@ -1308,7 +1295,7 @@ class SessionListDialog(QtWidgets.QDialog):
         """切换会话"""
         current_item = self.session_list.currentItem()
         if not current_item:
-            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
+            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         try:
@@ -1316,20 +1303,20 @@ class SessionListDialog(QtWidgets.QDialog):
             if self.gateway.switch_session(session_id):
                 self.accept()
             else:
-                QtWidgets.QMessageBox.warning(self, "错误", "切换会话失败")
+                QtWidgets.QMessageBox.warning(self, "错误", "切换会话失败", QtWidgets.QMessageBox.StandardButton.Ok)
         except RuntimeError:
-            QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择")
+            QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def delete_session(self) -> None:
         """删除会话"""
         current_item = self.session_list.currentItem()
         if not current_item:
-            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
+            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         reply = QtWidgets.QMessageBox.question(
             self, "确认删除", "确定要删除这个会话吗？",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
@@ -1338,28 +1325,28 @@ class SessionListDialog(QtWidgets.QDialog):
                 if self.gateway.delete_session(session_id):
                     row = self.session_list.row(current_item)
                     self.session_list.takeItem(row)
-                    QtWidgets.QMessageBox.information(self, "成功", "会话已删除")
+                    QtWidgets.QMessageBox.information(self, "成功", "会话已删除", QtWidgets.QMessageBox.StandardButton.Ok)
 
                     # 发出信号通知主窗口刷新会话列表
                     if hasattr(self, "session_deleted") and self.session_deleted is not None:
                         self.session_deleted.emit(session_id)
                 else:
-                    QtWidgets.QMessageBox.warning(self, "错误", "删除会话失败")
+                    QtWidgets.QMessageBox.warning(self, "错误", "删除会话失败", QtWidgets.QMessageBox.StandardButton.Ok)
             except RuntimeError:
-                QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择")
+                QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def export_session(self) -> None:
         """导出选中的会话"""
         current_item = self.session_list.currentItem()
         if not current_item:
-            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
+            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         session_id = current_item.data(QtCore.Qt.ItemDataRole.UserRole)
         title, messages = self.gateway.export_session(session_id)
 
         if not messages:
-            QtWidgets.QMessageBox.information(self, "导出会话", "选中的会话为空或不存在")
+            QtWidgets.QMessageBox.information(self, "导出会话", "选中的会话为空或不存在", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         # 选择保存路径
@@ -1389,10 +1376,10 @@ class SessionListDialog(QtWidgets.QDialog):
                     f.write(f"## {role} ({timestamp})\n\n")
                     f.write(f"{msg['content']}\n\n")
 
-            QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}")
+            QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}", QtWidgets.QMessageBox.StandardButton.Ok)
 
         except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "导出失败", f"导出会话时发生错误: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "导出失败", f"导出会话时发生错误: {str(e)}", QtWidgets.QMessageBox.StandardButton.Ok)
 
 
 class TrashDialog(QtWidgets.QDialog):
@@ -1458,7 +1445,7 @@ class TrashDialog(QtWidgets.QDialog):
         """恢复会话"""
         current_item = self.session_list.currentItem()
         if not current_item:
-            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
+            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         try:
@@ -1466,27 +1453,27 @@ class TrashDialog(QtWidgets.QDialog):
             if self.gateway.restore_session(session_id):
                 row = self.session_list.row(current_item)
                 self.session_list.takeItem(row)
-                QtWidgets.QMessageBox.information(self, "成功", "会话已恢复")
+                QtWidgets.QMessageBox.information(self, "成功", "会话已恢复", QtWidgets.QMessageBox.StandardButton.Ok)
 
                 # 如果列表为空，关闭对话框
                 if self.session_list.count() == 0:
                     self.accept()
             else:
-                QtWidgets.QMessageBox.warning(self, "错误", "恢复会话失败")
+                QtWidgets.QMessageBox.warning(self, "错误", "恢复会话失败", QtWidgets.QMessageBox.StandardButton.Ok)
         except RuntimeError:
-            QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择")
+            QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def permanent_delete(self) -> None:
         """永久删除会话"""
         current_item = self.session_list.currentItem()
         if not current_item:
-            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话")
+            QtWidgets.QMessageBox.warning(self, "警告", "请选择一个会话", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
         reply = QtWidgets.QMessageBox.question(
             self, "确认永久删除",
             "确定要永久删除这个会话吗？此操作不可撤销！",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
@@ -1496,29 +1483,29 @@ class TrashDialog(QtWidgets.QDialog):
                 if self.gateway._session_manager._permanent_delete_session(session_id):
                     row = self.session_list.row(current_item)
                     self.session_list.takeItem(row)
-                    QtWidgets.QMessageBox.information(self, "成功", "会话已永久删除")
+                    QtWidgets.QMessageBox.information(self, "成功", "会话已永久删除", QtWidgets.QMessageBox.StandardButton.Ok)
 
                     # 如果列表为空，关闭对话框
                     if self.session_list.count() == 0:
                         self.accept()
                 else:
-                    QtWidgets.QMessageBox.warning(self, "错误", "永久删除会话失败")
+                    QtWidgets.QMessageBox.warning(self, "错误", "永久删除会话失败", QtWidgets.QMessageBox.StandardButton.Ok)
             except RuntimeError:
-                QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择")
+                QtWidgets.QMessageBox.warning(self, "错误", "会话项已失效，请重新选择", QtWidgets.QMessageBox.StandardButton.Ok)
 
     def cleanup_all(self) -> None:
         """清理所有已删除的会话"""
         reply = QtWidgets.QMessageBox.question(
             self, "确认清理",
             "确定要清理所有已删除的会话吗？此操作不可撤销！",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             # 强制清理所有已删除的会话（忽略30天限制）
             count = self.gateway.cleanup_deleted_sessions(force_all=True)
             if count > 0:
-                QtWidgets.QMessageBox.information(self, "成功", f"已清理 {count} 个会话")
+                QtWidgets.QMessageBox.information(self, "成功", f"已清理 {count} 个会话", QtWidgets.QMessageBox.StandardButton.Ok)
                 self.accept()
             else:
-                QtWidgets.QMessageBox.information(self, "提示", "没有可清理的会话")
+                QtWidgets.QMessageBox.information(self, "提示", "没有可清理的会话", QtWidgets.QMessageBox.StandardButton.Ok)
