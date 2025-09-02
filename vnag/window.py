@@ -1,5 +1,5 @@
 from pathlib import Path
-import markdown    # type: ignore[import-not-found]
+import markdown     # type: ignore[import-untyped]
 import time
 from datetime import datetime
 
