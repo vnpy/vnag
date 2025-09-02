@@ -28,8 +28,8 @@
 
 ### 组件职责划分
 - **AgentGateway**: 核心业务层，整合所有AI相关功能，包括对话管理、RAG服务、会话管理等
-- **RAGService**: gateway内部组件，负责RAG消息预处理，内部管理DocumentService和VectorService
-- **DocumentService**: RAGService内部组件，处理文档解析和分块（.md/.txt/.pdf/.docx）
+- **RAGService**: gateway 内部组件，负责 RAG 消息预处理（知识库检索 + 用户附件拼接）
+- **DocumentService**: 处理文档解析与分块（知识库仅 .md；附件支持 .md/.txt/.pdf/.py）
 - **VectorService**: RAGService内部组件，处理向量存储和检索（ChromaDB + BGE）
 - **SessionManager**: gateway内部组件，管理对话会话和历史记录
 - **window.py**: 纯UI展示层，只负责界面显示和用户交互，不包含任何业务逻辑
@@ -56,12 +56,17 @@ vnag/
 │   ├── utility.py             # 工具函数
 │   ├── setting.py             # 配置管理
 │   ├── rag_service.py         # RAG消息预处理组件
-│   ├── document_service.py    # 文档处理服务（支持md/txt/pdf/docx）
+│   ├── document_service.py    # 文档处理服务（支持md/txt/pdf/py）
 │   ├── vector_service.py      # 向量存储服务（ChromaDB + BGE）
 │   ├── session_manager.py     # 会话管理组件（TinyDB）
 │   └── logo.ico
-├── docs/                      # 知识库目录（与.vnag同级，只支持md文件）
-├── test_framework.py          # 框架独立运行测试
+├── .vnag/docs/                # 知识库目录（仅 .md，用于向量化）
+├── scripts/                   # 测试脚本与辅助脚本
+│   ├── test_document_service.py
+│   ├── test_vector_service.py
+│   ├── test_rag_service.py
+│   ├── test_session_manager.py
+│   └── test_gateway.py
 ├── vnag_prompt.md             # VNAG系统Prompt模板
 ├── pyproject.toml
 ├── README.md
@@ -72,35 +77,29 @@ vnag/
 ## RAG功能扩展规范
 
 ### 文档格式支持
-- **知识库**: 只支持.md文件（docs目录，自动向量化）  
-- **用户文件**: 支持.md/.txt/.pdf/.docx（直接加入上下文，不向量化）
+- 知识库：仅 .md（.vnag/docs 目录，自动向量化）
+- 用户文件：.md/.txt/.pdf/.py（直接加入上下文，不向量化）
 
 ### 文档处理优化
-- **智能分块**: Markdown结构感知分块，按标题层级(#, ##, ###)优先切分
-- **代码块保护**: 识别并保护代码块完整性，避免语义截断
-- **语义边界**: 优先在段落、句号等语义边界分割，保持内容完整性
-- **元数据标记**: 为每个分块添加chunk_type标记（markdown_section, paragraph_group等）
-- **递归分割算法**: 使用langchain-text-splitters的RecursiveCharacterTextSplitter，按优先级尝试不同分隔符
+- **结构化分块**：Markdown 标题感知（# / ## / ###），代码块保护
+- **长段控制**：段内按空行聚合，超过阈值定长切片（字符级，后续可升级 token 级）
+- **元数据**：filename/source/file_type/chunk_index + section_title/section_order/section_part
 
 ### 向量检索增强
-- **相似度计算**: 将ChromaDB距离值转换为相似度分数，提供百分比显示和检索排名信息
-- **智能排序**: 综合相似度和分块质量的智能排序算法
-- **元数据丰富**: 显示来源文件、分块类型等元数据信息
-- **多轮对话检索**: 结合历史上下文进行智能检索
+- **向量相似度**：ChromaDB + BGE 编码，余弦相似度
+- **Top-K 检索**：基础 Top-K 检索（k=3，可配置）
 
 ### Prompt模板设计开发
 - **系统角色定义**: 明确RAG助手身份和专业能力
 - **回答要求规范**: 基于上下文、准确简洁、信息不足时明确说明
 - **历史对话支持**: 包含最近对话历史，提升上下文理解
 - **模板变量设计**: 支持{context}、{question}、{history}等变量替换
-- **多模式模板**: RAG模式和非RAG模式使用不同模板
-- **外部化配置**: 通过vnag_prompt.md文件管理模板内容
+- **模板内嵌于代码**（template.py），支持 CHAT/RAG 两种模板
 
 ### 服务类设计原则
 1. **单一职责**: 每个服务类只负责一个核心功能
-2. **轻量级**: 单个服务类代码量控制在200行以内
-3. **类型安全**: 严格的类型注解，支持mypy检查
-4. **错误处理**: 明确的异常类型和错误信息
+2. **类型安全**: 严格的类型注解，支持mypy、ruff检查
+3. **错误处理**: 明确的异常类型和错误信息
 
 ### Gateway统一接口设计
 AgentGateway 类是系统的核心，提供统一的接口与大语言模型交互：
@@ -108,7 +107,7 @@ AgentGateway 类是系统的核心，提供统一的接口与大语言模型交�
 - **初始化**: 支持基本连接参数（base_url、api_key、model_name）
 - **消息处理**: 支持普通消息和RAG增强消息
 - **会话管理**: 支持创建、切换、删除会话
-- **模型调用**: 支持同步和流式响应
+- **模型调用**: 流式响应
 - **参数处理**: 可选参数如max_tokens和temperature只在有值时传递
 
 ### 配置管理规范
@@ -146,8 +145,6 @@ SETTINGS: dict = {
 - **RAG开关按钮**: 显示"RAG ON"/"RAG OFF"文本
 
 ### UI增强功能
-- **代码高亮**: 使用QSyntaxHighlighter实现代码块语法高亮
-- **复制功能**: 支持全文复制和代码块独立复制
 - **流式显示**: 支持回答内容的实时追加显示
 
 ### RAG工作模式
@@ -170,33 +167,33 @@ SETTINGS: dict = {
 ## 错误处理与稳定性
 
 ### 输入验证
-- 多层输入验证：内容非空、长度合理、格式检查
-- 限制单次查询不超过2000字符
-- 敏感内容检测和安全过滤
+- 输入验证：内容非空、长度合理（UI 端校验）
 
 ### API异常处理
-- **分类异常处理**：AuthenticationError（API密钥无效）、RateLimitError（请求频率超限）、APIConnectionError（网络连接问题）、BadRequestError（请求参数错误）、APIStatusError（HTTP状态码错误）
-- **用户友好错误信息**：提供具体解决方案和操作建议，在聊天界面显示明确错误原因
-- **智能重试机制**：指数退避策略处理临时网络问题，避免无限重试
-- **错误恢复**：确保程序不会因API失败而卡死或崩溃，提升系统稳定性和用户体验
+- **异常处理**：统一捕获为用户友好文本并在 UI 显示；不做自动重试
 
 
 ## 开发路线
 
 ### 第一阶段（MVP核心功能）
 - 基础RAG问答 + 聊天界面 + 多格式文档支持
-- 智能文档处理（Markdown结构感知分块、元数据标记、递归分割算法）+ 向量检索增强 + 健壮异常处理
-- 相似度计算 + 输入验证机制 + API异常处理分类 + 重试机制
+- 文档处理：Markdown 结构化分块、代码块保护、长段定长切片
+- 向量检索：ChromaDB + BGE，Top-K 基础检索
 - 配置管理 + 会话管理 + 流式响应
+- 单元测试：pytest，脚本位于 scripts/
 
 ### 第二阶段（完整产品）
-- 语义切分优化 + 详细进度反馈 + 混合检索策略（BM25）
-- 文档导入工具 + 会话管理增强 + 界面优化
-- 配置外部化 + 智能标题推荐 + Token监控
-- 知识库自动初始化优化（增量更新、文件变化检测）
+- 语义切分优化（token 级、BM25 混合检索）
+- 使用RecursiveCharacterTextSplitter，按优先级尝试不同分隔符
+- 将ChromaDB距离值转换为相似度分数，提供百分比显示和检索排名信息
+- 敏感内容检测和安全过滤
+- 界面优化
+- 模板外部化与可配置化
 
 ### 第三阶段（高级特性）
 - 质量评估（多维度评估检索结果质量）+ 指代词处理 + 多Agent协作架构 + 实时交互能力
+- 多轮对话检索
+- 知识库md文件中的图片内容支持
 - 代码高亮主题切换 + 设备自动检测
 - UI交互优化（流式显示优化、代码块悬浮按钮、参考quivr设计）
 
@@ -216,9 +213,7 @@ dependencies = [
     "qdarkstyle",
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
-    "langchain-text-splitters>=0.2.0",  # 递归分割算法
     "pypdf>=3.0.0",
-    "python-docx>=0.8.0", 
     "tinydb>=4.8.0",      # 轻量级JSON数据库
 ]
 ```
@@ -226,9 +221,8 @@ dependencies = [
 ## 测试要求
 
 ### 单元测试
-- 每个服务类需要对应的测试文件
-- 测试覆盖率要求 > 80%
-- 使用pytest框架
+- 每个服务类对应测试文件（位于 scripts/）
+- 使用 pytest 框架
 
 ### 集成测试
 - RAG完整流程测试
