@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from openai import OpenAI, AuthenticationError, RateLimitError, APIConnectionError, BadRequestError, APIStatusError
+from openai import OpenAI
 from openai.types.chat.chat_completion import ChatCompletion
 from .utility import load_json
 
@@ -16,10 +16,10 @@ class AgentGateway:
         self.client: OpenAI | None = None
         self.model_name: str = ""
         # 直接加载配置
-        self.settings = load_json("gateway_setting.json")
+        self.settings: dict = load_json("gateway_setting.json")
 
         # 对话状态（框架独立运行）
-        self.chat_history: list[dict[str, str]] = []
+        self.chat_history: list = []
 
         # 内部组件（延迟初始化）
         self._rag_service: RAGService
@@ -28,9 +28,9 @@ class AgentGateway:
     def init(self) -> None:
         """初始化连接和内部服务组件"""
         # 从配置获取连接参数
-        base_url = self.settings.get("base_url", "")
-        api_key = self.settings.get("api_key", "")
-        model_name = self.settings.get("model_name", "")
+        base_url: str = self.settings.get("base_url", "")
+        api_key: str = self.settings.get("api_key", "")
+        model_name: str = self.settings.get("model_name", "")
 
         if not base_url or not api_key or not model_name:
             print("配置不完整，请检查以下配置项：")
@@ -56,38 +56,6 @@ class AgentGateway:
         # 加载历史会话
         self.load_history()
 
-    def invoke_model(
-        self,
-        messages: list[dict[str, str]],
-        use_rag: bool = False,
-        user_files: list[str] | None = None
-    ) -> str | None:
-        """统一模型调用接口（向后兼容 + 新功能）"""
-        # 说明：当前UI层默认只调用 invoke_streaming，非流式路径主要用于备用，尚未补充细粒度异常捕获。
-        if not self.client:
-            return None
-
-        if not self.model_name:
-            return None
-
-        # 预处理消息
-        processed_messages = self._prepare_messages(messages, use_rag, user_files)
-
-        # 直接以关键字参数调用，确保类型匹配
-        kwargs: dict[str, object] = {}
-        if self.settings.get("max_tokens"):
-            kwargs["max_tokens"] = int(self.settings["max_tokens"])
-        if self.settings.get("temperature"):
-            kwargs["temperature"] = float(self.settings["temperature"])
-
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=processed_messages,
-            **kwargs,    # type: ignore
-        )
-
-        return completion.choices[0].message.content
-
     def invoke_streaming(
         self,
         messages: list[dict[str, str]],
@@ -104,7 +72,11 @@ class AgentGateway:
             return
 
         # 预处理消息
-        processed_messages = self._prepare_messages(messages, use_rag, user_files)
+        processed_messages: list = self._prepare_messages(
+            messages,
+            use_rag,
+            user_files,
+        )
 
         # 确保消息不为空
         if not processed_messages or len(processed_messages) == 0:
@@ -121,7 +93,7 @@ class AgentGateway:
             kwargs["temperature"] = float(self.settings["temperature"])
 
         try:
-            stream = self.client.chat.completions.create(
+            stream: ChatCompletion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=processed_messages,
                 **kwargs,    # type: ignore
@@ -129,32 +101,12 @@ class AgentGateway:
 
             # 流式输出处理
             for chunk in stream:
-                # 只处理内容部分
-                if chunk.choices[0].delta.content:
+                # 只处理内容部分（显式检查 None）
+                if chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
-        except AuthenticationError:
-            yield "API密钥无效，请检查配置中的api_key设置"
-            return
-        except RateLimitError:
-            yield "请求频率超限，请稍后再试或检查API配额"
-            return
-        except APIConnectionError:
-            yield "无法连接到API服务器，请检查网络连接"
-            return
-        except BadRequestError as e:
-            yield f"请求参数错误: {e.message}"
-            return
-        except APIStatusError as e:
-            if e.status_code == 503:
-                yield "服务暂时不可用，请稍后重试"
-            elif e.status_code == 429:
-                yield "请求过于频繁，请稍后重试"
-            else:
-                yield f"API错误 ({e.status_code}): {e.message}"
-            return
         except Exception as e:
-            yield f"未知错误: {str(e)}"
+            yield f"请求错误: {str(e)}"
             return
 
     def send_message(
@@ -162,31 +114,40 @@ class AgentGateway:
         message: str,
         use_rag: bool = True,
         user_files: list[str] | None = None
-    ) -> str | None:
-        """发送消息并获取回复（框架核心接口）"""
-        if not message.strip():
-            return None
+    ) -> Generator[str, None, None]:
+        """封装的对话入口：处理历史追加、流式更新与保存。
 
-        # 添加用户消息到历史
-        user_message = {"role": "user", "content": message}
+        Args:
+            message: 用户输入文本
+            use_rag: 是否启用 RAG 检索
+            user_files: 用户临时附加文件路径列表
+
+        Yields:
+            模型输出的增量文本片段
+        """
+        if not message.strip():
+            return
+
+        # 追加用户消息
+        user_message: dict = {"role": "user", "content": message}
         self.chat_history.append(user_message)
 
-        # 调用模型获取回复
-        content = self.invoke_model(
+        # 先放入一个空的 assistant，用于逐步累积内容
+        assistant_message: dict = {"role": "assistant", "content": ""}
+        self.chat_history.append(assistant_message)
+
+        # 透传到底层流式接口，并在产生片段时更新历史中最后一条 assistant 的内容
+        for chunk in self.invoke_streaming(
             messages=self.chat_history,
             use_rag=use_rag,
-            user_files=user_files
-        )
+            user_files=user_files,
+        ):
+            if self.chat_history and self.chat_history[-1]["role"] == "assistant":
+                self.chat_history[-1]["content"] += chunk
+            yield chunk
 
-        # 添加助手回复到历史
-        if content:
-            assistant_message = {"role": "assistant", "content": content}
-            self.chat_history.append(assistant_message)
-
-        # 保存会话
+        # 结束后保存会话
         self._save_session()
-
-        return content
 
     def get_chat_history(self) -> list[dict[str, str]]:
         """获取当前对话历史"""
@@ -205,7 +166,7 @@ class AgentGateway:
     def new_session(self) -> str:
         """创建新会话"""
         if self._session_manager:
-            session_id = self._session_manager.create_session()
+            session_id: str = self._session_manager.create_session()
             self.chat_history.clear()
             return session_id
         return ""
@@ -219,7 +180,7 @@ class AgentGateway:
     def switch_session(self, session_id: str) -> bool:
         """切换会话"""
         if self._session_manager:
-            success = self._session_manager.switch_session(session_id)
+            success: bool = self._session_manager.switch_session(session_id)
             if success:
                 self.load_history()
             return success
@@ -278,13 +239,8 @@ class AgentGateway:
         user_files: list[str] | None
     ) -> list[dict[str, str]]:
         """内部方法：预处理消息"""
-        if not use_rag:
-            # 非RAG统一走CHAT模板；若有用户文件，会在模板后追加参考内容
-            return self._rag_service.prepare_chat_messages(messages, user_files)
-
         if use_rag:
             # RAG模式：知识库检索 + 用户文件
             return self._rag_service.prepare_rag_messages(messages, user_files)
-        else:
-            # 已合并至 prepare_chat_messages
-            return self._rag_service.prepare_chat_messages(messages, user_files)
+        # 非RAG统一走CHAT模板；若有用户文件，会在模板后追加参考内容
+        return self._rag_service.prepare_chat_messages(messages, user_files)
