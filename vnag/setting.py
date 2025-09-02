@@ -7,19 +7,7 @@ SETTINGS: dict = {
     "api_key": "",
     "model_name": "anthropic/claude-3.7-sonnet",
     "max_tokens": 2000,
-    "temperature": 0.7,
-
-    "embedding.model_name": "BAAI/bge-large-zh-v1.5",
-    "embedding.device": "cpu",
-
-    "vector_store.persist_directory": "chroma_db",
-
-    "document.chunk_size": 1000,
-    "document.chunk_overlap": 200,
-    "document.supported_formats": [".md", ".txt", ".pdf", ".docx"],
-
-    "token.max_tokens": 2000,
-    "token.warning_threshold": 0.8,
+    "temperature": 0.7
 }
 
 SETTING_FILENAME: str = "gateway_setting.json"

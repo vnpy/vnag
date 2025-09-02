@@ -1,7 +1,9 @@
+from pathlib import Path
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 from tinydb import TinyDB, Query
+from tinydb.table import Table
 
 from .utility import get_file_path
 
@@ -15,10 +17,10 @@ class SessionManager:
 
     def __init__(self) -> None:
         """构造函数"""
-        self.db_path = get_file_path("chat_sessions.json")
-        self.db = TinyDB(str(self.db_path))
-        self.sessions_table = self.db.table('sessions')
-        self.messages_table = self.db.table('messages')
+        self.db_path: Path = get_file_path("chat_sessions.json")
+        self.db: TinyDB = TinyDB(str(self.db_path))
+        self.sessions_table: Table = self.db.table('sessions')
+        self.messages_table: Table = self.db.table('messages')
         self.current_session_id: str | None = None
 
         # 自动加载或创建默认会话
@@ -26,10 +28,10 @@ class SessionManager:
 
     def create_session(self, title: str = "新会话") -> str:
         """创建新会话"""
-        session_id = str(uuid4())
+        session_id: str = str(uuid4())
         # 使用带毫秒的时间戳，避免重复
-        now = datetime.now().isoformat(timespec='milliseconds')
-        session_data = {
+        now: str = datetime.now().isoformat(timespec='milliseconds')
+        session_data: dict = {
             'id': session_id,
             'title': title,
             'created_at': now,
@@ -50,9 +52,9 @@ class SessionManager:
 
     def add_message(self, role: str, content: str) -> None:
         """添加消息到当前会话"""
-        session_id = self.get_current_session_id()
+        session_id: str = self.get_current_session_id()
 
-        message_data = {
+        message_data: dict = {
             'session_id': session_id,
             'role': role,
             'content': content,
@@ -62,7 +64,7 @@ class SessionManager:
         self.messages_table.insert(message_data)
 
         # 更新会话的最后更新时间
-        Session = Query()
+        Session: Query = Query()
         self.sessions_table.update({
             'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
@@ -72,23 +74,25 @@ class SessionManager:
         if not self.current_session_id:
             return []
 
-        messages = self.messages_table.search(Query().session_id == self.current_session_id)
+        messages: list = self.messages_table.search(Query().session_id == self.current_session_id)
         messages.sort(key=lambda x: x['timestamp'])
 
-        return [
-            {'role': msg['role'], 'content': msg['content']}
-            for msg in messages
-        ]
+        history: list = []
+        for msg in messages:
+            history.append({'role': msg['role'], 'content': msg['content']})
+
+        return history
 
     def get_all_sessions(self) -> list[dict]:
         """获取所有未删除的会话"""
-        sessions = self.sessions_table.search(Query().deleted == False)
-        return sorted(sessions, key=lambda x: x['updated_at'], reverse=True)
+        sessions: list = self.sessions_table.search(Query().deleted == False)    # type: ignore
+        sorted_sessions: list = sorted(sessions, key=lambda x: x['updated_at'], reverse=True)
+        return sorted_sessions
 
     def switch_session(self, session_id: str) -> bool:
         """切换到指定会话"""
-        Session = Query()
-        session = self.sessions_table.get(Session.id == session_id)
+        Session: Query = Query()
+        session: dict = self.sessions_table.get(Session.id == session_id)
 
         if session and not session.get('deleted', False):
             self.current_session_id = session_id
@@ -98,8 +102,8 @@ class SessionManager:
 
     def update_session_title(self, session_id: str, title: str) -> bool:
         """更新会话标题"""
-        Session = Query()
-        result = self.sessions_table.update({
+        Session: Query = Query()
+        result: list = self.sessions_table.update({
             'title': title,
             'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
@@ -108,41 +112,33 @@ class SessionManager:
 
     def delete_session(self, session_id: str) -> bool:
         """软删除会话"""
-        Session = Query()
-        result = self.sessions_table.update({
+        Session: Query = Query()
+        result: list = self.sessions_table.update({
             'deleted': True,
             'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
 
-        if len(result) > 0 and session_id == self.current_session_id:
+        delete_success: bool = len(result) > 0
+
+        if delete_success and session_id == self.current_session_id:
             self.current_session_id = None
 
-        return len(result) > 0
-
-    def clear_current_session(self) -> None:
-        """清空当前会话"""
-        if self.current_session_id:
-            Message = Query()
-            self.messages_table.remove(Message.session_id == self.current_session_id)
-
-    def new_session(self) -> str:
-        """创建新会话并切换"""
-        return self.create_session()
+        return delete_success
 
     def save_session(self, chat_history: list[dict[str, str]]) -> None:
         """保存会话历史（gateway接口）"""
         if not chat_history:
             return
 
-        session_id = self.get_current_session_id()
+        session_id: str = self.get_current_session_id()
 
         # 清空当前会话的消息
-        Message = Query()
+        Message: Query = Query()
         self.messages_table.remove(Message.session_id == session_id)
 
         # 保存新的消息历史
         for message in chat_history:
-            message_data = {
+            message_data: dict = {
                 'session_id': session_id,
                 'role': message['role'],
                 'content': message['content'],
@@ -151,15 +147,15 @@ class SessionManager:
             self.messages_table.insert(message_data)
 
         # 更新会话时间戳和自动生成标题
-        Session = Query()
-        update_data = {
+        Session: Query = Query()
+        update_data: dict = {
             'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }
 
         # 如果会话有内容，尝试自动生成标题
         if chat_history:
             # 获取当前会话信息
-            session = self.sessions_table.get(Session.id == session_id)
+            session: dict = self.sessions_table.get(Session.id == session_id)
 
             # 如果标题是默认的或者还没有设置自动标题
             if session and (session['title'] == "新会话" or session['title'] == "默认会话"):
@@ -179,12 +175,12 @@ class SessionManager:
         session_id: str | None = None
     ) -> list[dict[str, str]]:
         """加载会话历史（gateway接口）"""
-        target_session_id = session_id or self.get_current_session_id()
+        target_session_id: str = session_id or self.get_current_session_id()
 
-        messages = self.messages_table.search(Query().session_id == target_session_id)
+        messages: list = self.messages_table.search(Query().session_id == target_session_id)
         messages.sort(key=lambda x: x['timestamp'])
 
-        chat_history = [
+        chat_history: list = [
             {'role': msg['role'], 'content': msg['content']}
             for msg in messages
         ]
@@ -195,7 +191,7 @@ class SessionManager:
         """确保有当前会话"""
         if not self.current_session_id:
             # 尝试获取最近的会话
-            sessions = self.get_all_sessions()
+            sessions: list = self.get_all_sessions()
             if sessions:
                 self.current_session_id = sessions[0]['id']
             else:
@@ -211,7 +207,7 @@ class SessionManager:
         Returns:
             清理的会话数量
         """
-        Session = Query()
+        Session: Query = Query()
 
         if force_all:
             # 强制清理所有已删除的会话
@@ -227,12 +223,12 @@ class SessionManager:
             return 0
 
         # 删除会话及其消息
-        count = 0
+        count: int = 0
         for session in deleted_sessions:
-            session_id = session['id']
+            session_id: str = session['id']
 
             # 删除会话的消息
-            Message = Query()
+            Message: Query = Query()
             self.messages_table.remove(Message.session_id == session_id)
 
             # 删除会话本身
@@ -247,8 +243,8 @@ class SessionManager:
         Returns:
             是否成功恢复
         """
-        Session = Query()
-        result = self.sessions_table.update({
+        Session: Query = Query()
+        result: list = self.sessions_table.update({
             'deleted': False,
             'updated_at': datetime.now().isoformat(timespec='milliseconds')
         }, Session.id == session_id)
@@ -257,8 +253,8 @@ class SessionManager:
 
     def get_deleted_sessions(self) -> list[dict]:
         """获取所有已删除的会话"""
-        Session = Query()
-        sessions = self.sessions_table.search(Session.deleted == True)
+        Session: Query = Query()
+        sessions: list = self.sessions_table.search(Session.deleted == True)
         return sorted(sessions, key=lambda x: x['updated_at'], reverse=True)
 
     def _permanent_delete_session(self, session_id: str) -> bool:
@@ -271,14 +267,14 @@ class SessionManager:
             是否成功删除
         """
         # 确保会话存在且已被标记为删除
-        Session = Query()
-        session = self.sessions_table.get((Session.id == session_id) & (Session.deleted == True))
+        Session: Query = Query()
+        session: dict = self.sessions_table.get((Session.id == session_id) & (Session.deleted == True))
 
         if not session:
             return False
 
         # 删除会话的消息
-        Message = Query()
+        Message: Query = Query()
         self.messages_table.remove(Message.session_id == session_id)
 
         # 删除会话本身
@@ -291,20 +287,20 @@ class SessionManager:
 
         返回：(会话标题, 会话历史记录)
         """
-        target_session_id = session_id or self.get_current_session_id()
+        target_session_id: str = session_id or self.get_current_session_id()
 
         # 获取会话信息
-        Session = Query()
-        session = self.sessions_table.get(Session.id == target_session_id)
+        Session: Query = Query()
+        session: dict = self.sessions_table.get(Session.id == target_session_id)
         if not session:
             return ("未知会话", [])
 
         # 获取会话消息
-        messages = self.messages_table.search(Query().session_id == target_session_id)
+        messages: list = self.messages_table.search(Query().session_id == target_session_id)
         messages.sort(key=lambda x: x['timestamp'])
 
         # 格式化消息
-        formatted_messages = []
+        formatted_messages: list = []
         for msg in messages:
             formatted_messages.append({
                 'role': msg['role'],

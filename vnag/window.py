@@ -539,8 +539,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # 收集UI状态参数
         use_rag = self.rag_switch.isChecked()
         user_files = self.selected_files if self.selected_files else None
-        # 所有对话都使用流式输出
-        use_stream = True
 
         # 添加用户消息到历史
         self.append_message("user", text)
@@ -578,9 +576,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 # 控制UI更新频率
                 current_time = time.time()
-                if (current_time - last_update_time >= update_interval or 
-                    len(chunk_buffer) >= buffer_size_threshold or 
-                    any(mark in chunk for mark in ["。", ".", "\n", "!", "?", "！", "？"])):
+                if (
+                    current_time - last_update_time >= update_interval
+                    or len(chunk_buffer) >= buffer_size_threshold
+                    or any(mark in chunk for mark in ["。", ".", "\n", "!", "?", "！", "？"])
+                ):
 
                     # 更新历史记录
                     history = self.gateway.get_chat_history()
@@ -1252,10 +1252,10 @@ class SessionListDialog(QtWidgets.QDialog):
     ) -> None:
         """构造函数"""
         super().__init__(parent)
-        
+
         self.sessions = sessions
         self.gateway = gateway
-        
+
         self.init_ui()
 
     def init_ui(self) -> None:

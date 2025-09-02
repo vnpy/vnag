@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import NamedTuple
 
 import pypdf
-from docx.api import Document as DocxDocument
 
 
 class DocumentChunk(NamedTuple):
@@ -14,49 +13,44 @@ class DocumentChunk(NamedTuple):
 class DocumentService:
     """文档处理服务"""
 
-    def __init__(self, settings: dict) -> None:
+    def __init__(self) -> None:
         """构造函数"""
-        # 使用传入的配置
-        self.chunk_size: int = settings.get("document.chunk_size", 1000)
-        self.chunk_overlap: int = settings.get("document.chunk_overlap", 200)
+        # 分块参数先写死（MVP）：后续计划改为基于token的max_chunk_tokens/overlap_tokens，并回收至配置
+        self.chunk_size: int = 1000
+        self.chunk_overlap: int = 200
         # 支持多格式（用户文件上传需要）
-        self.supported_formats: list[str] = [".md", ".txt", ".pdf", ".docx"]
+        self.supported_formats: list[str] = [".md", ".txt", ".pdf"]
 
     def process_file(self, file_path: str) -> list[DocumentChunk]:
         """处理单个文件"""
-        path = Path(file_path)
-
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+        path: Path = Path(file_path)
 
         extension = path.suffix.lower()
         if extension not in self.supported_formats:
-            raise ValueError(f"Unsupported format: {extension}")
+            raise ValueError(f"不支持的类型：{extension}")
 
         # 读取文本内容
         if extension in ['.md', '.txt']:
-            text = self._read_text_file(path)
-        elif extension == '.pdf':
-            text = self._read_pdf_file(path)
-        elif extension == '.docx':
-            text = self._read_docx_file(path)
+            text: str = self._read_text_file(path)
         else:
-            raise ValueError(f"Unsupported extension: {extension}")
+            text = self._read_pdf_file(path)
 
         # 创建文档分块
-        return self._create_chunks(text, {
+        chunks: list = self._create_chunks(text, {
             'source': str(file_path),
             'filename': path.name,
             'file_type': extension
         })
+        return chunks
 
     def _read_text_file(self, path: Path) -> str:
         """读取文本文件"""
-        return path.read_text(encoding='utf-8')
+        text: str = path.read_text(encoding='utf-8')
+        return text
 
     def _read_pdf_file(self, path: Path) -> str:
         """读取PDF文件"""
-        text = ""
+        text: str = ""
 
         with open(path, 'rb') as file:
             reader = pypdf.PdfReader(file)
@@ -64,11 +58,6 @@ class DocumentService:
                 text += page.extract_text() + "\n"
 
         return text
-
-    def _read_docx_file(self, path: Path) -> str:
-        """读取DOCX文件"""
-        doc = DocxDocument(path)
-        return "\n".join([paragraph.text for paragraph in doc.paragraphs])
 
     def _create_chunks(
         self,
@@ -79,23 +68,23 @@ class DocumentService:
         chunks: list[DocumentChunk] = []
 
         # 简单的字符分块算法
-        start = 0
-        text_length = len(text)
+        start: int = 0
+        text_length: int = len(text)
 
         while start < text_length:
-            end = start + self.chunk_size
+            end: int = start + self.chunk_size
 
             # 如果不是最后一块，尝试在句号处分割
             if end < text_length:
                 # 寻找最近的句号
-                period_pos = text.rfind('.', start, end)
+                period_pos: int = text.rfind('.', start, end)
                 if period_pos > start:
                     end = period_pos + 1
 
-            chunk_text = text[start:end].strip()
+            chunk_text: str = text[start:end].strip()
 
             if chunk_text:
-                chunk_metadata = metadata.copy()
+                chunk_metadata: dict = metadata.copy()
                 chunk_metadata['chunk_index'] = str(len(chunks))
 
                 chunks.append(DocumentChunk(
@@ -104,6 +93,9 @@ class DocumentService:
                 ))
 
             # 考虑重叠
-            start = end - self.chunk_overlap if end < text_length else end
+            if end < text_length:
+                start = end - self.chunk_overlap
+            else:
+                start = end
 
         return chunks

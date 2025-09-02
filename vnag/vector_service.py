@@ -1,4 +1,5 @@
 from typing import Any
+from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
@@ -14,8 +15,8 @@ class VectorService:
     def __init__(self) -> None:
         """构造函数"""
         # 直接使用固定值
-        self.persist_dir = get_folder_path("chroma_db")
-        self.embedding_model = SentenceTransformer("BAAI/bge-large-zh-v1.5")
+        self.persist_dir: Path = get_folder_path("chroma_db")
+        self.embedding_model: SentenceTransformer = SentenceTransformer("BAAI/bge-large-zh-v1.5")
 
         # 初始化ChromaDB客户端
         self.client = chromadb.PersistentClient(
@@ -24,7 +25,7 @@ class VectorService:
         )
 
         # 获取或创建集合
-        self.collection = self.client.get_or_create_collection(
+        self.collection: chromadb.Collection = self.client.get_or_create_collection(
             name="documents",
             metadata={"hnsw:space": "cosine"}
         )
@@ -34,19 +35,20 @@ class VectorService:
         if not chunks:
             return
 
-        texts = [chunk.text for chunk in chunks]
-        metadatas = [chunk.metadata for chunk in chunks]
+        texts: list = [chunk.text for chunk in chunks]
+        metadatas: list = [chunk.metadata for chunk in chunks]
 
         # 生成向量
-        embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
+        embeddings: list = self.embedding_model.encode(texts, show_progress_bar=False).tolist()
 
         # 生成ID
-        ids = [f"{chunk.metadata['filename']}_{chunk.metadata['chunk_index']}"
-               for chunk in chunks]
+        ids: list = []
+        for chunk in chunks:
+            ids.append(f"{chunk.metadata['filename']}_{chunk.metadata['chunk_index']}")
 
         # 添加到ChromaDB
         self.collection.add(
-            embeddings=embeddings.tolist(),
+            embeddings=embeddings,
             documents=texts,
             metadatas=metadatas,
             ids=ids
@@ -58,29 +60,32 @@ class VectorService:
         k: int = 5
     ) -> list[dict[str, Any]]:
         """相似性搜索"""
+        # 没有collection就返回空列表
         if self.collection.count() == 0:
             return []
 
         # 生成查询向量
-        query_embedding = self.embedding_model.encode([query])
+        query_embedding: list = self.embedding_model.encode([query]).tolist()
 
         # 执行搜索
-        results = self.collection.query(
-            query_embeddings=query_embedding.tolist(),
+        results: chromadb.QueryResult = self.collection.query(
+            query_embeddings=query_embedding,
             n_results=k
         )
 
-        # 格式化结果
-        documents = []
-        if results['documents'] and results['documents'][0]:
-            for i, doc in enumerate(results['documents'][0]):
-                documents.append({
-                    'text': doc,
-                    'metadata': results['metadatas'][0][i]
-                               if results['metadatas'] else {},
-                    'distance': results['distances'][0][i]
-                             if results['distances'] else 0.0
-                })
+        # 简化类型处理，直接忽略索引类型检查
+        docs = results["documents"][0]  # type: ignore[index]
+        metas = results["metadatas"][0]  # type: ignore[index]
+        dists = results["distances"][0]  # type: ignore[index]
+
+        pairs: zip = zip(docs, metas, dists, strict=True)
+        documents: list[dict[str, Any]] = []
+        for t, m, d in pairs:
+            documents.append({
+                "text": t,
+                "metadata": m,
+                "distance": d
+            })
 
         return documents
 
@@ -88,14 +93,3 @@ class VectorService:
         """获取文档数量"""
         document_count: int = self.collection.count()
         return document_count
-
-    def clear_documents(self) -> None:
-        """清空所有文档"""
-        # 删除现有集合
-        self.client.delete_collection("documents")
-
-        # 重新创建集合
-        self.collection = self.client.get_or_create_collection(
-            name="documents",
-            metadata={"hnsw:space": "cosine"}
-        )

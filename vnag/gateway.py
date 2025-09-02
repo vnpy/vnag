@@ -33,7 +33,7 @@ class AgentGateway:
         model_name = self.settings.get("model_name", "")
 
         if not base_url or not api_key or not model_name:
-            print("❌ 配置不完整，请检查以下配置项：")
+            print("配置不完整，请检查以下配置项：")
             if not base_url:
                 print("  - base_url: API地址未设置")
             if not api_key:
@@ -50,7 +50,8 @@ class AgentGateway:
         )
 
         # 初始化内部组件
-        self._init_components()
+        self._rag_service = RAGService()
+        self._session_manager = SessionManager()
 
         # 加载历史会话
         self.load_history()
@@ -72,20 +73,18 @@ class AgentGateway:
         # 预处理消息
         processed_messages = self._prepare_messages(messages, use_rag, user_files)
 
-        # 准备API调用参数
-        params = {
-            "model": self.model_name,
-            "messages": processed_messages
-        }
-
-        # 使用实例变量中的配置
+        # 直接以关键字参数调用，确保类型匹配
+        kwargs: dict[str, object] = {}
         if self.settings.get("max_tokens"):
-            params["max_tokens"] = int(self.settings["max_tokens"])
-
+            kwargs["max_tokens"] = int(self.settings["max_tokens"])
         if self.settings.get("temperature"):
-            params["temperature"] = float(self.settings["temperature"])
+            kwargs["temperature"] = float(self.settings["temperature"])
 
-        completion: ChatCompletion = self.client.chat.completions.create(**params)
+        completion: ChatCompletion = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=processed_messages,
+            **kwargs,    # type: ignore
+        )
 
         return completion.choices[0].message.content
 
@@ -96,16 +95,12 @@ class AgentGateway:
         user_files: list[str] | None = None
     ) -> Generator[str, None, None]:
         """统一流式调用接口"""
-        def empty_generator():
-            return
-            yield  # 使其成为生成器但不产生任何值
-
         if not self.client:
-            yield "❌ LLM客户端未初始化，请检查配置"
+            yield "LLM客户端未初始化，请检查配置"
             return
 
         if not self.model_name:
-            yield "❌ 模型名称未设置，请检查配置"
+            yield "模型名称未设置，请检查配置"
             return
 
         # 预处理消息
@@ -113,36 +108,24 @@ class AgentGateway:
 
         # 确保消息不为空
         if not processed_messages or len(processed_messages) == 0:
-            yield "❌ 消息处理失败，请检查输入内容"
+            yield "消息处理失败，请检查输入内容"
             return
 
-        # 确保至少有一条用户消息
-        has_user_message = False
-        for msg in processed_messages:
-            if msg.get("role") == "user":
-                has_user_message = True
-                break
+        # 仅检查消息不为空，具体内容由上层保证
 
-        if not has_user_message:
-            yield "❌ 缺少用户消息，请检查消息格式"
-            return
-
-        # 准备API调用参数
-        params = {
-            "model": self.model_name,
-            "messages": processed_messages,
-            "stream": True
-        }
-
-        # 使用实例变量中的配置
+        # 使用关键字参数调用，确保类型匹配
+        kwargs: dict[str, object] = {"stream": True}
         if self.settings.get("max_tokens"):
-            params["max_tokens"] = int(self.settings["max_tokens"])
-
+            kwargs["max_tokens"] = int(self.settings["max_tokens"])
         if self.settings.get("temperature"):
-            params["temperature"] = float(self.settings["temperature"])
+            kwargs["temperature"] = float(self.settings["temperature"])
 
         try:
-            stream = self.client.chat.completions.create(**params)
+            stream = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=processed_messages,
+                **kwargs,    # type: ignore
+            )
 
             # 流式输出处理
             for chunk in stream:
@@ -151,27 +134,27 @@ class AgentGateway:
                     yield chunk.choices[0].delta.content
 
         except AuthenticationError:
-            yield "❌ API密钥无效，请检查配置中的api_key设置"
+            yield "API密钥无效，请检查配置中的api_key设置"
             return
         except RateLimitError:
-            yield "❌ 请求频率超限，请稍后再试或检查API配额"
+            yield "请求频率超限，请稍后再试或检查API配额"
             return
         except APIConnectionError:
-            yield "❌ 无法连接到API服务器，请检查网络连接"
+            yield "无法连接到API服务器，请检查网络连接"
             return
         except BadRequestError as e:
-            yield f"❌ 请求参数错误: {e.message}"
+            yield f"请求参数错误: {e.message}"
             return
         except APIStatusError as e:
             if e.status_code == 503:
-                yield "❌ 服务暂时不可用，请稍后重试"
+                yield "服务暂时不可用，请稍后重试"
             elif e.status_code == 429:
-                yield "❌ 请求过于频繁，请稍后重试"
+                yield "请求过于频繁，请稍后重试"
             else:
-                yield f"❌ API错误 ({e.status_code}): {e.message}"
+                yield f"API错误 ({e.status_code}): {e.message}"
             return
         except Exception as e:
-            yield f"❌ 未知错误: {str(e)}"
+            yield f"未知错误: {str(e)}"
             return
 
     def send_message(
@@ -222,7 +205,7 @@ class AgentGateway:
     def new_session(self) -> str:
         """创建新会话"""
         if self._session_manager:
-            session_id = self._session_manager.new_session()
+            session_id = self._session_manager.create_session()
             self.chat_history.clear()
             return session_id
         return ""
@@ -248,7 +231,7 @@ class AgentGateway:
             return self._session_manager.delete_session(session_id)
         return False
 
-    def export_session(self, session_id: str | None = None) -> tuple[str, list[dict]]:
+    def export_session(self, session_id: str | None = None) -> tuple:
         """导出会话
         返回：(会话标题, 会话历史记录)
         """
@@ -288,11 +271,6 @@ class AgentGateway:
         if self._session_manager:
             self._session_manager.save_session(self.chat_history)
 
-    def _init_components(self) -> None:
-        """初始化内部组件"""
-        self._rag_service = RAGService(self)
-        self._session_manager = SessionManager()
-
     def _prepare_messages(
         self,
         messages: list[dict[str, str]],
@@ -300,17 +278,13 @@ class AgentGateway:
         user_files: list[str] | None
     ) -> list[dict[str, str]]:
         """内部方法：预处理消息"""
-        if not use_rag and not user_files:
-            # 纯聊天模式：直接返回原始消息
-            return messages
-
-        if not self._rag_service:
-            # RAG组件未初始化，降级到普通聊天
-            return messages
+        if not use_rag:
+            # 非RAG统一走CHAT模板；若有用户文件，会在模板后追加参考内容
+            return self._rag_service.prepare_chat_messages(messages, user_files)
 
         if use_rag:
             # RAG模式：知识库检索 + 用户文件
             return self._rag_service.prepare_rag_messages(messages, user_files)
         else:
-            # 文件模式：只处理用户文件
-            return self._rag_service.prepare_file_messages(messages, user_files)
+            # 已合并至 prepare_chat_messages
+            return self._rag_service.prepare_chat_messages(messages, user_files)
