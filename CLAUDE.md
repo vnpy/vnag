@@ -113,24 +113,18 @@ AgentGateway 类是系统的核心，提供统一的接口与大语言模型交�
 
 ### 配置管理规范
 ```python
-# setting.py 中的默认 SETTINGS
+# setting.py 中的默认 SETTINGS（MVP）
 SETTINGS: dict = {
-    "base_url": "https://api.openai.com/v1",
+    "base_url": "https://openrouter.ai/api/v1",
     "api_key": "",
     "model_name": "anthropic/claude-3.7-sonnet",
     "max_tokens": 2000,
-    "temperature": 0.7,
-    "document.chunk_size": 1000,
-    "document.chunk_overlap": 200,
-    "embedding.model_name": "BAAI/bge-large-zh-v1.5",
-    "embedding.device": "cpu",
-    "rag.min_similarity": 0.6,
-    "rag.use_quality_filter": True
+    "temperature": 0.7
 }
 
-# gateway_setting.json 实际配置
+# gateway_setting.json 示例
 {
-    "base_url": "https://api.openai.com/v1",
+    "base_url": "https://openrouter.ai/api/v1",
     "api_key": "your_api_key",
     "model_name": "anthropic/claude-3.7-sonnet",
     "max_tokens": 2000,
