@@ -3,6 +3,7 @@ import markdown
 import time
 from datetime import datetime
 
+from openai import OpenAI
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .gateway import AgentGateway
@@ -347,7 +348,7 @@ class MainWindow(QtWidgets.QMainWindow):
         ph = getattr(self, "_pill_height", 18)
         # 药丸高度 = 目标高度（条内留白由条 padding 控制为上下各 2px）
         pill.setFixedHeight(ph)
-        self._actual_pill_height = pill.height()
+
         pill_layout = QtWidgets.QHBoxLayout(pill)
         # 依据 pill 行高设置边距与间距，保证垂直居中
         vpad = max(1, (pill.height() - 12) // 2)
@@ -1184,7 +1185,6 @@ class ModelSelectorDialog(QtWidgets.QDialog):
         self.status_label.setText("正在加载模型列表...")
 
         try:
-            from openai import OpenAI
             client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             models = client.models.list()
 
