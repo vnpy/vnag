@@ -40,7 +40,7 @@ def get_folder_path(folder_name: str) -> Path:
     return folder_path
 
 
-def load_json(filename: str) -> dict | list | None:
+def load_json(filename: str) -> dict:
     """加载JSON文件"""
     filepath: Path = get_file_path(filename)
 
@@ -49,7 +49,8 @@ def load_json(filename: str) -> dict | list | None:
             data: dict = json.load(f)
         return data
     else:
-        return None
+        save_json(filename, {})
+        return {}
 
 
 def save_json(filename: str, data: dict | list) -> None:
