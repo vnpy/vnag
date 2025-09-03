@@ -210,8 +210,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "QListWidget::item:selected { background: transparent; }"
             "QListWidget::item:hover { background: transparent; }"
         )
-        # 用于快速删除指定文件对应的条目
-        self.file_item_map: dict[str, QtWidgets.QListWidgetItem] = {}
+
         # 已选文件列表需在刷新显示前初始化
         self.selected_files: list[str] = []
 
