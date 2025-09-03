@@ -610,50 +610,6 @@ class MainWindow(QtWidgets.QMainWindow):
         # 不清理选择的文件，保留药丸供多轮追问使用
         self._position_file_pills()
 
-    def _add_file_pill(self, file_path: str) -> None:
-        """向文件列表添加一个“药丸”样式项"""
-        file_name: str = Path(file_path).name
-        display_name: str = (
-            (file_name[:17] + "...") if len(file_name) > 20 else file_name
-        )
-
-        pill: QtWidgets.QWidget = QtWidgets.QWidget()
-        pill_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout(pill)
-        pill_layout.setContentsMargins(8, 2, 6, 2)
-        pill_layout.setSpacing(4)
-
-        label: QtWidgets.QLabel = QtWidgets.QLabel(display_name)
-        font: QtGui.QFont = label.font()
-        font.setPointSize(max(7, font.pointSize() - 2))
-        label.setFont(font)
-        label.setToolTip(str(file_path))
-        close_btn: QtWidgets.QPushButton = QtWidgets.QPushButton("×")
-        close_btn.setFixedSize(12, 12)
-        close_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet(
-            "QPushButton { border: none; font-weight: bold; }"
-        )
-        close_btn.setToolTip("移除该文件")
-        label.setStyleSheet("color: white;")
-        pill.setStyleSheet(
-            "background-color: #3C3C3C; color: white;"
-            "border-radius: 12px;"
-        )
-
-        pill_layout.addWidget(label)
-        pill_layout.addWidget(close_btn)
-
-        item: QtWidgets.QListWidgetItem = QtWidgets.QListWidgetItem()
-        item.setSizeHint(pill.sizeHint())
-        self.file_list_widget.addItem(item)
-        self.file_list_widget.setItemWidget(item, pill)
-
-        self.file_item_map[file_path] = item
-
-        close_btn.clicked.connect(
-            lambda checked=False, fp=file_path: self._remove_file(fp)
-        )
-
     def refresh_display(self) -> None:
         """刷新UI显示（从gateway获取数据）"""
         # 从gateway获取对话历史
@@ -828,16 +784,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.file_list_widget.setVisible(False)
             self._position_file_pills()
             self.status_label.setText("就绪")
-
-    def _clear_file_display(self) -> None:
-        """清空文件显示区域"""
-        # 清空文件“药丸”列表
-        if hasattr(self, "file_list_widget"):
-            self.file_list_widget.clear()
-        if hasattr(self, "file_item_map"):
-            self.file_item_map.clear()
-        if hasattr(self, "file_list_widget"):
-            self.file_list_widget.setVisible(False)
 
     def new_session(self) -> None:
         """新建会话"""
