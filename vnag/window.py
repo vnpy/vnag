@@ -598,7 +598,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     # 重置缓冲区和计时器
                     chunk_buffer = ""
                     last_update_time = current_time
-                    time.sleep(0.01)
 
             # 保存会话由 gateway.send_message 末尾负责
             self.status_label.setText("就绪")
