@@ -6,7 +6,7 @@ from openai import OpenAI
 from .gateway import BaseGateway
 
 
-class AgentGateway(BaseGateway):
+class OpenAIGateway(BaseGateway):
     """连接大模型API的网关，提供统一接口"""
 
     def __init__(self) -> None:
@@ -39,27 +39,20 @@ class AgentGateway(BaseGateway):
             yield "LLM客户端未初始化，请检查配置"
             return
 
-        # 使用关键字参数调用，确保类型匹配
-        params: dict[str, object] = {"stream": True}
-        max_tokens = kwargs.get("max_tokens", 0)
-        temperature = kwargs.get("temperature", 0.0)
-        if max_tokens:
-            params["max_tokens"] = max_tokens
-        if temperature:
-            params["temperature"] = temperature
-
         try:
             stream: Any = self.client.chat.completions.create(  # type: ignore[call-overload]
                 model=model_name,
                 messages=messages,
-                **params,
+                stream=True,
+                **kwargs,
             )
 
             # 流式输出处理
             for chunk in stream:
                 # 只处理内容部分（显式检查 None）
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    yield content
 
         except Exception as e:
             yield f"请求错误: {str(e)}"
