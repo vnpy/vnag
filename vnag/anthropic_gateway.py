@@ -40,7 +40,7 @@ class AnthropicGateway(BaseGateway):
 
         try:
             # Anthropic 官方 SDK 的流式接口
-            with self.client.messages.stream(  # type: ignore[arg-type]
+            with self.client.messages.stream(
                 model=model_name,
                 messages=messages,
                 **kwargs,

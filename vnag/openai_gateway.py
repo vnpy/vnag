@@ -40,7 +40,7 @@ class OpenAIGateway(BaseGateway):
             return
 
         try:
-            stream: Any = self.client.chat.completions.create(  # type: ignore[call-overload]
+            stream: Any = self.client.chat.completions.create(
                 model=model_name,
                 messages=messages,
                 stream=True,
