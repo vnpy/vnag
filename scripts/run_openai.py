@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import sys
-from typing import Iterable
+from collections.abc import Iterable
 
 from vnag.openai_gateway import OpenAIGateway
 from vnag.utility import load_json
