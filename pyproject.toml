@@ -25,6 +25,7 @@ dependencies = [
     "qdarkstyle",
     "chromadb>=0.4.0",
     "sentence-transformers>=2.2.0",
+    "transformers>=4.56.0",
     "pypdf>=3.0.0",
     "python-docx>=0.8.0",
     "tinydb>=4.8.0",
