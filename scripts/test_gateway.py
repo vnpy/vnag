@@ -250,3 +250,4 @@ def test_clear_and_get_history_triggers_save() -> None:
     g.clear_history()
     assert g.chat_history == []                                 # 内存历史为空
     assert cast(Any, g._session_manager).n == 1                 # 保存被调用一次
+
