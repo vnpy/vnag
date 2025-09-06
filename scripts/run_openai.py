@@ -1,48 +1,41 @@
-"""运行脚本：测试 OpenAIGateway
-
-用法：
-  python scripts/run_openai.py <prompt>
-说明：
-  - 从 gateway_setting.json 读取 base_url/api_key/model_name
-  - 提示词从命令行第1个参数读取
-"""
-
-from __future__ import annotations
-
-import sys
-from collections.abc import Iterable
-
-from vnag.openai_gateway import OpenAIGateway
 from vnag.utility import load_json
+from vnag.object import Message, Request, Response, Role
+from vnag.gateways.openai_gateway import OpenaiGateway
 
 
 def main() -> None:
-    prompt: str = sys.argv[1]
+    """"""
+    # 直接写入配置
+    # setting: dict = {
+    #     "base_url": "https://openrouter.ai/api/v1",
+    #     "api_key": "123456"
+    # }
 
-    settings = load_json("gateway_setting.json")
-    base_url: str = settings.pop("base_url")
-    api_key: str = settings.pop("api_key")
-    model_name: str = settings.pop("model_name")
+    # 读取配置文件
+    setting: dict = load_json("connect_openai.json")
 
-    gateway = OpenAIGateway()
-    gateway.init(base_url=base_url, api_key=api_key)
+    # 创建接口实例
+    gateway: OpenaiGateway = OpenaiGateway()
 
-    messages: list[dict[str, str]] = [
-        {"role": "user", "content": prompt},
-    ]
+    # 初始化接口
+    gateway.init(setting)
 
-    stream: Iterable[str] = gateway.invoke_streaming(
-        messages=messages,
-        model_name=model_name,
-        **settings
+    # 创建请求对象
+    request: Request = Request(
+        model="gpt-4o",
+        messages=[
+            Message(role=Role.USER, content="Hello, World!"),
+        ],
+        temperature=0,
+        max_tokens=100,
     )
 
-    for chunk in stream:
-        print(chunk, end="", flush=True)
-    print()
+    # 调用接口并输出结果
+    response: Response = gateway.invoke(request)
+
+    print(response.content)
+    print(response.usage)
 
 
 if __name__ == "__main__":
     main()
-
-

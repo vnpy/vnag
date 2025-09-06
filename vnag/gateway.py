@@ -1,21 +1,26 @@
 from abc import ABC, abstractmethod
-from collections.abc import Generator
+from typing import Any
+
+from .object import Request, Response
 
 
 class BaseGateway(ABC):
     """网关基类：仅负责将已准备好的 messages 发给模型并返回流式结果。"""
 
+    default_name: str = ""
+
+    default_setting: dict = {}
+
     @abstractmethod
-    def init(self, base_url: str, api_key: str) -> bool:
-        """初始化连接或客户端，返回是否成功。"""
+    def init(self, setting: dict[str, Any]) -> bool:
+        """初始化客户端"""
         pass
 
     @abstractmethod
-    def invoke_streaming(
-        self,
-        messages: list[dict[str, str]],
-        model_name: str,
-        **kwargs: object,
-    ) -> Generator:
-        """流式调用接口：将已准备好的消息发送给模型并逐步产出文本。"""
+    def invoke(self, request: Request) -> Response:
+        """阻塞式调用接口"""
         pass
+
+    def write_log(self, text: str) -> None:
+        """写入日志"""
+        print(text)
