@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, Generator
+from typing import Any
+from collections.abc import Generator
 
-from .object import Request, Response, StreamChunk
+from .object import Request, Response, Delta
 
 
 class BaseGateway(ABC):
@@ -22,7 +23,7 @@ class BaseGateway(ABC):
         pass
 
     @abstractmethod
-    def stream(self, request: Request) -> Generator[StreamChunk, None, None]:
+    def stream(self, request: Request) -> Generator[Delta, None, None]:
         """流式调用接口，返回一个StreamChunk的生成器"""
         pass
 

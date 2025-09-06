@@ -6,7 +6,7 @@ from anthropic.types import Message as AnthropicMessage, MessageStreamEvent
 
 from vnag.constant import FinishReason
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, StreamChunk, Usage
+from vnag.object import Request, Response, Delta, Usage
 
 
 ANTHROPIC_FINISH_REASON_MAP = {
@@ -88,7 +88,7 @@ class AnthropicGateway(BaseGateway):
             usage=usage,
         )
 
-    def stream(self, request: Request) -> Generator[StreamChunk, None, None]:
+    def stream(self, request: Request) -> Generator[Delta, None, None]:
         """流式调用接口"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
@@ -124,7 +124,7 @@ class AnthropicGateway(BaseGateway):
                 stream_event.type == "content_block_delta"
                 and stream_event.delta.type == "text_delta"
             ):
-                yield StreamChunk(
+                yield Delta(
                     id=response_id,
                     content=stream_event.delta.text,
                 )
@@ -134,7 +134,7 @@ class AnthropicGateway(BaseGateway):
                     stream_event.delta.stop_reason, FinishReason.UNKNOWN
                 )
 
-                yield StreamChunk(
+                yield Delta(
                     id=response_id,
                     finish_reason=finish_reason,
                     usage=Usage(
