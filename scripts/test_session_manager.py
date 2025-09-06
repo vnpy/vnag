@@ -141,3 +141,4 @@ def test_export_session(
     sm.add_message("user", "X")
     title, msgs = sm.export_session(None)
     assert isinstance(title, str) and len(msgs) >= 1        # 标题为字符串且有消息
+

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import NamedTuple
 from collections.abc import Iterator
 
-import pypdf
+from .utility import read_text_file, read_pdf_file
 
 
 class DocumentChunk(NamedTuple):
@@ -31,8 +31,8 @@ class DocumentService:
         if ext not in self.supported_formats:
             raise ValueError(f"不支持的类型：{ext}")
         if ext in [".md", ".txt"]:
-            return self._read_text_file(path)
-        return self._read_pdf_file(path)
+            return read_text_file(path)
+        return read_pdf_file(path)
 
     def process_file(self, file_path: str) -> list[DocumentChunk]:
         """处理单个文件用于知识库入库：仅对 .md 进行分块。"""
@@ -40,7 +40,7 @@ class DocumentService:
 
         extension: str = path.suffix.lower()
 
-        text: str = self._read_text_file(path)
+        text: str = read_text_file(path)
 
         # 创建文档分块（仅 .md）
         chunks: list = self._create_chunks_markdown(text, {
@@ -49,25 +49,6 @@ class DocumentService:
             'file_type': extension
         })
         return chunks
-
-    def _read_text_file(self, path: Path) -> str:
-        """读取文本文件"""
-        text: str = path.read_text(encoding='utf-8')
-        return text
-
-    def _read_pdf_file(self, path: Path) -> str:
-        """读取PDF文件"""
-        text: str = ""
-
-        with open(path, 'rb') as file:
-            reader: pypdf.PdfReader = pypdf.PdfReader(file)
-            for page in reader.pages:
-                page_text: str = page.extract_text()
-                if page_text is None:
-                    page_text = ""
-                text += page_text + "\n"
-
-        return text
 
     def _create_chunks_markdown(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
         """Markdown 结构化分块。

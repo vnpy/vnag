@@ -128,3 +128,4 @@ def test_get_document_count() -> None:
     ))
     vs.add_documents(chunks)
     assert vs.get_document_count() == 2
+

@@ -95,9 +95,7 @@ class RAGService:
         # 处理用户提交的文件
         user_content: str = self._process_user_files(user_files)
 
-        # 如果既没有知识库文档也没有用户文件，返回原消息
-        if not relevant_docs and not user_content:
-            return messages
+        # 即使没有知识库或用户文件，也使用模板包装问题，保持行为一致
 
         # 构建完整上下文
         context_parts: list = []

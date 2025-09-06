@@ -21,13 +21,13 @@ class VectorService:
         # 初始化ChromaDB客户端
         self.client = chromadb.PersistentClient(
             path=str(self.persist_dir),
-            settings=ChromaSettings(anonymized_telemetry=False)
+            settings=ChromaSettings(anonymized_telemetry=False)    # 不发送匿名使用统计
         )
 
         # 获取或创建集合
         self.collection: chromadb.Collection = self.client.get_or_create_collection(
             name="documents",
-            metadata={"hnsw:space": "cosine"}
+            metadata={"hnsw:space": "cosine"}                      # 使用余弦相似度
         )
 
     def add_documents(self, chunks: list[DocumentChunk]) -> None:
