@@ -9,7 +9,7 @@ from PySide6 import QtWidgets, QtGui, QtCore
 
 from .agent_engine import AgentEngine
 from .setting import SETTINGS, SETTING_FILENAME
-from .utility import AGENT_DIR, save_json, load_json
+from .utility import AGENT_DIR, save_json, load_json, write_text_file
 from . import __version__
 
 
@@ -913,24 +913,8 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                # 写入标题
-                f.write(f"# {title}\n\n")
-
-                # 写入时间戳
-                f.write(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-
-                # 写入消息
-                for msg in messages:
-                    if msg['role'] == 'user':
-                        role: str = "用户"
-                    else:
-                        role = "助手"
-
-                    timestamp: str = msg.get('timestamp', '').replace('T', ' ')[:16]
-
-                    f.write(f"## {role} ({timestamp})\n\n")
-                    f.write(f"{msg['content']}\n\n")
+            content: str = format_session_export(title, messages)
+            write_text_file(file_path, content)
 
             QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}", QtWidgets.QMessageBox.StandardButton.Ok)
 
@@ -985,7 +969,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _toggle_api_key_visibility(self) -> None:
         """切换API Key的可见性"""
-        sender: QtWidgets.QObject | None = self.sender()
+        sender: QtCore.QObject | None = self.sender()
 
         if self.config_api_key.echoMode() == QtWidgets.QLineEdit.EchoMode.Password:
             self.config_api_key.setEchoMode(QtWidgets.QLineEdit.EchoMode.Normal)
@@ -1006,8 +990,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "temperature": float(self.config_temperature.text())
         }
 
-        self.engine.settings.update(settings)
-        save_json("gateway_setting.json", self.engine.settings)
+        save_json("gateway_setting.json", settings)
 
         QtWidgets.QMessageBox.information(self, "配置已保存", "配置已保存。", QtWidgets.QMessageBox.StandardButton.Ok)
 
@@ -1356,24 +1339,8 @@ class SessionListDialog(QtWidgets.QDialog):
             return
 
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                # 写入标题
-                f.write(f"# {title}\n\n")
-
-                # 写入时间戳
-                f.write(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-
-                # 写入消息
-                for msg in messages:
-                    if msg['role'] == 'user':
-                        role = "用户"
-                    else:
-                        role = "助手"
-
-                    timestamp: str = msg.get('timestamp', '').replace('T', ' ')[:16]
-
-                    f.write(f"## {role} ({timestamp})\n\n")
-                    f.write(f"{msg['content']}\n\n")
+            content: str = format_session_export(title, messages)
+            write_text_file(file_path, content)
 
             QtWidgets.QMessageBox.information(self, "导出会话", f"会话已成功导出到: {file_path}", QtWidgets.QMessageBox.StandardButton.Ok)
 
@@ -1509,3 +1476,24 @@ class TrashDialog(QtWidgets.QDialog):
                 self.accept()
             else:
                 QtWidgets.QMessageBox.information(self, "提示", "没有可清理的会话", QtWidgets.QMessageBox.StandardButton.Ok)
+
+
+# 导出相关：格式化为 Markdown 文本
+def format_session_export(title: str, messages: list[dict]) -> str:
+    """格式化导出会话为 Markdown 字符串（UI侧文案约定）。"""
+    lines: list[str] = []
+    lines.append(f"# {title}\n\n")
+    lines.append(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+    for msg in messages:
+        if msg.get("role") == "user":
+            role = "用户"
+        else:
+            role = "助手"
+
+        timestamp: str = str(msg.get("timestamp", "")).replace('T', ' ')[:16]
+        lines.append(f"## {role} ({timestamp})\n\n")
+        lines.append(f"{msg.get('content', '')}\n\n")
+
+    text: str = "".join(lines)
+    return text
