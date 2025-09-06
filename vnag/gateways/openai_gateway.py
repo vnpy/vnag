@@ -1,11 +1,12 @@
-from typing import Any, Generator
+from typing import Any
+from collections.abc import Generator
 
 from openai import OpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.model import Model
 
 from vnag.gateway import BaseGateway
-from vnag.object import FinishReason, Request, Response, StreamChunk, Usage
+from vnag.object import FinishReason, Request, Response, Delta, Usage
 
 
 FINISH_REASON_MAP = {
@@ -74,7 +75,7 @@ class OpenaiGateway(BaseGateway):
             usage=usage,
         )
 
-    def stream(self, request: Request) -> Generator[StreamChunk, None, None]:
+    def stream(self, request: Request) -> Generator[Delta, None, None]:
         """流式调用接口"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
@@ -89,38 +90,38 @@ class OpenaiGateway(BaseGateway):
         )
 
         response_id: str = ""
-        for openai_chunck in stream:
+        for chuck in stream:
             if not response_id:
-                response_id = openai_chunck.id
+                response_id = chuck.id
 
-            vnag_chuck: StreamChunk = StreamChunk(id=response_id)
+            delta: Delta = Delta(id=response_id)
             should_yield: bool = False
 
             # 检查内容增量
-            delta_content: str | None = openai_chunck.choices[0].delta.content
+            delta_content: str | None = chuck.choices[0].delta.content
             if delta_content:
-                vnag_chuck.content = delta_content
+                delta.content = delta_content
                 should_yield = True
 
             # 检查结束原因
-            openai_finish_reason = openai_chunck.choices[0].finish_reason
+            openai_finish_reason = chuck.choices[0].finish_reason
             if openai_finish_reason:
                 vnag_finish_reason: FinishReason = FINISH_REASON_MAP.get(
                     openai_finish_reason, FinishReason.UNKNOWN
                 )
-                vnag_chuck.finish_reason = vnag_finish_reason
+                delta.finish_reason = vnag_finish_reason
                 should_yield = True
 
             # 检查用量信息（通常在最后一个数据块中）
-            if openai_chunck.usage:
-                vnag_chuck.usage = Usage(
-                    input_tokens=openai_chunck.usage.prompt_tokens,
-                    output_tokens=openai_chunck.usage.completion_tokens,
+            if chuck.usage:
+                delta.usage = Usage(
+                    input_tokens=chuck.usage.prompt_tokens,
+                    output_tokens=chuck.usage.completion_tokens,
                 )
                 should_yield = True
 
             if should_yield:
-                yield vnag_chuck
+                yield delta
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""
