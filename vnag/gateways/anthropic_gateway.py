@@ -1,10 +1,20 @@
 from typing import Any
+from collections.abc import Generator
 
-from anthropic import Anthropic
-from anthropic.types import Message as AnthropicMessage
+from anthropic import Anthropic, Stream
+from anthropic.types import Message as AnthropicMessage, MessageStreamEvent
 
+from vnag.constant import FinishReason
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Usage
+from vnag.object import Request, Response, StreamChunk, Usage
+
+
+ANTHROPIC_FINISH_REASON_MAP = {
+    "end_turn": FinishReason.STOP,
+    "max_tokens": FinishReason.LENGTH,
+    "stop_sequence": FinishReason.STOP,
+    "tool_use": FinishReason.TOOL_CALLS,
+}
 
 
 class AnthropicGateway(BaseGateway):
@@ -53,39 +63,85 @@ class AnthropicGateway(BaseGateway):
         if messages and messages[0]["role"] == "system":
             system_prompt = messages.pop(0)["content"]
 
-        params: dict[str, Any] = {
-            "model": request.model,
-            "messages": messages,
-            "max_tokens": request.max_tokens,
-        }
-        if system_prompt:
-            params["system"] = system_prompt
-        if request.temperature is not None:
-            params["temperature"] = request.temperature
+        response: AnthropicMessage = self.client.messages.create(
+            model=request.model,
+            messages=messages,
+            max_tokens=request.max_tokens,
+            system=system_prompt,
+            temperature=request.temperature,
+        )
 
-        try:
-            response: AnthropicMessage = self.client.messages.create(**params)
+        usage: Usage = Usage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )
 
-            usage = Usage(
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
-            )
+        content: str = ""
+        if response.content:
+            for block in response.content:
+                if hasattr(block, "text"):
+                    content += block.text
 
-            content = ""
-            if response.content:
-                for block in response.content:
-                    if hasattr(block, "text"):
-                        content += block.text
+        return Response(
+            id=response.id,
+            content=content,
+            usage=usage,
+        )
 
-            return Response(
-                id=response.id,
-                content=content,
-                usage=usage,
-            )
-        except Exception as e:
-            error_msg = f"请求错误: {str(e)}"
-            self.write_log(error_msg)
-            return Response(id="", content=error_msg, usage=Usage())
+    def stream(self, request: Request) -> Generator[StreamChunk, None, None]:
+        """流式调用接口"""
+        if not self.client:
+            self.write_log("LLM客户端未初始化，请检查配置")
+            return
+
+        if not request.max_tokens:
+            self.write_log("max_tokens 为 Anthropic 必传参数")
+            return
+
+        messages: list[dict] = [msg.model_dump() for msg in request.messages]
+        system_prompt = ""
+        if messages and messages[0]["role"] == "system":
+            system_prompt = messages.pop(0)["content"]
+
+        stream: Stream[MessageStreamEvent] = self.client.messages.create(
+            model=request.model,
+            messages=messages,
+            max_tokens=request.max_tokens,
+            stream=True,
+            system=system_prompt,
+            temperature=request.temperature,
+        )
+
+        response_id: str = ""
+        input_tokens: int = 0
+
+        for stream_event in stream:
+            if stream_event.type == "message_start":
+                response_id = stream_event.message.id
+                input_tokens = stream_event.message.usage.input_tokens
+
+            elif (
+                stream_event.type == "content_block_delta"
+                and stream_event.delta.type == "text_delta"
+            ):
+                yield StreamChunk(
+                    id=response_id,
+                    content=stream_event.delta.text,
+                )
+
+            elif stream_event.type == "message_delta":
+                finish_reason: FinishReason = ANTHROPIC_FINISH_REASON_MAP.get(
+                    stream_event.delta.stop_reason, FinishReason.UNKNOWN
+                )
+
+                yield StreamChunk(
+                    id=response_id,
+                    finish_reason=finish_reason,
+                    usage=Usage(
+                        input_tokens=input_tokens,
+                        output_tokens=stream_event.usage.output_tokens,
+                    ),
+                )
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""

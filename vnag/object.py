@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 
-from .constant import Role
+from .constant import Role, FinishReason
 
 
 class Message(BaseModel):
@@ -28,3 +28,12 @@ class Response(BaseModel):
     id: str
     content: str
     usage: Usage
+
+
+class StreamChunk(BaseModel):
+    """标准化的LLM流式响应块"""
+
+    id: str
+    content: str | None = None
+    finish_reason: FinishReason | None = None
+    usage: Usage | None = None

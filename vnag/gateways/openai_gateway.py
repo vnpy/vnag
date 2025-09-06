@@ -1,11 +1,18 @@
-from typing import Any
+from typing import Any, Generator
 
-from openai import OpenAI
-from openai.types.chat import ChatCompletion
+from openai import OpenAI, Stream
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.model import Model
 
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Usage
+from vnag.object import FinishReason, Request, Response, StreamChunk, Usage
+
+
+FINISH_REASON_MAP = {
+    "stop": FinishReason.STOP,
+    "length": FinishReason.LENGTH,
+    "tool_calls": FinishReason.TOOL_CALLS,
+}
 
 
 class OpenaiGateway(BaseGateway):
@@ -49,16 +56,12 @@ class OpenaiGateway(BaseGateway):
             self.write_log("LLM客户端未初始化，请检查配置")
             return Response(id="", content="", usage=Usage())
 
-        params: dict[str, Any] = {
-            "model": request.model,
-            "messages": [msg.model_dump() for msg in request.messages],
-        }
-        if request.temperature is not None:
-            params["temperature"] = request.temperature
-        if request.max_tokens is not None:
-            params["max_tokens"] = request.max_tokens
-
-        response: ChatCompletion = self.client.chat.completions.create(**params)
+        response: ChatCompletion = self.client.chat.completions.create(
+            model=request.model,
+            messages=[msg.model_dump() for msg in request.messages],
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+        )
 
         usage = Usage()
         if response.usage:
@@ -70,6 +73,54 @@ class OpenaiGateway(BaseGateway):
             content=response.choices[0].message.content or "",
             usage=usage,
         )
+
+    def stream(self, request: Request) -> Generator[StreamChunk, None, None]:
+        """流式调用接口"""
+        if not self.client:
+            self.write_log("LLM客户端未初始化，请检查配置")
+            return
+
+        stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(
+            model=request.model,
+            messages=[msg.model_dump() for msg in request.messages],
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            stream=True,
+        )
+
+        response_id: str = ""
+        for openai_chunck in stream:
+            if not response_id:
+                response_id = openai_chunck.id
+
+            vnag_chuck: StreamChunk = StreamChunk(id=response_id)
+            should_yield: bool = False
+
+            # 检查内容增量
+            delta_content: str | None = openai_chunck.choices[0].delta.content
+            if delta_content:
+                vnag_chuck.content = delta_content
+                should_yield = True
+
+            # 检查结束原因
+            openai_finish_reason = openai_chunck.choices[0].finish_reason
+            if openai_finish_reason:
+                vnag_finish_reason: FinishReason = FINISH_REASON_MAP.get(
+                    openai_finish_reason, FinishReason.UNKNOWN
+                )
+                vnag_chuck.finish_reason = vnag_finish_reason
+                should_yield = True
+
+            # 检查用量信息（通常在最后一个数据块中）
+            if openai_chunck.usage:
+                vnag_chuck.usage = Usage(
+                    input_tokens=openai_chunck.usage.prompt_tokens,
+                    output_tokens=openai_chunck.usage.completion_tokens,
+                )
+                should_yield = True
+
+            if should_yield:
+                yield vnag_chuck
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""
