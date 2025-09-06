@@ -40,6 +40,29 @@ def main() -> None:
     print(response.content)
     print(response.usage)
 
+    # 流式调用并输出结果
+    stream_request: Request = Request(
+        model="o3",
+        messages=[
+            Message(
+                role=Role.USER,
+                content="Give me an introduction of Python programming language"
+            ),
+        ],
+        temperature=1,
+        max_tokens=10000,
+    )
+
+    for chunk in gateway.stream(stream_request):
+        if chunk.content:
+            print(chunk.content, end="", flush=True)
+
+        if chunk.finish_reason:
+            print(f"\n结束原因: {chunk.finish_reason.value}")
+
+        if chunk.usage:
+            print(f"\n用量统计: {chunk.usage}")
+
 
 if __name__ == "__main__":
     main()
