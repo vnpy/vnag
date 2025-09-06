@@ -2,6 +2,7 @@ from typing import Any
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
+from openai.types.model import Model
 
 from vnag.gateway import BaseGateway
 from vnag.object import Request, Response, Usage
@@ -69,3 +70,12 @@ class OpenaiGateway(BaseGateway):
             content=response.choices[0].message.content or "",
             usage=usage,
         )
+
+    def list_models(self) -> list[str]:
+        """查询可用模型列表"""
+        if not self.client:
+            self.write_log("LLM客户端未初始化，请检查配置")
+            return []
+
+        models: list[Model] = self.client.models.list()
+        return sorted([model.id for model in models])

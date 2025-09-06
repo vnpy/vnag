@@ -26,15 +26,12 @@ class AnthropicGateway(BaseGateway):
 
     def init(self, setting: dict[str, Any]) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
-        base_url: str = setting.get("base_url", "")
+        base_url: str | None = setting.get("base_url", None)
         api_key: str = setting.get("api_key", "")
 
-        if not base_url or not api_key:
+        if not api_key:
             self.write_log("配置不完整，请检查以下配置项：")
-            if not base_url:
-                self.write_log("  - base_url: API地址未设置")
-            if not api_key:
-                self.write_log("  - api_key: API密钥未设置")
+            self.write_log("  - api_key: API密钥未设置")
             return False
 
         self.client = Anthropic(api_key=api_key, base_url=base_url)
@@ -89,3 +86,8 @@ class AnthropicGateway(BaseGateway):
             error_msg = f"请求错误: {str(e)}"
             self.write_log(error_msg)
             return Response(id="", content=error_msg, usage=Usage())
+
+    def list_models(self) -> list[str]:
+        """查询可用模型列表"""
+        self.write_log("Anthropic API 不支持查询模型列表")
+        return []
