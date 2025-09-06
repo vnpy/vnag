@@ -11,6 +11,7 @@ class AnthropicGateway(BaseGateway):
     def __init__(self) -> None:
         """构造函数"""
         self.client: Anthropic | None = None
+        self.model_list: list[str] = []
 
     def init(self, base_url: str, api_key: str) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
@@ -24,6 +25,8 @@ class AnthropicGateway(BaseGateway):
             return False
 
         self.client = Anthropic(api_key=api_key, base_url=base_url)
+
+        self.model_list = ["claude-3-7-sonnet-20250219"]
 
         return True
 

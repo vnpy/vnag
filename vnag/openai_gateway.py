@@ -12,6 +12,7 @@ class OpenAIGateway(BaseGateway):
     def __init__(self) -> None:
         """构造函数"""
         self.client: OpenAI | None = None
+        self.model_list: list[str] = []
 
     def init(self, base_url: str, api_key: str) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
@@ -25,6 +26,10 @@ class OpenAIGateway(BaseGateway):
             return False
 
         self.client = OpenAI(api_key=api_key, base_url=base_url)
+
+        # 初始化时拉取可用模型列表
+        models = self.client.models.list()
+        self.model_list = [m.id for m in models.data]
 
         return True
 

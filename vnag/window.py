@@ -4,7 +4,6 @@ import time
 from datetime import datetime
 from collections.abc import Generator
 
-from openai import OpenAI
 from PySide6 import QtWidgets, QtGui, QtCore
 
 from .agent_engine import AgentEngine
@@ -817,16 +816,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.load_history()
         self.status_label.setText("已创建新会话")
 
-    def show_sessions(self) -> None:
-        """显示会话列表（切换到会话标签页）"""
-        # 切换到会话标签页
-        self.tab_widget.setCurrentIndex(0)
-
-        # 刷新会话列表
-        self.refresh_session_list()
-
-    # 移除toggle_stream_mode方法，因为我们现在总是使用流式输出
-
     def toggle_rag_mode(self, checked: bool) -> None:
         """切换RAG模式"""
         # 确保 status_label 已经初始化
@@ -935,8 +924,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tab_widget.setCurrentIndex(1)  # 切换到配置标签页
             return
 
-        # 创建模型选择对话框
-        dialog: ModelSelectorDialog = ModelSelectorDialog(self.base_url, self.api_key, self.model_name, self)
+        # 创建模型选择对话框（仅传 parent 与当前模型）
+        dialog: ModelSelectorDialog = ModelSelectorDialog(self, self.model_name)
+
         if dialog.exec_():
             # 如果用户选择了模型，更新配置表单
             model_name: str = dialog.selected_model
@@ -1082,18 +1072,16 @@ class ModelSelectorDialog(QtWidgets.QDialog):
 
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
-        current_model: str = "",
-        parent: QtWidgets.QWidget | None = None
+        parent: MainWindow,
+        current_model: str
     ) -> None:
         """构造函数"""
         super().__init__(parent)
 
-        self.base_url: str = base_url
-        self.api_key: str = api_key
+        self.parent_window: MainWindow = parent  # 直接使用 MainWindow 类型
         self.current_model: str = current_model
         self.selected_model: str = ""
+        self.model_ids: list[str] = parent.engine.gateway.model_list
 
         self.init_ui()
         self.load_models()
@@ -1158,23 +1146,13 @@ class ModelSelectorDialog(QtWidgets.QDialog):
         self.model_list.clear()
         self.status_label.setText("正在加载模型列表...")
 
-        try:
-            client: OpenAI = OpenAI(api_key=self.api_key, base_url=self.base_url)
-            models = client.models.list()
+        for model_id in sorted(self.model_ids):
+            self.model_list.addItem(model_id)
 
-            model_ids: list = [model.id for model in models.data]
-            model_ids.sort()
+        self.status_label.setText(f"已加载 {len(self.model_ids)} 个模型")
 
-            for model_id in model_ids:
-                self.model_list.addItem(model_id)
-
-            self.status_label.setText(f"已加载 {len(model_ids)} 个模型")
-
-            # 应用当前搜索过滤
-            self.filter_models(self.search_box.text())
-
-        except Exception as e:
-            self.status_label.setText(f"加载模型失败: {str(e)}")
+        # 应用当前搜索过滤
+        self.filter_models(self.search_box.text())
 
     def filter_models(self, text: str) -> None:
         """根据搜索文本过滤模型列表"""
@@ -1333,7 +1311,10 @@ class TrashDialog(QtWidgets.QDialog):
 
 # 导出相关：格式化为 Markdown 文本
 def format_session_export(title: str, messages: list[dict]) -> str:
-    """格式化导出会话为 Markdown 字符串（UI侧文案约定）。"""
+    """格式化导出会话为 Markdown 字符串（UI侧文案约定）。
+
+    后续可直接复用于：复制全文到剪贴板、批量导出、分享等功能。
+    """
     lines: list[str] = []
     lines.append(f"# {title}\n\n")
     lines.append(f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
