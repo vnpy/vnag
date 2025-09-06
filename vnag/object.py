@@ -30,7 +30,7 @@ class Response(BaseModel):
     usage: Usage
 
 
-class StreamChunk(BaseModel):
+class Delta(BaseModel):
     """标准化的LLM流式响应块"""
 
     id: str
