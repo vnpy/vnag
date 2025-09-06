@@ -21,6 +21,11 @@ class BaseGateway(ABC):
         """阻塞式调用接口"""
         pass
 
+    @abstractmethod
+    def list_models(self) -> list[str]:
+        """查询可用模型列表"""
+        pass
+
     def write_log(self, text: str) -> None:
         """写入日志"""
         print(text)

@@ -20,6 +20,10 @@ def main() -> None:
     # 初始化接口
     gateway.init(setting)
 
+    # 列出支持模型
+    model_names: list[str] = gateway.list_models()
+    print(model_names)
+
     # 创建请求对象
     request: Request = Request(
         model="claude-3-7-sonnet-20250219",
