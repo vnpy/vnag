@@ -840,7 +840,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "回收站", "回收站为空", QtWidgets.QMessageBox.StandardButton.Ok)
             return
 
-        dialog: TrashDialog = TrashDialog(deleted_sessions, self.engine, self)
+        dialog: TrashDialog = TrashDialog(deleted_sessions, self.engine)
         if dialog.exec_():
             self.refresh_session_list()
 
@@ -924,8 +924,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tab_widget.setCurrentIndex(1)  # 切换到配置标签页
             return
 
-        # 创建模型选择对话框（仅传 parent 与当前模型）
-        dialog: ModelSelectorDialog = ModelSelectorDialog(self, self.model_name)
+        model_list: list[str] = self.engine.gateway.model_list
+        dialog: ModelSelectorDialog = ModelSelectorDialog(self.model_name, model_list)
 
         if dialog.exec_():
             # 如果用户选择了模型，更新配置表单
@@ -990,9 +990,9 @@ class RagSwitchButton(QtWidgets.QWidget):
 
     toggled = QtCore.Signal(bool)
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self) -> None:
         """构造函数"""
-        super().__init__(parent)
+        super().__init__()
         self.setFixedSize(100, 30)  # 调整宽度以容纳更长的文本
         self._checked: bool = False
 
@@ -1072,16 +1072,15 @@ class ModelSelectorDialog(QtWidgets.QDialog):
 
     def __init__(
         self,
-        parent: MainWindow,
-        current_model: str
+        current_model: str,
+        model_list: list[str]
     ) -> None:
         """构造函数"""
-        super().__init__(parent)
+        super().__init__()
 
-        self.parent_window: MainWindow = parent  # 直接使用 MainWindow 类型
         self.current_model: str = current_model
         self.selected_model: str = ""
-        self.model_ids: list[str] = parent.engine.gateway.model_list
+        self.model_ids: list[str] = model_list
 
         self.init_ui()
         self.load_models()
@@ -1186,10 +1185,9 @@ class TrashDialog(QtWidgets.QDialog):
         self,
         deleted_sessions: list[dict],
         engine: AgentEngine,
-        parent: QtWidgets.QWidget | None = None
     ) -> None:
         """构造函数"""
-        super().__init__(parent)
+        super().__init__()
 
         self.deleted_sessions: list = deleted_sessions
         self.engine: AgentEngine = engine
