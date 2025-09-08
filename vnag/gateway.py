@@ -1,37 +1,37 @@
-from openai import OpenAI
-from openai.types.chat.chat_completion import ChatCompletion
+from abc import ABC, abstractmethod
+from typing import Any
+from collections.abc import Generator
+
+from .object import Request, Response, Delta
 
 
-class AgentGateway:
-    """连接大模型API的网关，提供统一接口"""
+class BaseGateway(ABC):
+    """网关基类：仅负责将已准备好的 messages 发给模型并返回流式结果。"""
 
-    def __init__(self) -> None:
-        """构造函数"""
-        self.client: OpenAI | None = None
-        self.model_name: str = ""
+    default_name: str = ""
 
-    def init(
-        self,
-        base_url: str,
-        api_key: str,
-        model_name: str
-    ) -> None:
-        """构造函数"""
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+    default_setting: dict = {}
 
-        self.model_name = model_name
+    @abstractmethod
+    def init(self, setting: dict[str, Any]) -> bool:
+        """初始化客户端"""
+        pass
 
-    def invoke_model(self, messages: list[dict[str, str]]) -> str | None:
-        """调用模型返回结果"""
-        if not self.client:
-            return None
+    @abstractmethod
+    def invoke(self, request: Request) -> Response:
+        """阻塞式调用接口"""
+        pass
 
-        completion: ChatCompletion = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=messages       # type: ignore
-        )
+    @abstractmethod
+    def stream(self, request: Request) -> Generator[Delta, None, None]:
+        """流式调用接口，返回一个StreamChunk的生成器"""
+        pass
 
-        return completion.choices[0].message.content
+    @abstractmethod
+    def list_models(self) -> list[str]:
+        """查询可用模型列表"""
+        pass
+
+    def write_log(self, text: str) -> None:
+        """写入日志"""
+        print(text)

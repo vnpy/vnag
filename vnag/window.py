@@ -31,7 +31,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def init_widgets(self) -> None:
         """初始化中央控件"""
+        desktop: QtCore.QRect = QtWidgets.QApplication.primaryScreen().availableGeometry()
+
         self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+        self.input_widget.setMaximumHeight(desktop.height() // 4)
 
         self.history_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.history_widget.setReadOnly(True)
@@ -84,9 +87,9 @@ class MainWindow(QtWidgets.QMainWindow):
             escaped_content = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
 
             html = f"""
-            <p><b>👤 User:</b></p>
-            <div style="padding: 10px;">{escaped_content}</div>
-            <br>
+            <p><b>💬 User</b></p>
+            <div>{escaped_content}</div>
+            <br><br>
             """
             self.history_widget.insertHtml(html)
         elif role == "assistant":
@@ -94,9 +97,9 @@ class MainWindow(QtWidgets.QMainWindow):
             html_content = markdown.markdown(content, extensions=['fenced_code', 'codehilite'])
 
             html = f"""
-            <p><b>🤖 Assistant:</b></p>
+            <p><b>✨ Assistant</b></p>
             {html_content}
-            <br>
+            <br><br>
             """
             self.history_widget.insertHtml(html)
 
