@@ -1,8 +1,10 @@
 import re
 import ast
 from vnag.splitter import BaseSplitter, DocumentChunk
+
 # 用来找到一个函数/类定义块起点的正则常量
 PY_DEF_CLASS_PATTERN = re.compile(r"^\s*(?:@.+\n)*\s*(def|class)\s", re.MULTILINE)
+
 
 class PythonSplitter(BaseSplitter):
     """
@@ -11,7 +13,7 @@ class PythonSplitter(BaseSplitter):
 
     def __init__(self, chunk_size: int = 3000) -> None:
         """构造函数"""
-        self.chunk_size: int = chunk_size
+        super().__init__(chunk_size)
 
     def split_text(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
         """对传入的 Python 源码进行分块"""

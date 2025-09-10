@@ -11,6 +11,10 @@ class DocumentChunk(NamedTuple):
 class BaseSplitter(ABC):
     """文本分割器抽象基类（只负责切分，不负责读取）"""
 
+    def __init__(self, chunk_size: int) -> None:
+        """构造函数"""
+        self.chunk_size: int = chunk_size
+
     @abstractmethod
     def split_text(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
         """对传入文本进行分块，返回 DocumentChunk 列表"""
@@ -32,7 +36,7 @@ class BaseSplitter(ABC):
             if paragraph.strip():
                 paragraphs.append(paragraph)
 
-        chunks: list[str] = self.pack_paragraphs(paragraphs, self.chunk_size)
+        chunks: list[str] = self.pack_paragraphs(paragraphs)
 
         filtered_chunks: list[str] = []
         for chunk in chunks:
@@ -41,7 +45,7 @@ class BaseSplitter(ABC):
 
         return filtered_chunks
 
-    def pack_paragraphs(self, paragraphs: list[str], chunk_size: int) -> list[str]:
+    def pack_paragraphs(self, paragraphs: list[str]) -> list[str]:
         """
         基于自然段（以空行为界）进行装箱聚合，输出不超过 chunk_size 的片段序列
 
@@ -64,7 +68,7 @@ class BaseSplitter(ABC):
 
             p_len: int = len(p) + separator_length
 
-            if buffer_length + p_len <= chunk_size:
+            if buffer_length + p_len <= self.chunk_size:
                 if buffer:
                     buffer.append("")
                 buffer.append(p)
@@ -80,21 +84,21 @@ class BaseSplitter(ABC):
                 buffer_length = 0
 
             # 单个段落本身超限：定长切片
-            if len(p) > chunk_size:
-                chunks.extend(self.split_by_length(p, chunk_size))
+            if len(p) > self.chunk_size:
+                chunks.extend(self.split_by_length(p))
             else:
                 buffer.append(p)
                 buffer_length = len(p)
 
         # flush 剩余缓冲
         if buffer:
-            assembled = "\n\n".join(buffer).strip() # 拼接缓冲
+            assembled = "\n\n".join(buffer).strip()    # 拼接缓冲
             if assembled:
                 chunks.append(assembled)
 
         return chunks
 
-    def pack_lines(self, lines: list[str], chunk_size: int) -> list[str]:
+    def pack_lines(self, lines: list[str]) -> list[str]:
         """
         按“行”为最小单位进行装箱聚合，超过 chunk_size 时 flush 当前缓冲
 
@@ -117,7 +121,7 @@ class BaseSplitter(ABC):
             added_length = len(line) + newline_length
 
             # 如果缓冲长度加上当前行长度小于等于chunk_size，则将当前行加入缓冲
-            if buffer_length + added_length <= chunk_size:
+            if buffer_length + added_length <= self.chunk_size:
                 if buffer:
                     buffer.append("\n")
                 buffer.append(line)
@@ -135,7 +139,7 @@ class BaseSplitter(ABC):
 
         return chunks
 
-    def split_by_length(self, text: str, chunk_size: int, overlap: int = 0) -> list[str]:
+    def split_by_length(self, text: str, overlap: int = 0) -> list[str]:
         """
         将长文本按固定大小切片（支持重叠），返回非空片段列表
 
@@ -148,17 +152,17 @@ class BaseSplitter(ABC):
         - 丢弃全空白片段
         - 步长 stride = max(1, chunk_size - overlap)
         """
-        if chunk_size <= 0:
+        if self.chunk_size <= 0:
             return []
 
         # 计算步长
-        stride: int = max(1, chunk_size - max(0, overlap))
+        stride: int = max(1, self.chunk_size - max(0, overlap))
         slices: list[str] = []
         n: int = len(text)
 
         # 按步长切分
         for i in range(0, n, stride):
-            piece_raw: str = text[i : i + chunk_size]
+            piece_raw: str = text[i:i + self.chunk_size]
             if piece_raw.strip():
                 slices.append(piece_raw)
 

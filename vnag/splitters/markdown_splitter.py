@@ -11,9 +11,7 @@ class MarkdownSplitter(BaseSplitter):
 
     def __init__(self, chunk_size: int = 3000) -> None:
         """构造函数"""
-        super().__init__()
-
-        self.chunk_size: int = chunk_size
+        super().__init__(chunk_size)
 
     def split_text(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
         """对传入的 Markdown 文本进行结构化分块"""
