@@ -20,9 +20,15 @@ def main() -> None:
     print(f"chunks: {len(chunks)}")
     # 打印示例结果
     for i, ch in enumerate(chunks[:6]):
+        md = ch.metadata
         print(
-            f"[{i}] len={len(ch.text)} title={ch.metadata.get('section_title','')} "
-            f"part={ch.metadata.get('section_part','')}\n{ch.text[:120]}\n---"
+            f"[{i}] len={len(ch.text)} "
+            f"title={md.get('section_title','')} "
+            f"order={md.get('section_order','')} "
+            f"part={md.get('section_part','')} "
+            f"container={md.get('container_class','')} "
+            f"qname={md.get('qualified_name','')}\n"
+            f"{ch.text[:120]}\n---"
         )
 
 

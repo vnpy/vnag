@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from vnag.splitter import BaseSplitter, DocumentChunk
 
 
@@ -50,5 +48,3 @@ class OverlapSplitter(BaseSplitter):
             out.append(DocumentChunk(text=piece, metadata=meta))
 
         return out
-
-

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from typing import NamedTuple
 
@@ -17,6 +15,31 @@ class BaseSplitter(ABC):
     def split_text(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
         """对传入文本进行分块，返回 DocumentChunk 列表"""
         pass
+
+    def pack_section(self, sec: str) -> list[str]:
+        """
+        对单个段（含标题+正文或代码单元）进行“按空行切段后装箱”：
+        - 切段：以两个换行 "\n\n" 作为自然段边界（不引入新的切分点）
+        - 装箱：按段落顺序聚合到不超过 self.chunk_size；段间用一个空行拼接，保持可读性
+        - 若原段长度不超过 self.chunk_size，则直接返回 [sec]
+        - 返回前过滤空白片段，顺序不变
+        """
+        if len(sec) <= self.chunk_size:
+            return [sec]
+
+        paragraphs: list[str] = []
+        for paragraph in sec.split("\n\n"):
+            if paragraph.strip():
+                paragraphs.append(paragraph)
+
+        chunks: list[str] = self.pack_paragraphs(paragraphs, self.chunk_size)
+
+        filtered_chunks: list[str] = []
+        for chunk in chunks:
+            if chunk:
+                filtered_chunks.append(chunk)
+
+        return filtered_chunks
 
     def pack_paragraphs(self, paragraphs: list[str], chunk_size: int) -> list[str]:
         """
@@ -78,6 +101,7 @@ class BaseSplitter(ABC):
         说明：
         - 行内保持原样，行间拼接使用一个换行符，因此聚合长度计算中需要额外+1
         - 不做重叠，维持原始顺序
+        - 用途：当段落层级仍超限时，以“行”为自然边界尽量装满块；当前项目精简后未使用，保留以备将来处理“极长单行/序列化文本”的场景
         """
         chunks: list[str] = []
         buffer: list[str] = []

@@ -51,8 +51,8 @@ class MarkdownSplitter(BaseSplitter):
         # 逐段（按标题）→ 逐片（按大小）流式产出，最后收集为列表
         chunks: list = []
         idx: int = 0
-        sections_iter: Iterator = self.iter_markdown_sections(text)
         section_order: int = 0
+        sections_iter: Iterator = self.iter_markdown_sections(text)
 
         for sec in sections_iter:
             # 提取标题文本（去除开头 # 与空格），用于检索/展示关联
@@ -133,29 +133,3 @@ class MarkdownSplitter(BaseSplitter):
             joined = "\n".join(current).strip()   # 收尾：剩余缓冲作为最后一段
             if joined:
                 yield joined
-
-    def pack_section(self, sec: str) -> list[str]:
-        """将单个段（含标题+正文）打包为多个不超过 chunk_size 的片段（返回列表）
-
-        规则：
-        - 先按空行拆分为自然段（paragraphs）
-        - 使用基类的 pack_paragraphs 聚合装箱，内部已处理单段超限的定长切
-        - 片段之间不重叠，保持顺序不变
-        """
-        if len(sec) <= self.chunk_size: # 段本身不超限：直接返回
-            return [sec]
-
-        # 空行装箱
-        paragraphs: list[str] = []
-        for paragraph in sec.split("\n\n"):
-            if paragraph.strip():
-                paragraphs.append(paragraph)
-        chunks: list[str] = self.pack_paragraphs(paragraphs, self.chunk_size)
-
-        # 过滤空白片段，保持顺序
-        filtered_chunks: list[str] = []
-        for chunk in chunks:
-            if chunk:
-                filtered_chunks.append(chunk)
-
-        return filtered_chunks
