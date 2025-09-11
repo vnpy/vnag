@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from vnag.splitter import BaseSplitter, DocumentChunk
 
 
@@ -17,7 +15,8 @@ class OverlapSplitter(BaseSplitter):
         if overlap >= chunk_size:
             overlap = max(0, chunk_size - 1)
 
-        self.chunk_size: int = chunk_size
+        super().__init__(chunk_size)
+
         self.overlap: int = overlap
 
     def split_text(self, text: str, metadata: dict[str, str]) -> list[DocumentChunk]:
@@ -37,7 +36,7 @@ class OverlapSplitter(BaseSplitter):
         if not text:
             return []
 
-        pieces: list[str] = self.split_by_length(text, self.chunk_size, self.overlap)
+        pieces: list[str] = self.split_by_length(text, self.overlap)
 
         total: int = len(pieces)
         out: list[DocumentChunk] = []
@@ -50,5 +49,3 @@ class OverlapSplitter(BaseSplitter):
             out.append(DocumentChunk(text=piece, metadata=meta))
 
         return out
-
-
