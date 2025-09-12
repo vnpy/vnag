@@ -1,14 +1,13 @@
-from typing import Any, NamedTuple
-
 from pydantic import BaseModel, Field
 
 from .constant import Role, FinishReason
 
 
-class Segment(NamedTuple):
+class Segment(BaseModel):
     """A unified structure for document chunks."""
     text: str
     metadata: dict[str, str]
+    score: float = 0
 
 
 class Message(BaseModel):
