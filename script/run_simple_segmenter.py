@@ -5,7 +5,8 @@ def main() -> None:
     """运行简单的文本分段器"""
     segmenter = SimpleSegmenter()
 
-    text = "这是一个简单的文本分段器，按固定长度切分文本，并支持重叠。"
+    with open("./knowledge/backtesting.py", encoding="utf-8") as f:
+        text: str = f.read()
 
     metadata = {"source": "test"}
 

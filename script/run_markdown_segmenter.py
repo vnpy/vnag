@@ -5,7 +5,7 @@ def main() -> None:
     """运行简单的文本分段器"""
     segmenter = MarkdownSegmenter()
 
-    with open("veighna_station.md", encoding="utf-8") as f:
+    with open("./knowledge/veighna_station.md", encoding="utf-8") as f:
         text: str = f.read()
 
     metadata = {"source": "veighna_station.md"}
