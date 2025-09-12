@@ -1,6 +1,8 @@
 import json
 import sys
+
 from pathlib import Path
+import pypdf
 
 
 def _get_agent_dir(temp_name: str) -> tuple[Path, Path]:
@@ -40,7 +42,7 @@ def get_folder_path(folder_name: str) -> Path:
     return folder_path
 
 
-def load_json(filename: str) -> dict | list | None:
+def load_json(filename: str) -> dict:
     """加载JSON文件"""
     filepath: Path = get_file_path(filename)
 
@@ -49,12 +51,13 @@ def load_json(filename: str) -> dict | list | None:
             data: dict = json.load(f)
         return data
     else:
-        return None
+        return {}
 
 
 def save_json(filename: str, data: dict | list) -> None:
     """保存JSON文件"""
     filepath: Path = get_file_path(filename)
+
     with open(filepath, mode="w+", encoding="UTF-8") as f:
         json.dump(
             data,
@@ -62,3 +65,30 @@ def save_json(filename: str, data: dict | list) -> None:
             indent=4,
             ensure_ascii=False
         )
+
+
+def read_text_file(path: str | Path) -> str:
+    """读取文本文件，使用 UTF-8 编码。"""
+    p: Path = Path(path)
+    text: str = p.read_text(encoding="utf-8")
+    return text
+
+
+def read_pdf_file(path: str | Path) -> str:
+    """读取 PDF 文件为纯文本。"""
+    p: Path = Path(path)
+    text: str = ""
+    with open(p, "rb") as file:
+        reader: pypdf.PdfReader = pypdf.PdfReader(file)
+        for page in reader.pages:
+            page_text: str | None = page.extract_text()
+            if page_text is None:
+                page_text = ""
+            text += page_text + "\n"
+    return text
+
+
+def write_text_file(path: str | Path, content: str) -> None:
+    """写入文本文件，使用 UTF-8 编码（覆盖写）。"""
+    p: Path = Path(path)
+    p.write_text(content, encoding="utf-8")
