@@ -4,7 +4,7 @@ from markdown_it import MarkdownIt
 from markdown_it.token import Token
 
 from vnag.object import Segment
-from vnag.segmenter import BaseSegmenter
+from vnag.segmenter import BaseSegmenter, pack_section
 
 
 class MarkdownSegmenter(BaseSegmenter):
@@ -40,12 +40,8 @@ class MarkdownSegmenter(BaseSegmenter):
         section_order: int = 0
 
         for title, content in sections:
-            chunks: list[str]
-            # 如果一个章节内容过长，则调用段落打包函数进一步切分
-            if len(content) > self.chunk_size:
-                chunks = pack_paragraphs(content.split("\n\n"), self.chunk_size)
-            else:
-                chunks = [content]
+            # 统一使用通用装箱逻辑
+            chunks: list[str] = pack_section(content, self.chunk_size)
 
             total_chunks: int = len(chunks)
             for i, chunk in enumerate(chunks):
@@ -118,63 +114,3 @@ def group_by_headings(text: str, tokens: list[Token]) -> list[tuple[str, str]]:
         sections.append((current_title, "\n".join(current_section_lines).strip()))
 
     return sections
-
-
-def pack_paragraphs(paragraphs: list[str], chunk_size: int) -> list[str]:
-    """
-    将段落列表打包成不超过指定大小的文本块。
-
-    该函数模拟将段落一个个放入箱子（文本块）的过程，以尽可能填满每个箱子，
-    同时确保单个段落不会被分割（除非该段落本身就超过了最大长度）。
-
-    参数:
-        paragraphs: 待打包的字符串段落列表。
-        chunk_size: 每个文本块的最大长度。
-
-    返回:
-        一个由打包好的文本块字符串组成的列表。
-
-    注意:
-        - 段落之间使用 `\n\n` 连接，拼接长度会计入总长度。
-        - 如果单个段落的长度超过 `chunk_size`，它将被强制切分为更小的块。
-    """
-    chunks: list[str] = []
-    buffer: list[str] = []
-    buffer_len: int = 0
-
-    for paragraph in paragraphs:
-        # 计算段落间分隔符的长度
-        separator_len: int = 2 if buffer else 0
-        paragraph_len: int = len(paragraph)
-
-        # 检查将当前段落加入缓冲区后是否会超长
-        if buffer_len + paragraph_len + separator_len <= chunk_size:
-            # 未超长：加入缓冲区
-            buffer.append(paragraph)
-            buffer_len += paragraph_len + separator_len
-            continue
-
-        # 已超长：需要先处理（清空）缓冲区
-        if buffer:
-            assembled_chunk: str = "\n\n".join(buffer).strip()
-            if assembled_chunk:
-                chunks.append(assembled_chunk)
-            buffer = []
-            buffer_len = 0
-
-        # 处理当前段落
-        if paragraph_len > chunk_size:
-            # 如果段落本身就超长，直接进行定长切分
-            chunks.extend(BaseSegmenter.chunk_text(paragraph, chunk_size))
-        else:
-            # 否则，将该段落作为新缓冲区的第一个元素
-            buffer.append(paragraph)
-            buffer_len = paragraph_len
-
-    # 清空最后一个缓冲区中剩余的内容
-    if buffer:
-        assembled_chunk: str = "\n\n".join(buffer).strip()
-        if assembled_chunk:
-            chunks.append(assembled_chunk)
-
-    return chunks
