@@ -52,9 +52,17 @@ class ChromaVector(BaseVector):
             for seg in segments
         ]
 
-        self.collection.add(
-            embeddings=embeddings, documents=texts, metadatas=metadatas, ids=ids
-        )
+        # 分批写入，避免触发 Chroma 单批上限（约 5461）
+        db_batch_size: int = 3000
+        for i in range(0, len(ids), db_batch_size):
+            j = i + db_batch_size
+            self.collection.add(
+                embeddings=embeddings[i:j],
+                documents=texts[i:j],
+                metadatas=metadatas[i:j],
+                ids=ids[i:j],
+            )
+
         return ids
 
     def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
