@@ -29,7 +29,7 @@ class MarkdownSegmenter(BaseSegmenter):
         处理流程:
         1. 使用 markdown-it-py 解析文本，获取 Tokens。
         2. 调用 `group_by_headings` 方法，按标题将 Tokens 分割成逻辑章节。
-        3. 对于过长的章节，调用 `pack_paragraphs` 按段落进行打包，确保每个块不超过 `chunk_size`。
+        3. 调用 `pack_section` 进行三层分块，确保每个块不超过 `chunk_size`。
         4. 为每个最终的文本块创建 `Segment` 对象，并附加元数据。
         """
         tokens: list[Token] = self.md_parser.parse(text)

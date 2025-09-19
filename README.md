@@ -61,64 +61,79 @@ pip install -e .
 
 ## 快速开始
 
-### 启动应用
+### 运行脚本测试（临时）
 
-在项目根目录下运行：
+说明：当前 UI 仍在调整中，暂不支持 `python -m vnag` 启动。请先拉取 main 分支代码并通过 script 目录中的测试脚本进行验证。
+
+示例（在项目根目录执行）：
 
 ```bash
-python -m vnag
+# 分段器示例
+python vnag/script/run_markdown_segmenter.py
+python vnag/script/run_python_segmenter.py
+python vnag/script/run_cpp_segmenter.py
 ```
 
-### 初始化配置
+# 完整RAG项目流程demo
 
-1. 启动应用后，点击菜单栏中的"系统" → "连接"
-2. 在弹出的对话框中配置：
-   - **服务地址**：大模型API的base_url（如：https://api.openai.com/v1）
-   - **API Key**：您的API密钥
-   - **模型名称**：要使用的模型（如：gpt-3.5-turbo）
-3. 点击"连接"完成初始化
+   fork api_agent项目代码，切到vnag_rag_demo目录运行测试脚本：
 
-### 开始对话
+ - 知识库导入（MD/PY/CPP 批量入库 + 计时）
+   ```
+   python run_add_document.py
+   ```
 
-配置完成后，您就可以在输入框中输入问题，点击"发送请求"与AI进行对话了。
+ - 发送消息与对比（带RAG / 不带RAG 对比输出）
+   ```
+   python run_send_message.py
+   ```
 
-- 对话历史会自动保存在本地
-- 支持Markdown格式的AI回复渲染
-- 可以随时清空对话历史
+提示：上述 demo 默认使用本仓库附带的模板与示例路径，可根据本机数据调整脚本中的路径变量。
 
 ## 项目结构
 
 ```
 vnag/
-├── vnag/                   # 核心模块
-│   ├── __init__.py        # 版本信息
-│   ├── __main__.py        # 应用入口
-│   ├── gateway.py         # AI模型网关
-│   ├── window.py          # 主窗口界面
-│   ├── utility.py         # 工具函数
-│   └── logo.ico          # 应用图标
-├── pyproject.toml         # 项目配置
-├── README.md             # 项目文档
-└── LICENSE               # 开源协议
+├── vnag/                       # 核心模块
+│   ├── __init__.py            # 版本信息
+│   ├── object.py              # 数据对象（Segment/Message/Request等）
+│   ├── segmenter.py           # BaseSegmenter 与通用装箱逻辑
+│   ├── segmenters/            # 分段器实现
+│   │   ├── markdown_segmenter.py
+│   │   ├── python_segmenter.py
+│   │   └── cpp_segmenter.py
+│   ├── vector.py              # BaseVector 接口
+│   ├── vectors/               # 向量库实现
+│   │   └── chromadb_vector.py
+│   ├── gateways/              # 网关实现集合（OpenAI 等兼容实现）
+│   └── utility.py             # 工具函数（读写文件/临时目录等）
+├── vnag/script/               # 快速测试脚本集合（run_*.py）
+├── pyproject.toml             # 项目配置
+├── README.md                  # 项目文档
+└── LICENSE                    # 开源协议
 ```
 
 ### 核心模块说明
 
-- **gateway.py**：负责与各种大模型API的统一接口封装
-- **window.py**：主窗口UI逻辑，包含聊天界面和配置对话框
-- **utility.py**：提供JSON配置文件读写等工具函数
-- **__main__.py**：应用启动入口，负责Qt应用初始化
+- **segmenters/**：Markdown/Python/C++ 分段器（Python/C++ 为 AST 结构化切分，统一装箱）
+- **vectors/chromadb_vector.py**：ChromaDB 向量存储（CPU 友好，内部DB分批写入）
+- **gateways/openai_gateway.py**：OpenAI 兼容网关（流式输出）
+- **utility.py**：读写 JSON/文本、临时目录管理等
+- **script/**：分段器/入库/发送消息测试脚本
 
 ## 开发状态
 
 ### 当前功能 ✅
 
-- [x] 基础聊天UI界面
-- [x] OpenAI兼容API支持
-- [x] 对话历史管理
-- [x] Markdown渲染
-- [x] 配置持久化
-- [x] 深色主题UI
+- [x] 分段器：Markdown（按标题）、Python（AST）、C++（libclang AST）
+- [x] 向量库：ChromaDB 集成（内部DB分批写入，避免单批上限）
+- [x] 网关：OpenAI 兼容，支持流式回答
+- [x] 脚本：批量入库（MD/PY/CPP）、RAG 与不带 RAG 的对比发送
+
+### 暂未开放 ⏳
+
+- [ ] UI 启动（`python -m vnag` 尚未开放，UI 正在调整）
+- [ ] 插件系统、多 Agent 会话、文件上传、主题等增强
 
 ### 开发路线图 🚧
 
