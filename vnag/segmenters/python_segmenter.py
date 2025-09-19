@@ -27,7 +27,7 @@ class PythonSegmenter(BaseSegmenter):
 
         处理流程:
         1. 调用 `ast_split` 函数，按顶层函数和类定义将源码分割成逻辑章节。
-        2. 对于过长的章节，调用 `pack_lines` 按代码行进行打包，确保每个块不超过 `chunk_size`。
+        2. 调用 `pack_section` 进行三层分块，确保每个块不超过 `chunk_size`。
         3. 为每个最终的文本块创建 `Segment` 对象，并附加元数据。
         """
         if not text.strip():
