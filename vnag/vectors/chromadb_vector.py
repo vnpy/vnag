@@ -18,9 +18,10 @@ from vnag.vector import BaseVector
 class ChromaVector(BaseVector):
     """基于 ChromaDB 实现的向量存储。"""
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "default") -> None:
         """初始化 ChromaDB 向量存储。"""
-        self.persist_dir: Path = get_folder_path("chroma_db")
+        self.persist_dir: Path = get_folder_path("chroma_db").joinpath(name)
+
         self.embedding_model: SentenceTransformer = SentenceTransformer(
             "BAAI/bge-large-zh-v1.5"
         )
