@@ -44,3 +44,10 @@ class Delta(BaseModel):
     content: str | None = None
     finish_reason: FinishReason | None = None
     usage: Usage | None = None
+
+
+class Session(BaseModel):
+    """聊天交互会话历史"""
+    id: str
+    name: str
+    messages: list[Message] = Field(default_factory=list)
