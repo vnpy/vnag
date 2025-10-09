@@ -64,7 +64,7 @@ class OpenaiGateway(BaseGateway):
             max_tokens=request.max_tokens,
         )
 
-        usage = Usage()
+        usage: Usage = Usage()
         if response.usage:
             usage.input_tokens = response.usage.prompt_tokens
             usage.output_tokens = response.usage.completion_tokens
