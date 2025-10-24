@@ -1,12 +1,13 @@
 from typing import Any
 from collections.abc import Generator
+import json
 
 from openai import OpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
-from openai.types.model import Model
 
 from vnag.gateway import BaseGateway
-from vnag.object import FinishReason, Request, Response, Delta, Usage
+from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ToolCall
+from vnag.object import Role
 
 
 FINISH_REASON_MAP = {
@@ -34,6 +35,49 @@ class OpenaiGateway(BaseGateway):
 
         self.client: OpenAI | None = None
 
+    def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
+        """
+        将内部 Message 格式转换为 OpenAI API 格式
+
+        内部格式支持 tool_results，需要拆分为多条 tool 角色消息
+        """
+        openai_messages: list[dict[str, Any]] = []
+
+        for msg in messages:
+            # 处理工具结果：拆分为多条 tool 消息
+            if msg.tool_results:
+                for tool_result in msg.tool_results:
+                    openai_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_result.id,
+                        "content": tool_result.content
+                    })
+
+            # 处理普通消息或带 tool_calls 的消息
+            else:
+                message_dict: dict[str, Any] = {"role": msg.role.value}
+
+                if msg.content:
+                    message_dict["content"] = msg.content
+
+                if msg.tool_calls:
+                    # 转换 tool_calls 为 OpenAI 格式
+                    message_dict["tool_calls"] = [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments)
+                            }
+                        }
+                        for tc in msg.tool_calls
+                    ]
+
+                openai_messages.append(message_dict)
+
+        return openai_messages
+
     def init(self, setting: dict[str, Any]) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
         base_url: str = setting.get("base_url", "")
@@ -57,22 +101,61 @@ class OpenaiGateway(BaseGateway):
             self.write_log("LLM客户端未初始化，请检查配置")
             return Response(id="", content="", usage=Usage())
 
-        response: ChatCompletion = self.client.chat.completions.create(
-            model=request.model,
-            messages=[msg.model_dump() for msg in request.messages],
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-        )
+        # 转换消息格式
+        openai_messages: list[dict[str, Any]] = self._convert_messages(request.messages)
+
+        # 准备请求参数
+        create_params: dict[str, Any] = {
+            "model": request.model,
+            "messages": openai_messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+        }
+
+        # 添加工具定义（如果有）
+        if request.tools_schemas:
+            create_params["tools"] = [t.get_schema() for t in request.tools_schemas]
+
+        response: ChatCompletion = self.client.chat.completions.create(**create_params)
 
         usage: Usage = Usage()
         if response.usage:
             usage.input_tokens = response.usage.prompt_tokens
             usage.output_tokens = response.usage.completion_tokens
 
+        choice = response.choices[0]
+        finish_reason: FinishReason = FINISH_REASON_MAP.get(
+            choice.finish_reason, FinishReason.UNKNOWN
+        )
+
+        # 提取工具调用
+        tool_calls: list[ToolCall] = []
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                try:
+                    if hasattr(tc, "function"):
+                        arguments: dict[str, Any] = json.loads(tc.function.arguments)
+                        tool_calls.append(ToolCall(
+                            id=tc.id,
+                            name=tc.function.name,
+                            arguments=arguments
+                        ))
+                except json.JSONDecodeError:
+                    pass
+
+        # 构建返回的消息对象
+        message = Message(
+            role=Role.ASSISTANT,
+            content=choice.message.content or "",
+            tool_calls=tool_calls
+        )
+
         return Response(
             id=response.id,
-            content=response.choices[0].message.content or "",
+            content=choice.message.content or "",
             usage=usage,
+            finish_reason=finish_reason,
+            message=message
         )
 
     def stream(self, request: Request) -> Generator[Delta, None, None]:
@@ -81,15 +164,28 @@ class OpenaiGateway(BaseGateway):
             self.write_log("LLM客户端未初始化，请检查配置")
             return
 
-        stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(
-            model=request.model,
-            messages=[msg.model_dump() for msg in request.messages],
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            stream=True,
-        )
+        # 转换消息格式
+        openai_messages: list[dict[str, Any]] = self._convert_messages(request.messages)
+
+        # 准备请求参数
+        create_params: dict[str, Any] = {
+            "model": request.model,
+            "messages": openai_messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stream": True,
+        }
+
+        # 添加工具定义（如果有）
+        if request.tools_schemas:
+            create_params["tools"] = [t.get_schema() for t in request.tools_schemas]
+
+        stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(**create_params)
 
         response_id: str = ""
+        # 用于累积 tool_calls（OpenAI 流式返回时可能分多次）
+        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+
         for chuck in stream:
             if not response_id:
                 response_id = chuck.id
@@ -103,6 +199,28 @@ class OpenaiGateway(BaseGateway):
                 delta.content = delta_content
                 should_yield = True
 
+            # 检查 tool_calls 增量
+            if chuck.choices[0].delta.tool_calls:
+                for tc_chunk in chuck.choices[0].delta.tool_calls:
+                    idx: int = tc_chunk.index
+
+                    # 初始化或更新累积的 tool_call
+                    if idx not in accumulated_tool_calls:
+                        accumulated_tool_calls[idx] = {
+                            "id": "",
+                            "name": "",
+                            "arguments": ""
+                        }
+
+                    if tc_chunk.id:
+                        accumulated_tool_calls[idx]["id"] = tc_chunk.id
+
+                    if tc_chunk.function:
+                        if tc_chunk.function.name:
+                            accumulated_tool_calls[idx]["name"] = tc_chunk.function.name
+                        if tc_chunk.function.arguments:
+                            accumulated_tool_calls[idx]["arguments"] += tc_chunk.function.arguments
+
             # 检查结束原因
             openai_finish_reason = chuck.choices[0].finish_reason
             if openai_finish_reason:
@@ -111,6 +229,23 @@ class OpenaiGateway(BaseGateway):
                 )
                 delta.finish_reason = vnag_finish_reason
                 should_yield = True
+
+                # 如果是 tool_calls 结束，转换累积的 tool_calls
+                if vnag_finish_reason == FinishReason.TOOL_CALLS and accumulated_tool_calls:
+                    tool_calls: list[ToolCall] = []
+                    for tc_data in accumulated_tool_calls.values():
+                        try:
+                            arguments: dict[str, Any] = json.loads(tc_data["arguments"])
+                        except json.JSONDecodeError:
+                            arguments = {}
+
+                        tool_calls.append(ToolCall(
+                            id=tc_data["id"],
+                            name=tc_data["name"],
+                            arguments=arguments
+                        ))
+
+                    delta.calls = tool_calls
 
             # 检查用量信息（通常在最后一个数据块中）
             if chuck.usage:
@@ -129,5 +264,5 @@ class OpenaiGateway(BaseGateway):
             self.write_log("LLM客户端未初始化，请检查配置")
             return []
 
-        models: list[Model] = self.client.models.list()
+        models = self.client.models.list()
         return sorted([model.id for model in models])

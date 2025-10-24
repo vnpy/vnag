@@ -6,12 +6,13 @@ class Role(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+    TOOL = "tool"
 
 
 class FinishReason(str, Enum):
     """流式响应结束原因"""
-
     STOP = "stop"
     LENGTH = "length"
     TOOL_CALLS = "tool_calls"
     UNKNOWN = "unknown"
+    ERROR = "error"
