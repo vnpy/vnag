@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 import qdarkstyle
-from PySide6 import QtGui, QtWidgets, QtCore
+from PySide6 import QtGui, QtWidgets, QtCore, QtWebEngineWidgets, QtWebEngineCore
 
 
 def create_qapp() -> QtWidgets.QApplication:
@@ -34,4 +34,6 @@ __all__ = [
     "QtCore",
     "QtGui",
     "QtWidgets",
+    "QtWebEngineWidgets",
+    "QtWebEngineCore",
 ]

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="monokai-sublime.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="history"></div>
+
+    <script src="highlight.min.js"></script>
+    <script src="markdown-it.min.js"></script>
+    <script>
+        window.onload = function() {
+            const md = window.markdownit({
+                html: true,
+                linkify: true,
+                typographer: true,
+                highlight: function (str, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return '<pre class="hljs"><code>' +
+                                    hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+                                    '</code></pre>';
+                        } catch (__) {}
+                    }
+                    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+                }
+            });
+
+            function getCurrentTime() {
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, '0');
+                const minutes = String(now.getMinutes()).padStart(2, '0');
+                return `${hours}:${minutes}`;
+            }
+
+            window.appendUserMessage = function(content) {
+                const history = document.getElementById("history");
+                const messageDiv = document.createElement("div");
+                messageDiv.className = "message user";
+
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <div class="icon">🧐</div>
+                        <div class="role">用户</div>
+                        <div class="timestamp">${getCurrentTime()}</div>
+                    </div>
+                    <div class="message-content">${content}</div>
+                `;
+
+                history.appendChild(messageDiv);
+                scrollToBottom();
+            }
+
+            window.appendAssistantMessage = function(markdownContent) {
+                const history = document.getElementById("history");
+                const messageDiv = document.createElement("div");
+                messageDiv.className = "message assistant";
+                
+                const htmlContent = md.render(markdownContent);
+
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <div class="icon">🤖</div>
+                        <div class="role">Assistant</div>
+                        <div class="timestamp">${getCurrentTime()}</div>
+                    </div>
+                    <div class="message-content">${htmlContent}</div>
+                `;
+
+                addCopyButtons(messageDiv);
+                history.appendChild(messageDiv);
+                scrollToBottom();
+            }
+
+            window.startAssistantMessage = function(msgId) {
+                const history = document.getElementById("history");
+                const messageDiv = document.createElement("div");
+                messageDiv.id = msgId;
+                messageDiv.className = "message assistant";
+
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        <div class="icon">🤖</div>
+                        <div class="role">Assistant</div>
+                        <div class="timestamp">${getCurrentTime()}</div>
+                    </div>
+                    <div class="message-content"></div>
+                `;
+
+                history.appendChild(messageDiv);
+                scrollToBottom();
+            }
+
+            window.updateAssistantMessage = function(msgId, markdownContent) {
+                const messageDiv = document.getElementById(msgId);
+                if (messageDiv) {
+                    const contentDiv = messageDiv.querySelector('.message-content');
+                    contentDiv.innerHTML = md.render(markdownContent);
+                    scrollToBottom();
+                }
+            }
+
+            window.finishAssistantMessage = function(msgId) {
+                const messageDiv = document.getElementById(msgId);
+                if (messageDiv) {
+                    addCopyButtons(messageDiv);
+                }
+            }
+
+            function addCopyButtons(element) {
+                const pres = element.querySelectorAll('pre');
+                pres.forEach(pre => {
+                    const button = document.createElement('button');
+                    button.className = 'copy-button';
+                    button.innerText = 'Copy';
+                    
+                    button.addEventListener('click', () => {
+                        const code = pre.querySelector('code').innerText;
+                        navigator.clipboard.writeText(code).then(() => {
+                            button.innerText = 'Copied!';
+                            setTimeout(() => {
+                                button.innerText = 'Copy';
+                            }, 2000);
+                        });
+                    });
+                    pre.appendChild(button);
+                });
+            }
+
+            function scrollToBottom() {
+                window.scrollTo(0, document.body.scrollHeight);
+            }
+        };
+    </script>
+</body>
+</html>

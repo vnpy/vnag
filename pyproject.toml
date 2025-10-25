@@ -21,14 +21,15 @@ classifiers = [
 dependencies = [
     "PySide6",
     "openai",
-    "markdown",
+    "markdown-it-py",
     "pydantic",
     "libclang",
     "chromadb",
     "numpy",
     "sentence-transformers",
     "pypdf",
-    "QDarkStyle"
+    "QDarkStyle",
+    "PySide6-WebEngine"
 ]
 requires-python = ">=3.10"
 keywords = ["ai", "agent"]
