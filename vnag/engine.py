@@ -1,17 +1,11 @@
-from collections.abc import Callable, Generator
-from typing import Any
+from collections.abc import Generator
 from uuid import uuid4
-from dataclasses import asdict
-
-from mcp import Tool
 
 from .gateway import BaseGateway
 from .object import Message, Request, Delta, Response, Usage, ToolCall, ToolResult, ToolSchema
 from .constant import Role, FinishReason
 from .mcp import McpManager
-from .local import LocalManager, LocalTool
-
-OnDeltaCallback = Callable[[Delta], None]
+from .local import LocalManager
 
 
 class AgentEngine:

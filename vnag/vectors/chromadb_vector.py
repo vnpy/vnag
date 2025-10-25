@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+from collections.abc import Mapping
 
 import numpy as np
 from numpy.typing import NDArray
 import chromadb
-from chromadb.api.client import Client
+from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.api.types import GetResult, QueryResult
 from chromadb.config import Settings as ChromaSettings
@@ -26,7 +27,7 @@ class ChromaVector(BaseVector):
             "BAAI/bge-large-zh-v1.5"
         )
 
-        self.client: Client = chromadb.PersistentClient(
+        self.client: ClientAPI = chromadb.PersistentClient(
             path=str(self.persist_dir),
             settings=ChromaSettings(anonymized_telemetry=False),
         )
@@ -41,12 +42,11 @@ class ChromaVector(BaseVector):
             return []
 
         texts: list[str] = [seg.text for seg in segments]
-        metadatas: list[dict[str, str]] = [seg.metadata for seg in segments]
+        metadatas: list[Mapping[str, Any]] = [seg.metadata for seg in segments]
 
         embeddings_np: NDArray[np.float32] = self.embedding_model.encode(
             texts, show_progress_bar=False
         )
-        embeddings: list[list[float]] = cast(list[list[float]], embeddings_np.tolist())
 
         ids: list[str] = [
             f"{seg.metadata['filename']}_{seg.metadata['chunk_index']}"
@@ -58,7 +58,7 @@ class ChromaVector(BaseVector):
         for i in range(0, len(ids), db_batch_size):
             j = i + db_batch_size
             self.collection.add(
-                embeddings=embeddings[i:j],
+                embeddings=embeddings_np[i:j],
                 documents=texts[i:j],
                 metadatas=metadatas[i:j],
                 ids=ids[i:j],
@@ -74,14 +74,13 @@ class ChromaVector(BaseVector):
         query_embedding_np: NDArray[np.float32] = self.embedding_model.encode(
             [query_text]
         )
-        query_embedding: list[list[float]] = cast(list[list[float]], query_embedding_np.tolist())
 
         results: QueryResult = self.collection.query(
-            query_embeddings=query_embedding, n_results=k
+            query_embeddings=query_embedding_np, n_results=k
         )
 
         documents: list[list[str]] | None = results.get("documents")
-        metadatas: list[list[dict[str, Any]]] | None = results.get("metadatas")
+        metadatas: list[list[Mapping[str, Any]]] | None = results.get("metadatas")
         distances: list[list[float]] | None = results.get("distances")
 
         if not (documents and metadatas and distances and documents[0]):
@@ -121,7 +120,7 @@ class ChromaVector(BaseVector):
         results: GetResult = self.collection.get(ids=segment_ids)
 
         documents: list[str] | None = results.get("documents")
-        metadatas: list[dict[str, Any]] | None = results.get("metadatas")
+        metadatas: list[Mapping[str, Any]] | None = results.get("metadatas")
 
         if not (documents and metadatas):
             return []

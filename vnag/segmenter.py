@@ -106,7 +106,7 @@ def pack_lines(lines: list[str], chunk_size: int) -> list[str]:
 
     # 清空最后一个缓冲区中剩余的内容
     if buffer:
-        assembled_chunk: str = "\n".join(buffer).strip()
+        assembled_chunk = "\n".join(buffer).strip()
         if assembled_chunk:
             chunks.append(assembled_chunk)
 

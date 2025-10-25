@@ -1,6 +1,7 @@
 import ast
+from ast import stmt
 from typing import Any
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 
 from vnag.object import Segment
 from vnag.segmenter import BaseSegmenter, pack_section
@@ -118,7 +119,7 @@ def ast_split(text: str) -> Generator[tuple[str, str, str, str, str], None, None
 
 
 def traverse_body(
-    body_nodes: list[ast.AST],
+    body_nodes: Sequence[stmt],
     lines: list[str],
     prefix: str = ""
 ) -> Generator[tuple[str, str, str, str, str], None, None]:
@@ -163,7 +164,7 @@ def traverse_body(
             # 产出类的头部（class ...:、文档字符串、类变量等）。
             header_code: str = "".join(lines[start_line:header_end_line]).strip()
             if header_code:
-                summary: str = ast.get_docstring(node) or ""
+                summary = ast.get_docstring(node) or ""
                 yield f"{prefix}{node.name}", header_code, "class", summary, ""
 
             # 递归调用自身，处理类体中的方法和嵌套类。
@@ -182,9 +183,9 @@ def traverse_body(
                         yield f"{prefix}{node.name}", footer_code, "class", "", ""
         else:
             # 对于其他类型的顶层语句（如赋值、导入等），将其归为模块代码。
-            node_code: str = "".join(lines[start_line:end_line]).strip()
+            node_code = "".join(lines[start_line:end_line]).strip()
             if node_code:
-                title: str = f"{prefix}module" if prefix else "module"
+                title = f"{prefix}module" if prefix else "module"
                 yield title, node_code, "module", "", ""
 
         # 更新上一个节点的结束位置
@@ -260,9 +261,9 @@ def get_signature_string(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
             part = arg.arg
             if arg.annotation:
                 part += f": {ast.unparse(arg.annotation)}"
-            default_val = args.kw_defaults[i]
-            if default_val is not None:
-                part += f" = {ast.unparse(default_val)}"
+            kw_default_val = args.kw_defaults[i]
+            if kw_default_val is not None:
+                part += f" = {ast.unparse(kw_default_val)}"
             parts.append(part)
 
     # 5. 处理 **kwargs

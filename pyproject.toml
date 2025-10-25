@@ -21,7 +21,7 @@ classifiers = [
 dependencies = [
     "PySide6",
     "openai",
-    "markdown-it-py",
+    "markdown",
     "pydantic",
     "libclang",
     "chromadb",

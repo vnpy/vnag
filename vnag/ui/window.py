@@ -363,7 +363,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"版本号：{__version__}\n"
                 "\n"
                 f"运行目录：{AGENT_DIR}"
-            )
+            ),
+            QtWidgets.QMessageBox.StandardButton.Ok
         )
 
     def open_website(self) -> None:

@@ -86,7 +86,7 @@ def group_by_headings(text: str, tokens: list[Token]) -> list[tuple[str, str]]:
     heading_indices: dict[int, str] = {
         token.map[0]: token.content
         for token in tokens
-        if token.type == "heading_open"
+        if token.type == "heading_open" and token.map
     }
 
     # 如果没有找到任何标题，则将整个文档作为一个章节处理
