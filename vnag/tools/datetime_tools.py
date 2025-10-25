@@ -38,6 +38,9 @@ def get_day_of_week() -> str:
 
 # 注册工具
 get_current_date_tool: LocalTool = LocalTool(get_current_date)
+
 get_current_time_tool: LocalTool = LocalTool(get_current_time)
+
 get_current_datetime_tool: LocalTool = LocalTool(get_current_datetime)
+
 get_day_of_week_tool: LocalTool = LocalTool(get_day_of_week)

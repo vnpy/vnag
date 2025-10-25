@@ -1,5 +1,5 @@
 from vnag.utility import load_json
-from vnag.object import Message, Request, Response, Role
+from vnag.object import Message, Request, Response, Role, ToolSchema
 from vnag.gateways.anthropic_gateway import AnthropicGateway
 
 
@@ -15,7 +15,7 @@ def main() -> None:
     setting: dict = load_json("connect_anthropic.json")
 
     # 创建接口实例
-    gateway = AnthropicGateway()
+    gateway: AnthropicGateway = AnthropicGateway()
 
     # 初始化接口
     gateway.init(setting)
@@ -40,28 +40,46 @@ def main() -> None:
     print(response.content)
     print(response.usage)
 
-    # 流式调用并输出结果
-    stream_request: Request = Request(
-        model="claude-3-7-sonnet-20250219",
-        messages=[
-            Message(
-                role=Role.USER,
-                content="Give me an introduction of Python programming language",
-            ),
-        ],
-        temperature=1,
+    # 定义工具
+    get_weather_schema: ToolSchema = ToolSchema(
+        name="get_current_weather",
+        description="获取指定地点的当前天气情况",
+        parameters={
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "城市和省份，例如：上海, 北京",
+                },
+                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+            },
+            "required": ["location"],
+        },
+    )
+
+    # 创建工具调用请求
+    tool_request: Request = Request(
+        model="claude-3-opus-20240229",
+        messages=[Message(role=Role.USER, content="今天上海的天气如何？")],
+        tools_schemas=[get_weather_schema],
         max_tokens=1024,
     )
 
-    for chunk in gateway.stream(stream_request):
-        if chunk.content:
-            print(chunk.content, end="", flush=True)
+    # 调用接口
+    tool_response: Response = gateway.invoke(tool_request)
 
-        if chunk.finish_reason:
-            print(f"\n结束原因: {chunk.finish_reason.value}")
+    # 打印工具调用结果
+    if tool_response.message and tool_response.message.tool_calls:
+        print("工具调用:")
+        for tc in tool_response.message.tool_calls:
+            print(f"  ID: {tc.id}")
+            print(f"  Name: {tc.name}")
+            print(f"  Arguments: {tc.arguments}")
+    else:
+        print("模型回复:")
+        print(tool_response.content)
 
-        if chunk.usage:
-            print(f"\n用量统计: {chunk.usage}")
+    print(f"用量统计: {tool_response.usage}")
 
 
 if __name__ == "__main__":

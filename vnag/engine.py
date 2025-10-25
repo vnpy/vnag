@@ -211,7 +211,8 @@ class AgentEngine:
         temperature: float | None = None,
         max_tokens: int | None = None
     ) -> Response:
-        """阻塞式对话接口，一次性返回完整的 AI 回复。
+        """
+        阻塞式对话接口，一次性返回完整的 AI 回复。
 
         这个函数是对 stream 方法的封装，它会消费 stream 生成的所有增量数据（Delta），
         然后将它们聚合成一个完整的响应（Response）对象再返回。

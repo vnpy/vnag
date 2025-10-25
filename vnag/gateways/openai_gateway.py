@@ -4,6 +4,8 @@ import json
 
 from openai import OpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
 
 from vnag.gateway import BaseGateway
 from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ToolCall
@@ -116,14 +118,17 @@ class OpenaiGateway(BaseGateway):
         if request.tools_schemas:
             create_params["tools"] = [t.get_schema() for t in request.tools_schemas]
 
+        # 发起请求并获取响应
         response: ChatCompletion = self.client.chat.completions.create(**create_params)
 
+        # 提取用量信息
         usage: Usage = Usage()
         if response.usage:
             usage.input_tokens = response.usage.prompt_tokens
             usage.output_tokens = response.usage.completion_tokens
 
-        choice = response.choices[0]
+        # 提取响应内容和结束原因
+        choice: Choice = response.choices[0]
         finish_reason: FinishReason = FINISH_REASON_MAP.get(
             choice.finish_reason, FinishReason.UNKNOWN
         )
@@ -193,15 +198,17 @@ class OpenaiGateway(BaseGateway):
             delta: Delta = Delta(id=response_id)
             should_yield: bool = False
 
+            choice: ChunkChoice = chuck.choices[0]
+
             # 检查内容增量
-            delta_content: str | None = chuck.choices[0].delta.content
+            delta_content: str | None = choice.delta.content
             if delta_content:
                 delta.content = delta_content
                 should_yield = True
 
             # 检查 tool_calls 增量
-            if chuck.choices[0].delta.tool_calls:
-                for tc_chunk in chuck.choices[0].delta.tool_calls:
+            if choice.delta.tool_calls:
+                for tc_chunk in choice.delta.tool_calls:
                     idx: int = tc_chunk.index
 
                     # 初始化或更新累积的 tool_call
@@ -222,7 +229,7 @@ class OpenaiGateway(BaseGateway):
                             accumulated_tool_calls[idx]["arguments"] += tc_chunk.function.arguments
 
             # 检查结束原因
-            openai_finish_reason = chuck.choices[0].finish_reason
+            openai_finish_reason = choice.finish_reason
             if openai_finish_reason:
                 vnag_finish_reason: FinishReason = FINISH_REASON_MAP.get(
                     openai_finish_reason, FinishReason.UNKNOWN
