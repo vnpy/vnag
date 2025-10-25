@@ -1,6 +1,7 @@
 import traceback
 
 from ..gateway import BaseGateway
+from ..engine import AgentEngine
 from ..object import Request
 from .qt import QtCore
 
@@ -23,18 +24,23 @@ class StreamWorker(QtCore.QRunnable):
     """
     在线程池中处理流式网关请求的Worker
     """
-    def __init__(self, gateway: BaseGateway, request: Request) -> None:
+    def __init__(self, engine: AgentEngine, request: Request) -> None:
         """构造函数"""
         super().__init__()
 
-        self.gateway: BaseGateway = gateway
+        self.engine: AgentEngine = engine
         self.request: Request = request
         self.signals: StreamSignals = StreamSignals()
 
     def run(self) -> None:
         """处理数据流"""
         try:
-            for delta in self.gateway.stream(self.request):
+            for delta in self.engine.stream(
+                messages=self.request.messages,
+                model=self.request.model,
+                temperature=self.request.temperature,
+                max_tokens=self.request.max_tokens,
+            ):
                 if delta.content:
                     self.signals.delta.emit(delta.content)
         except Exception:

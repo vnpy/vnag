@@ -3,6 +3,8 @@ import os
 import uuid
 
 from ..constant import Role
+from ..object import ToolSchema
+from ..engine import AgentEngine
 from .qt import QtWebEngineWidgets, QtWidgets, QtCore, QtWebEngineCore
 
 
@@ -107,3 +109,88 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         # 返回完整的流式输出内容
         return self.full_content
+
+
+class ToolsDialog(QtWidgets.QDialog):
+    """显示可用工具的对话框"""
+
+    def __init__(self, engine: AgentEngine, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self._engine: AgentEngine = engine
+
+        self.init_ui()
+
+    def init_ui(self) -> None:
+        """初始化UI"""
+        self.setWindowTitle("工具浏览器")
+        self.setMinimumSize(800, 600)
+
+        # 左侧树
+        self.tree_widget: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
+        self.tree_widget.setColumnCount(1)
+        self.tree_widget.setHeaderLabels(["工具列表"])
+        self.tree_widget.itemClicked.connect(self.on_item_clicked)
+
+        # 右侧详情
+        self.detail_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+        self.detail_widget.setReadOnly(True)
+
+        # 分割器
+        splitter: QtWidgets.QSplitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        splitter.addWidget(self.tree_widget)
+        splitter.addWidget(self.detail_widget)
+        splitter.setSizes([250, 550])
+
+        # 主布局
+        vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        vbox.addWidget(splitter)
+        self.setLayout(vbox)
+
+        # 加载数据
+        self.populate_tree()
+
+    def populate_tree(self) -> None:
+        """填充树"""
+        self.tree_widget.clear()
+
+        # 添加本地工具
+        local_tools: dict[str, ToolSchema] = self._engine._local_tools
+        if local_tools:
+            local_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                self.tree_widget,
+                ["本地工具"]
+            )
+
+            for schema in local_tools.values():
+                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(local_root, [schema.name])
+                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
+
+            self.tree_widget.expandItem(local_root)
+
+        # 添加MCP工具
+        mcp_tools: dict[str, ToolSchema] = self._engine._mcp_tools
+        if mcp_tools:
+            mcp_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                self.tree_widget,
+                ["MCP工具"]
+            )
+
+            for schema in mcp_tools.values():
+                item = QtWidgets.QTreeWidgetItem(mcp_root, [schema.name])
+                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
+
+            self.tree_widget.expandItem(mcp_root)
+
+    def on_item_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int) -> None:
+        """处理项目点击事件"""
+        schema: ToolSchema | None = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+
+        if schema:
+            text: str = (
+                f"[名称]\n{schema.name}\n\n"
+                f"[描述]\n{schema.description}\n\n"
+                f"[参数]\n{json.dumps(schema.parameters, indent=4, ensure_ascii=False)}"
+            )
+            self.detail_widget.setText(text)

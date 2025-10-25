@@ -4,11 +4,12 @@ from uuid import uuid4
 import json
 
 from ..gateway import BaseGateway
+from ..engine import AgentEngine
 from ..utility import AGENT_DIR, save_json, load_json
 from ..object import Request, Message, Session
 from ..constant import Role
 from .. import __version__
-from .widget import HistoryWidget
+from .widget import HistoryWidget, ToolsDialog
 from .worker import StreamWorker
 from .qt import QtWidgets, QtGui, QtCore
 
@@ -22,16 +23,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     setting_filename: str = "chat_setting.json"
 
-    def __init__(self, gateway: BaseGateway) -> None:
+    def __init__(self, engine: AgentEngine) -> None:
         """构造函数"""
         super().__init__()
 
-        self.gateway: BaseGateway = gateway
+        self.engine: AgentEngine = engine
 
         self.setting: dict[str, Any] = {}
         self.sessions: dict[str, Session] = {}
         self.current_id: str = ""
-        self.models: list[str] = self.gateway.list_models()
+        self.models: list[str] = self.engine.list_models()
 
         self.init_ui()
         self.load_setting()
@@ -114,9 +115,18 @@ class MainWindow(QtWidgets.QMainWindow):
         sys_menu: QtWidgets.QMenu = menu_bar.addMenu("系统")
         sys_menu.addAction("退出", self.close)
 
+        function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
+        function_menu.addAction("新建会话", self.new_session)
+        function_menu.addAction("查看工具", self.show_tools)
+
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
         help_menu.addAction("关于", self.show_about)
+
+    def show_tools(self) -> None:
+        """显示工具"""
+        dialog: ToolsDialog = ToolsDialog(self.engine, self)
+        dialog.exec()
 
     def save_setting(self) -> None:
         """保存设置"""
@@ -166,7 +176,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         # 设置并启动Worker
-        worker: StreamWorker = StreamWorker(self.gateway, request)
+        worker: StreamWorker = StreamWorker(self.engine, request)
         worker.signals.delta.connect(self.on_stream_delta)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)

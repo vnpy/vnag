@@ -33,6 +33,8 @@ class McpManager:
 
             self.thread = Thread(target=self._run_loop, daemon=True)
             self.thread.start()
+        else:
+            self.started_event.set()
 
     def _run_loop(self) -> None:
         """在后台线程中运行事件循环"""

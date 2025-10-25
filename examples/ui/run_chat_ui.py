@@ -2,6 +2,7 @@ from vnag.utility import load_json
 from vnag.gateways.openai_gateway import OpenaiGateway
 from vnag.ui.window import MainWindow
 from vnag.ui.qt import create_qapp, QtWidgets
+from vnag.engine import AgentEngine
 
 
 def main() -> None:
@@ -13,7 +14,10 @@ def main() -> None:
     gateway: OpenaiGateway = OpenaiGateway()
     gateway.init(setting)
 
-    window: MainWindow = MainWindow(gateway)
+    engine: AgentEngine = AgentEngine(gateway)
+    engine.init()
+
+    window: MainWindow = MainWindow(engine)
     window.showMaximized()
 
     qapp.exec()

@@ -42,6 +42,10 @@ class AgentEngine:
         mcp_schemas: list[ToolSchema] = list(self._mcp_tools.values())
         return local_schemas + mcp_schemas
 
+    def list_models(self) -> list[str]:
+        """查询可用模型列表"""
+        return self.gateway.list_models()
+
     def _prepare_request(
         self,
         messages: list[Message],
