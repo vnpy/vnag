@@ -22,7 +22,9 @@ def main() -> None:
 
     # 列出支持模型
     model_names: list[str] = gateway.list_models()
-    print(model_names)
+    model_names.sort()
+    for name in model_names:
+        print(name)
 
     # 创建请求对象
     request: Request = Request(
@@ -41,7 +43,7 @@ def main() -> None:
     print(response.usage)
 
     # 定义工具
-    get_weather_schema = ToolSchema(
+    get_weather_schema: ToolSchema = ToolSchema(
         name="get_current_weather",
         description="获取指定地点的当前天气情况",
         parameters={
@@ -58,14 +60,14 @@ def main() -> None:
     )
 
     # 创建工具调用请求
-    tool_request = Request(
+    tool_request: Request = Request(
         model="gpt-4o",
         messages=[Message(role=Role.USER, content="上海今天天气如何?")],
         tools_schemas=[get_weather_schema],
     )
 
     # 调用接口
-    tool_response = gateway.invoke(tool_request)
+    tool_response: Response = gateway.invoke(tool_request)
 
     # 打印工具调用结果
     if tool_response.message and tool_response.message.tool_calls:
