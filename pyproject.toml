@@ -19,17 +19,27 @@ classifiers = [
     "Natural Language :: Chinese (Simplified)",
 ]
 dependencies = [
-    "PySide6",
-    "openai",
-    "markdown-it-py",
+    # 核心框架
     "pydantic",
-    "libclang",
-    "chromadb",
-    "numpy",
+    # AI服务
+    "openai",
+    "anthropic",
+    "dashscope",
+    # UI界面
+    "markdown-it-py",
+    "PySide6",
+    "PySide6-Addons",
+    "QDarkStyle",
+    # 分段器
     "sentence-transformers",
     "pypdf",
-    "QDarkStyle",
-    "PySide6-WebEngine"
+    "libclang",
+    # 向量数据库
+    "chromadb",
+    "numpy",
+    # 工具调用
+    "fastmcp",
+    "requests"
 ]
 requires-python = ">=3.10"
 keywords = ["ai", "agent"]
