@@ -48,8 +48,9 @@ class ChromaVector(BaseVector):
             texts, show_progress_bar=False
         )
 
+        # 使用source（绝对路径）和chunk_index组合生成唯一ID
         ids: list[str] = [
-            f"{seg.metadata['filename']}_{seg.metadata['chunk_index']}"
+            f"{seg.metadata['source']}_{seg.metadata['chunk_index']}"
             for seg in segments
         ]
 
@@ -57,7 +58,7 @@ class ChromaVector(BaseVector):
         db_batch_size: int = 3000
         for i in range(0, len(ids), db_batch_size):
             j = i + db_batch_size
-            self.collection.add(
+            self.collection.upsert(
                 embeddings=embeddings_np[i:j],
                 documents=texts[i:j],
                 metadatas=metadatas[i:j],
