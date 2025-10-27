@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.object import Message, Request, Role, Segment
 from vnag.utility import load_json
 from vnag.gateways.openai_gateway import OpenaiGateway
@@ -35,9 +36,11 @@ def import_knowledge(vector: ChromaVector) -> None:
             text: str = f.read()
 
         # 解析文件内容
+        file_type: str = h_file.suffix.lower().lstrip(".")
         metadata: dict = {
-            "source": str(h_file.name),
             "filename": str(h_file.name),
+            "source": str(h_file.resolve()),
+            "file_type": file_type
         }
         segments: list[Segment] = segmenter.parse(text, metadata)
 
@@ -135,7 +138,8 @@ def main() -> None:
     """
     # 1. 初始化向量数据库
     # ChromaVector 默认会在当前工作目录下创建并使用 chroma 文件夹进行数据持久化
-    vector: ChromaVector = ChromaVector(name="ctp")
+    embedder: SentenceEmbedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
+    vector: ChromaVector = ChromaVector(name="ctp", embedder=embedder)
 
     print(f"向量数据库初始化完成，当前知识总数：{vector.count}")
 

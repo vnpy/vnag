@@ -9,23 +9,24 @@ from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.api.types import GetResult, QueryResult
 from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
 
 from vnag.object import Segment
 from vnag.utility import get_folder_path
 from vnag.vector import BaseVector
+from vnag.embedder import BaseEmbedder
 
 
 class ChromaVector(BaseVector):
     """基于 ChromaDB 实现的向量存储。"""
 
-    def __init__(self, name: str = "default") -> None:
+    def __init__(
+        self,
+        name: str,
+        embedder: BaseEmbedder
+    ) -> None:
         """初始化 ChromaDB 向量存储。"""
         self.persist_dir: Path = get_folder_path("chroma_db").joinpath(name)
-
-        self.embedding_model: SentenceTransformer = SentenceTransformer(
-            "BAAI/bge-large-zh-v1.5"
-        )
+        self.embedder: BaseEmbedder = embedder
 
         self.client: ClientAPI = chromadb.PersistentClient(
             path=str(self.persist_dir),
@@ -44,12 +45,13 @@ class ChromaVector(BaseVector):
         texts: list[str] = [seg.text for seg in segments]
         metadatas: list[Mapping[str, Any]] = [seg.metadata for seg in segments]
 
-        embeddings_np: NDArray[np.float32] = self.embedding_model.encode(
-            texts, show_progress_bar=False
+        embeddings_np: NDArray[np.float32] = self.embedder.encode(
+            texts
         )
 
+        # 使用source（绝对路径）和chunk_index组合生成唯一ID
         ids: list[str] = [
-            f"{seg.metadata['filename']}_{seg.metadata['chunk_index']}"
+            f"{seg.metadata['source']}_{seg.metadata['chunk_index']}"
             for seg in segments
         ]
 
@@ -57,7 +59,7 @@ class ChromaVector(BaseVector):
         db_batch_size: int = 3000
         for i in range(0, len(ids), db_batch_size):
             j = i + db_batch_size
-            self.collection.add(
+            self.collection.upsert(
                 embeddings=embeddings_np[i:j],
                 documents=texts[i:j],
                 metadatas=metadatas[i:j],
@@ -71,7 +73,7 @@ class ChromaVector(BaseVector):
         if self.count == 0:
             return []
 
-        query_embedding_np: NDArray[np.float32] = self.embedding_model.encode(
+        query_embedding_np: NDArray[np.float32] = self.embedder.encode(
             [query_text]
         )
 
