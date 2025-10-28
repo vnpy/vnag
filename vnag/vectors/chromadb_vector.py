@@ -9,23 +9,24 @@ from chromadb.api import ClientAPI
 from chromadb.api.models.Collection import Collection
 from chromadb.api.types import GetResult, QueryResult
 from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
 
 from vnag.object import Segment
 from vnag.utility import get_folder_path
 from vnag.vector import BaseVector
+from vnag.embedding import BaseEmbedding
 
 
 class ChromaVector(BaseVector):
     """基于 ChromaDB 实现的向量存储。"""
 
-    def __init__(self, name: str = "default") -> None:
+    def __init__(
+        self,
+        name: str,
+        embedding_model: BaseEmbedding
+    ) -> None:
         """初始化 ChromaDB 向量存储。"""
         self.persist_dir: Path = get_folder_path("chroma_db").joinpath(name)
-
-        self.embedding_model: SentenceTransformer = SentenceTransformer(
-            "BAAI/bge-large-zh-v1.5"
-        )
+        self.embedding_model: BaseEmbedding = embedding_model
 
         self.client: ClientAPI = chromadb.PersistentClient(
             path=str(self.persist_dir),
@@ -45,7 +46,7 @@ class ChromaVector(BaseVector):
         metadatas: list[Mapping[str, Any]] = [seg.metadata for seg in segments]
 
         embeddings_np: NDArray[np.float32] = self.embedding_model.encode(
-            texts, show_progress_bar=False
+            texts
         )
 
         # 使用source（绝对路径）和chunk_index组合生成唯一ID
