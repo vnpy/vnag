@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from vnag.segmenters.python_segmenter import PythonSegmenter
 
 
@@ -5,10 +7,16 @@ def main() -> None:
     """运行简单的文本分段器"""
     segmenter = PythonSegmenter()
 
-    with open("./knowledge/backtesting.py", encoding="utf-8") as f:
+    filepath: Path = Path("../rag/knowledge/backtesting.py").resolve()
+    with open(filepath, encoding="utf-8") as f:
         text: str = f.read()
 
-    metadata = {"source": "backtesting.py"}
+    file_type: str = filepath.suffix.lower().lstrip(".")
+    metadata: dict[str, str] = {
+        "filename": filepath.name,
+        "source": str(filepath),
+        "file_type": file_type
+    }
 
     segments = segmenter.parse(text, metadata)
 

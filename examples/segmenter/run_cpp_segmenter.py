@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from vnag.segmenters.cpp_segmenter import CppSegmenter
 
 
@@ -5,11 +7,16 @@ def main() -> None:
     """运行简单的文本分段器"""
     segmenter = CppSegmenter()
 
-    src_path = r".\knowledge\include\ctp\ThostFtdcMdApi.h"
-    with open(src_path, encoding="gbk", errors="ignore") as f:
+    filepath: Path = Path("../rag/knowledge/include/ctp/ThostFtdcMdApi.h").resolve()
+    with open(filepath, encoding="gbk", errors="ignore") as f:
         text: str = f.read()
 
-    metadata = {"source": src_path}
+    file_type: str = filepath.suffix.lower().lstrip(".")
+    metadata: dict[str, str] = {
+        "filename": filepath.name,
+        "source": str(filepath),
+        "file_type": file_type
+    }
 
     segments = segmenter.parse(text, metadata)
 
