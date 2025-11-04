@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+from uuid import uuid5, NAMESPACE_DNS
 
 import numpy as np
 from numpy.typing import NDArray
@@ -28,7 +29,7 @@ class QdrantVector(BaseVector):
         self.persist_dir: Path = get_folder_path("qdrant_db")
         self.embedder: BaseEmbedder = embedder
         self.collection_name: str = name
-        self.dimension: int = 1536    # OpenAI text-embedding-3-small 默认维度
+        self.dimension: int = 1024    # OpenAI text-embedding-3-small 默认维度
 
         self.client: QdrantClient = QdrantClient(
             path=str(self.persist_dir)
@@ -60,23 +61,27 @@ class QdrantVector(BaseVector):
 
         embeddings_np: NDArray[np.float32] = self.embedder.encode(texts)
 
-        # 生成唯一ID
-        ids: list[str] = [
+        # 生成唯一ID（字符串形式，用于返回）
+        string_ids: list[str] = [
             f"{seg.metadata['source']}_{seg.metadata['chunk_index']}"
             for seg in segments
         ]
 
         # 构建 Qdrant Points
         points: list[PointStruct] = []
-        for segment_id, segment, embedding in zip(
-            ids, segments, embeddings_np, strict=True
+        for string_id, segment, embedding in zip(
+            string_ids, segments, embeddings_np, strict=True
         ):
-            # 构建 payload（包含文本和元数据）
+            # 将字符串ID转为UUID（Qdrant要求）
+            uuid_id: str = str(uuid5(NAMESPACE_DNS, string_id))
+
+            # 构建 payload（包含文本、元数据和原始字符串ID）
             payload: dict[str, Any] = segment.metadata.copy()
             payload["text"] = segment.text
+            payload["string_id"] = string_id
 
             point = PointStruct(
-                id=segment_id,
+                id=uuid_id,
                 vector=embedding.tolist(),
                 payload=payload
             )
@@ -90,7 +95,7 @@ class QdrantVector(BaseVector):
                 points=points[i:i + batch_size]
             )
 
-        return ids
+        return string_ids
 
     def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
         """根据查询文本，从 Qdrant 中检索相似的文档块。"""
@@ -141,9 +146,13 @@ class QdrantVector(BaseVector):
             return True
 
         try:
+            # 将字符串ID转为UUID
+            uuid_ids: list[str] = [
+                str(uuid5(NAMESPACE_DNS, sid)) for sid in segment_ids
+            ]
             self.client.delete(
                 collection_name=self.collection_name,
-                points_selector=segment_ids
+                points_selector=uuid_ids
             )
             return True
         except Exception:
@@ -154,9 +163,14 @@ class QdrantVector(BaseVector):
         if not segment_ids:
             return []
 
+        # 将字符串ID转为UUID
+        uuid_ids: list[str] = [
+            str(uuid5(NAMESPACE_DNS, sid)) for sid in segment_ids
+        ]
+
         points = self.client.retrieve(
             collection_name=self.collection_name,
-            ids=segment_ids
+            ids=uuid_ids
         )
 
         results: list[Segment] = []
