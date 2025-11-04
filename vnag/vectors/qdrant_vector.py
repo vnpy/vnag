@@ -29,7 +29,9 @@ class QdrantVector(BaseVector):
         self.persist_dir: Path = get_folder_path("qdrant_db")
         self.embedder: BaseEmbedder = embedder
         self.collection_name: str = name
-        self.dimension: int = 1024    # OpenAI text-embedding-3-small 默认维度
+
+        # 通过编码样本获取实际维度
+        self.dimension: int = embedder.encode(["qdrant"]).shape[1]
 
         self.client: QdrantClient = QdrantClient(
             path=str(self.persist_dir)
@@ -88,11 +90,11 @@ class QdrantVector(BaseVector):
             points.append(point)
 
         # 分批插入，避免单批数据过大导致超时
-        batch_size: int = 1000
-        for i in range(0, len(points), batch_size):
+        db_batch_size: int = 1000
+        for i in range(0, len(points), db_batch_size):
             self.client.upsert(
                 collection_name=self.collection_name,
-                points=points[i:i + batch_size]
+                points=points[i:i + db_batch_size]
             )
 
         return string_ids
@@ -123,7 +125,7 @@ class QdrantVector(BaseVector):
             text: str = payload.pop("text", "")
 
             # 转换 payload 为 metadata
-            metadata: dict[str, str] = {
+            safe_meta: dict[str, str] = {
                 str(key): str(value) for key, value in payload.items()
             }
 
@@ -133,7 +135,7 @@ class QdrantVector(BaseVector):
             distance: float = 1.0 - point.score
             segment: Segment = Segment(
                 text=text,
-                metadata=metadata,
+                metadata=safe_meta,
                 score=distance
             )
             retrieved_results.append(segment)
@@ -181,11 +183,11 @@ class QdrantVector(BaseVector):
                 payload = {}
             text: str = payload.pop("text", "")
 
-            metadata: dict[str, str] = {
+            safe_meta: dict[str, str] = {
                 str(key): str(value) for key, value in payload.items()
             }
 
-            segment: Segment = Segment(text=text, metadata=metadata)
+            segment: Segment = Segment(text=text, metadata=safe_meta)
             results.append(segment)
 
         return results
