@@ -1,6 +1,5 @@
 import traceback
 
-from ..gateway import BaseGateway
 from ..engine import AgentEngine
 from ..object import Request
 from .qt import QtCore

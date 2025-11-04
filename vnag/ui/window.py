@@ -3,7 +3,6 @@ from pathlib import Path
 from uuid import uuid4
 import json
 
-from ..gateway import BaseGateway
 from ..engine import AgentEngine
 from ..utility import AGENT_DIR, save_json, load_json
 from ..object import Request, Message, Session

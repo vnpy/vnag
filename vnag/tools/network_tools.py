@@ -5,7 +5,7 @@ import socket
 import subprocess
 import uuid
 
-import requests  # type: ignore
+import requests
 
 from vnag.local import LocalTool
 

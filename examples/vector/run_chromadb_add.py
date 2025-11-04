@@ -33,7 +33,7 @@ def main() -> None:
     # from vnag.embedders.dashscope_embedder import DashscopeEmbedder
     # embedder = DashscopeEmbedder(api_key="your_api_key", model_name="text-embedder-v3")
     # vector = ChromaVector(name="dashscope", embedder=embedder)
-   
+
     vector.add_segments(segments)
 
     print(f"写入完成，向量库中共有 {vector.count} 个块")

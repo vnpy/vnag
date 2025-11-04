@@ -36,6 +36,7 @@ dependencies = [
     "libclang",
     # 向量数据库
     "chromadb",
+    "qdrant-client",
     "numpy",
     # 工具调用
     "fastmcp",
