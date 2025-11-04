@@ -1,0 +1,184 @@
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    VectorParams,
+    PointStruct
+)
+
+from vnag.object import Segment
+from vnag.utility import get_folder_path
+from vnag.vector import BaseVector
+from vnag.embedder import BaseEmbedder
+
+
+class QdrantVector(BaseVector):
+    """基于 Qdrant 实现的向量存储。"""
+
+    def __init__(
+        self,
+        name: str,
+        embedder: BaseEmbedder
+    ) -> None:
+        """初始化 Qdrant 向量存储。"""
+        self.persist_dir: Path = get_folder_path("qdrant_db")
+        self.embedder: BaseEmbedder = embedder
+        self.collection_name: str = name
+        self.dimension: int = 1536    # OpenAI text-embedding-3-small 默认维度
+
+        self.client: QdrantClient = QdrantClient(
+            path=str(self.persist_dir)
+        )
+
+        # 创建或获取集合
+        self._init_collection()
+
+    def _init_collection(self) -> None:
+        """初始化或获取集合。"""
+        collections = self.client.get_collections().collections
+        collection_names = [col.name for col in collections]
+
+        if self.collection_name not in collection_names:
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(
+                    size=self.dimension,
+                    distance=Distance.COSINE
+                )
+            )
+
+    def add_segments(self, segments: list[Segment]) -> list[str]:
+        """将一批文档块添加到 Qdrant 中。"""
+        if not segments:
+            return []
+
+        texts: list[str] = [seg.text for seg in segments]
+
+        embeddings_np: NDArray[np.float32] = self.embedder.encode(texts)
+
+        # 生成唯一ID
+        ids: list[str] = [
+            f"{seg.metadata['source']}_{seg.metadata['chunk_index']}"
+            for seg in segments
+        ]
+
+        # 构建 Qdrant Points
+        points: list[PointStruct] = []
+        for segment_id, segment, embedding in zip(
+            ids, segments, embeddings_np, strict=True
+        ):
+            # 构建 payload（包含文本和元数据）
+            payload: dict[str, Any] = segment.metadata.copy()
+            payload["text"] = segment.text
+
+            point = PointStruct(
+                id=segment_id,
+                vector=embedding.tolist(),
+                payload=payload
+            )
+            points.append(point)
+
+        # 分批插入，避免单批数据过大导致超时
+        batch_size: int = 1000
+        for i in range(0, len(points), batch_size):
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=points[i:i + batch_size]
+            )
+
+        return ids
+
+    def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
+        """根据查询文本，从 Qdrant 中检索相似的文档块。"""
+        if self.count == 0:
+            return []
+
+        query_embedding_np: NDArray[np.float32] = self.embedder.encode(
+            [query_text]
+        )
+
+        # 执行搜索
+        search_result = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=query_embedding_np[0].tolist(),
+            limit=k
+        )
+
+        # 构建返回结果
+        retrieved_results: list[Segment] = []
+        for point in search_result:
+            if point.payload:
+                payload: dict[str, Any] = point.payload
+            else:
+                payload = {}
+            text: str = payload.pop("text", "")
+
+            # 转换 payload 为 metadata
+            metadata: dict[str, str] = {
+                str(key): str(value) for key, value in payload.items()
+            }
+
+            # Qdrant 返回 score（余弦相似度，越大越相似）
+            # ChromaDB 返回 distance（余弦距离，越小越相似）
+            # 为保持一致，将 Qdrant score 转为 distance
+            distance: float = 1.0 - point.score
+            segment: Segment = Segment(
+                text=text,
+                metadata=metadata,
+                score=distance
+            )
+            retrieved_results.append(segment)
+
+        return retrieved_results
+
+    def delete_segments(self, segment_ids: list[str]) -> bool:
+        """根据ID列表，从 Qdrant 中删除一个或多个文档。"""
+        if not segment_ids:
+            return True
+
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=segment_ids
+            )
+            return True
+        except Exception:
+            return False
+
+    def get_segments(self, segment_ids: list[str]) -> list[Segment]:
+        """根据ID列表，从 Qdrant 中直接获取原始的文档块。"""
+        if not segment_ids:
+            return []
+
+        points = self.client.retrieve(
+            collection_name=self.collection_name,
+            ids=segment_ids
+        )
+
+        results: list[Segment] = []
+        for point in points:
+            if point.payload:
+                payload: dict[str, Any] = point.payload
+            else:
+                payload = {}
+            text: str = payload.pop("text", "")
+
+            metadata: dict[str, str] = {
+                str(key): str(value) for key, value in payload.items()
+            }
+
+            segment: Segment = Segment(text=text, metadata=metadata)
+            results.append(segment)
+
+        return results
+
+    @property
+    def count(self) -> int:
+        """获取向量存储中的文档总数。"""
+        collection_info = self.client.get_collection(self.collection_name)
+        count: int = collection_info.points_count
+        return count
