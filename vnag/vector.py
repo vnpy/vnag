@@ -28,7 +28,7 @@ class BaseVector(ABC):
         pass
 
     @abstractmethod
-    def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
+    def retrieve(self, query_text: str, k: int = 5, filter: dict | None = None) -> list[Segment]:
         """
         根据给定的文本查询，执行相似性检索。
 
@@ -37,6 +37,7 @@ class BaseVector(ABC):
         Args:
             query_text (str): 用于搜索的自然语言查询字符串。
             k (int, optional): 希望返回的最相似结果的数量。默认为 5。
+            filter (dict | None, optional): 元数据过滤条件。默认为 None。
 
         Returns:
             list[Segment]: 检索结果的列表，按相关性排序。

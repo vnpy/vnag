@@ -68,7 +68,7 @@ class ChromaVector(BaseVector):
 
         return ids
 
-    def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
+    def retrieve(self, query_text: str, k: int = 5, filter: dict | None = None) -> list[Segment]:
         """根据查询文本，从 ChromaDB 中检索相似的文档块。"""
         if self.count == 0:
             return []
@@ -77,8 +77,22 @@ class ChromaVector(BaseVector):
             [query_text]
         )
 
+        where: dict[str, Any] | None = None
+        if filter:
+            conditions: list[dict[str, Any]] = []
+            for key, value in filter.items():
+                if isinstance(value, list):
+                    conditions.append({key: {"$in": value}})
+                else:
+                    conditions.append({key: value})
+
+            if len(conditions) == 1:
+                where = conditions[0]
+            elif len(conditions) > 1:
+                where = {"$and": conditions}
+
         results: QueryResult = self.collection.query(
-            query_embeddings=query_embedding_np, n_results=k
+            query_embeddings=query_embedding_np, n_results=k, where=where
         )
 
         documents: list[list[str]] | None = results.get("documents")

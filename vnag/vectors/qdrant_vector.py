@@ -9,7 +9,11 @@ from qdrant_client.models import (
     Distance,
     VectorParams,
     PointStruct,
-    CollectionDescription
+    CollectionDescription,
+    Filter,
+    FieldCondition,
+    MatchValue,
+    MatchAny
 )
 
 from vnag.object import Segment
@@ -103,7 +107,7 @@ class QdrantVector(BaseVector):
 
         return string_ids
 
-    def retrieve(self, query_text: str, k: int = 5) -> list[Segment]:
+    def retrieve(self, query_text: str, k: int = 5, filter: dict | None = None) -> list[Segment]:
         """根据查询文本，从 Qdrant 中检索相似的文档块。"""
         if self.count == 0:
             return []
@@ -112,11 +116,22 @@ class QdrantVector(BaseVector):
             [query_text]
         )
 
+        query_filter = None
+        if filter:
+            conditions: list[FieldCondition] = []
+            for key, value in filter.items():
+                if isinstance(value, list):
+                    conditions.append(FieldCondition(key=key, match=MatchAny(any=value)))
+                else:
+                    conditions.append(FieldCondition(key=key, match=MatchValue(value=value)))
+            query_filter: Filter = Filter(must=conditions)
+
         # 执行搜索
         search_result = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_embedding_np[0].tolist(),
-            limit=k
+            limit=k,
+            query_filter=query_filter
         )
 
         # 构建返回结果
