@@ -7,7 +7,6 @@ def main() -> None:
     """"""
     # 直接写入配置
     # setting: dict = {
-    #     "base_url": "https://openrouter.ai/api/v1",
     #     "api_key": "123456"
     # }
 

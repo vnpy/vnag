@@ -119,14 +119,20 @@ python examples/ui/run_chat_ui.py
 
 ### 向量库（Vector）
 
-- 功能：演示如何将文本数据向量化后存入 ChromaDB，并进行相似度搜索。
+- 功能：演示如何将文本数据向量化后存入向量数据库（ChromaDB 或 Qdrant），并进行相似度搜索。
 - 示例：
   ```bash
-  # 添加数据到向量库
+  # 添加数据到 ChromaDB
   python examples/vector/run_chromadb_add.py
 
-  # 从向量库搜索数据
+  # 从 ChromaDB 搜索数据
   python examples/vector/run_chromadb_search.py
+
+  # 添加数据到 Qdrant
+  python examples/vector/run_qdrant_add.py
+
+  # 从 Qdrant 搜索数据
+  python examples/vector/run_qdrant_search.py
   ```
 
 ### RAG
@@ -230,12 +236,14 @@ vnag/
 │   ├── gateway.py             # 网关基类
 │   ├── segmenter.py           # 分段器基类
 │   ├── vector.py              # 向量库基类
+│   ├── embedder.py            # 嵌入模型基类
 │   ├── local.py               # 本地工具管理器
 │   ├── mcp.py                 # MCP远程工具管理器
 │   ├── engine.py              # Agent引擎
 │   ├── gateways/              # 网关实现（OpenAI/Anthropic/Dashscope）
-│   ├── segmenters/            # 分段器实现（Markdown/Python/C++）
-│   ├── vectors/               # 向量库实现（ChromaDB）
+│   ├── segmenters/            # 分段器实现（Markdown/Python/C++/Simple）
+│   ├── vectors/               # 向量库实现（ChromaDB/Qdrant）
+│   ├── embedders/             # 嵌入模型实现（Dashscope/SentenceTransformer）
 │   ├── tools/                 # 本地工具实现示例
 │   └── ui/                    # GUI界面实现
 ├── examples/                  # 功能示例脚本集合
@@ -249,7 +257,8 @@ vnag/
 - **`engine.py`**: Agent 引擎，负责对话管理、工具调用编排和与大模型交互。
 - **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope 等多种实现。
 - **`segmenter.py` & `segmenters/`**: 用于将文档（如 Markdown、Python、C++ 源码）解析为结构化数据段，是 RAG 的基础。
-- **`vector.py` & `vectors/`**: 向量数据库的统一接口和实现（当前为 ChromaDB），用于存储和检索知识片段。
+- **`vector.py` & `vectors/`**: 向量数据库的统一接口和实现（支持 ChromaDB 和 Qdrant），用于存储和检索知识片段。
+- **`embedder.py` & `embedders/`**: 文本嵌入模型的统一接口和实现（支持 Dashscope API 和本地 SentenceTransformer），用于将文本转换为向量。
 - **`local.py`**: 本地工具管理器，可以自动加载和执行本地 Python 函数作为工具。
 - **`mcp.py`**: MCP（元计算平台）工具管理器，用于连接 `fastmcp` 服务，实现在远端执行更复杂的工具。
 - **`tools/`**: 提供一系列开箱即用的本地工具，详情请见下方“内置本地工具”章节。
