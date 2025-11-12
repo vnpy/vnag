@@ -6,6 +6,7 @@ from .object import Message, Request, Delta, Response, Usage, ToolCall, ToolResu
 from .constant import Role, FinishReason
 from .mcp import McpManager
 from .local import LocalManager
+from .tracer import LogTracer
 
 
 class AgentEngine:
@@ -14,6 +15,8 @@ class AgentEngine:
     def __init__(self, gateway: BaseGateway) -> None:
         """构造函数"""
         self.gateway: BaseGateway = gateway
+
+        self._tracer: LogTracer = LogTracer()
 
         self._local_manager: LocalManager = LocalManager()
         self._mcp_manager: McpManager = McpManager()
@@ -126,6 +129,8 @@ class AgentEngine:
                 max_tokens=max_tokens
             )
 
+            self._tracer.on_llm_start(request)
+
             # 本轮循环中的数据缓存
             collected_content: str = ""                     # 累积收到的文本内容
             collected_tool_calls: list[ToolCall] = []       # 累积收到的工具调用请求
@@ -149,6 +154,8 @@ class AgentEngine:
                 if delta.finish_reason:
                     finish_reason = delta.finish_reason
 
+                self._tracer.on_llm_delta(delta)
+
                 # 将原始的 Delta 对象直接转发给调用者，实现实时流式效果
                 yield delta
 
@@ -168,6 +175,8 @@ class AgentEngine:
                 )
                 working_messages.append(assistant_msg)
 
+                self._tracer.on_llm_end(assistant_msg)
+
                 # 批量执行所有工具调用
                 tool_results: list[ToolResult] = []
 
@@ -175,12 +184,16 @@ class AgentEngine:
                     # 在执行前，先通过 yield 发送一个通知，告诉上层应用“正在执行哪个工具”
                     yield Delta(
                         id=response_id or str(uuid4()),
-                        content=f"\n[执行工具: {tool_call.name}]\n"
+                        content=f"\n\n[执行工具: {tool_call.name}]\n\n"
                     )
+
+                    self._tracer.on_tool_start(tool_call)
 
                     # 执行单个工具调用，并记录结果
                     result: ToolResult = self._execute_tool(tool_call)
                     tool_results.append(result)
+
+                    self._tracer.on_tool_end(result)
 
                 # 将所有工具的执行结果打包成一个消息，也添加到工作列表中
                 user_message: Message = Message(
