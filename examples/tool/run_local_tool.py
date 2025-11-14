@@ -1,21 +1,8 @@
 from vnag.local import LocalManager
 
 
-def run() -> None:
-    """运行函数"""
-    # 初始化本地工具管理器
-    manager = LocalManager()
-
-    # 获取并打印所有本地工具的Schema
-    tools = manager.list_tools()
-    print("列出所有本地工具：")
-    for tool in tools:
-        print(tool.model_dump())
-
-    # 执行工具并打印结果
-    print("\n" + "=" * 30 + "\n")
-    print("执行本地工具：")
-
+def run_datetime_tools(manager: LocalManager) -> None:
+    """测试 datetime_tools"""
     # datetime_tools
     print("-" * 30)
     date = manager.execute_tool("get_current_date", {})
@@ -33,6 +20,9 @@ def run() -> None:
     day = manager.execute_tool("get_day_of_week", {})
     print(f"get_day_of_week: {day}")
 
+
+def run_file_tools(manager: LocalManager) -> None:
+    """测试 file_tools"""
     # file_tools
     print("-" * 30)
     result = manager.execute_tool("list_directory", {"path": "."})
@@ -72,6 +62,9 @@ def run() -> None:
     result = manager.execute_tool("delete_file", {"path": "test.txt"})
     print(f"delete_file: {result}\n")
 
+
+def run_network_tools(manager: LocalManager) -> None:
+    """测试 network_tools"""
     # network_tools
     print("-" * 30)
     result = manager.execute_tool("get_local_ip", {})
@@ -93,6 +86,9 @@ def run() -> None:
     result = manager.execute_tool("get_public_ip", {})
     print(f"get_public_ip: {result}")
 
+
+def run_web_tools(manager: LocalManager) -> None:
+    """测试 web_tools"""
     # web_tools
     print("-" * 30)
     result = manager.execute_tool("fetch_html", {"url": "http://www.vnpy.com"})
@@ -110,5 +106,47 @@ def run() -> None:
     print(f"check_link: {result}\n")
 
 
+def run_code_tools(manager: LocalManager) -> None:
+    """测试 code_tools"""
+    # code_tools
+    print("-" * 30)
+    result = manager.execute_tool("execute_code", {"code": 'print("Hello VNAG!")'})
+    print(f"execute_code: {result}\n")
+
+    print("-" * 30)
+    test_code_path = "test_vnag.py"
+    test_code_content = 'print("Hello from VNAG file!")'
+    result = manager.execute_tool(
+        "write_file",
+        {"path": test_code_path, "content": test_code_content}
+    )
+    print(f"write_file: {result}\n")
+
+    print("-" * 30)
+    result = manager.execute_tool("execute_file", {"path": test_code_path})
+    print(f"execute_file: {result}\n")
+
+    print("-" * 30)
+    result = manager.execute_tool("delete_file", {"path": test_code_path})
+    print(f"delete_file: {result}\n")
+
+
 if __name__ == "__main__":
-    run()
+    # 初始化本地工具管理器
+    manager = LocalManager()
+
+    # 获取并打印所有本地工具的Schema
+    tools = manager.list_tools()
+    print("列出所有本地工具：")
+    for tool in tools:
+        print(tool.model_dump())
+
+    # 执行工具并打印结果
+    print("\n" + "=" * 30 + "\n")
+    print("执行本地工具：")
+
+    run_datetime_tools(manager)
+    run_file_tools(manager)
+    run_network_tools(manager)
+    run_web_tools(manager)
+    run_code_tools(manager)
