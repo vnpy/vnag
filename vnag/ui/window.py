@@ -70,15 +70,30 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.input_widget.setMaximumHeight(desktop.height() // 4)
-        self.input_widget.setPlaceholderText("在这里输入消息，点击下方按钮发送")
+        self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
         self.input_widget.installEventFilter(self)
 
         self.history_widget: HistoryWidget = HistoryWidget()
 
-        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送请求")
+        button_width: int = 80
+        button_height: int = 50
+
+        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送")
         self.send_button.clicked.connect(self.send_message)
-        self.send_button.setFixedWidth(300)
-        self.send_button.setFixedHeight(50)
+        self.send_button.setFixedWidth(button_width)
+        self.send_button.setFixedHeight(button_height)
+
+        self.resend_button: QtWidgets.QPushButton = QtWidgets.QPushButton("重发")
+        self.resend_button.clicked.connect(self.resend_round)
+        self.resend_button.setFixedWidth(button_width)
+        self.resend_button.setFixedHeight(button_height)
+        self.resend_button.setEnabled(False)
+
+        self.delete_button: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
+        self.delete_button.clicked.connect(self.delete_round)
+        self.delete_button.setFixedWidth(button_width)
+        self.delete_button.setFixedHeight(button_height)
+        self.delete_button.setEnabled(False)
 
         completer: QtWidgets.QCompleter = QtWidgets.QCompleter(self.models)
         completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
@@ -92,6 +107,8 @@ class MainWindow(QtWidgets.QMainWindow):
         hbox3 = QtWidgets.QHBoxLayout()
         hbox3.addStretch()
         hbox3.addWidget(self.model_line)
+        hbox3.addWidget(self.delete_button)
+        hbox3.addWidget(self.resend_button)
         hbox3.addWidget(self.send_button)
 
         right_vbox = QtWidgets.QVBoxLayout()
@@ -167,6 +184,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.history_widget.start_stream()
 
         self.send_button.setEnabled(False)
+        self.resend_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
         self.status_label.setText("正在等待AI服务返回数据...")
 
         request: Request = Request(
@@ -230,6 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
             session.messages.append(message)
 
         self.save_current()
+        self.update_buttons()
 
     def on_stream_error(self, error_msg: str) -> None:
         """
@@ -238,6 +258,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.send_button.setEnabled(True)
         self.status_label.setText("发生错误")
         QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+        self.update_buttons()
 
     def save_current(self) -> None:
         """保存当前会话"""
@@ -304,6 +325,8 @@ class MainWindow(QtWidgets.QMainWindow):
         for message in session.messages:
             self.history_widget.append_message(message.role, message.content)
 
+        self.update_buttons()
+
     def new_session(self) -> None:
         """创建新会话"""
         session: Session = Session(
@@ -323,6 +346,51 @@ class MainWindow(QtWidgets.QMainWindow):
         session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
         self.current_id = session_id
         self.display_session()
+
+    def delete_round(self) -> None:
+        """删除最后一轮对话"""
+        session: Session = self.sessions[self.current_id]
+
+        # 按钮状态已经保证了此时最后一条消息是AI
+        if not session.messages or session.messages[-1].role != Role.ASSISTANT:
+            return
+
+        # 删除AI和用户消息
+        session.messages.pop()
+        session.messages.pop()
+
+        self.display_session()
+        self.save_current()
+
+    def resend_round(self) -> None:
+        """重新发送最后一轮对话"""
+        session: Session = self.sessions[self.current_id]
+
+        # 按钮状态已经保证了此时最后一条消息是AI
+        if not session.messages or session.messages[-1].role != Role.ASSISTANT:
+            return
+
+        # 复制用户问题
+        user_message: Message = session.messages[-2]
+        self.input_widget.setText(user_message.content)
+
+        # 删除AI和用户消息
+        session.messages.pop()
+        session.messages.pop()
+
+        self.display_session()
+        self.save_current()
+
+    def update_buttons(self) -> None:
+        """更新功能按钮状态"""
+        session: Session = self.sessions[self.current_id]
+
+        if session.messages and session.messages[-1].role == Role.ASSISTANT:
+            self.resend_button.setEnabled(True)
+            self.delete_button.setEnabled(True)
+        else:
+            self.resend_button.setEnabled(False)
+            self.delete_button.setEnabled(False)
 
     def show_menu(self, pos: QtCore.QPoint) -> None:
         """显示会话的右键菜单"""
