@@ -1,0 +1,7 @@
+{
+    "read_allowed": [
+    ],
+    "write_allowed": [
+        "."
+    ]
+}

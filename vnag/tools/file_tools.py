@@ -1,7 +1,10 @@
 """
 常用的文件系统函数工具
 """
+import traceback
 from pathlib import Path
+
+import chardet
 
 from vnag.utility import load_json, save_json
 from vnag.local import LocalTool
@@ -29,6 +32,21 @@ WRITE_ALLOWED_PATHS: set[Path] = {Path(p).resolve() for p in setting["write_allo
 # 读取权限路径包含 "read_allowed" 和 "write_allowed" 中的所有路径
 # 这样，用户只需将路径配置在 "write_allowed" 中，即可同时获得读写权限
 ALL_READ_PATHS: set[Path] = {Path(p).resolve() for p in setting["read_allowed"]}.union(WRITE_ALLOWED_PATHS)
+
+
+def _get_encoding(path: Path) -> str:
+    """
+    使用 chardet 检测文件编码。
+    如果文件不存在或为空，则默认为 utf-8。
+    """
+    if not path.is_file() or path.stat().st_size == 0:
+        return "utf-8"
+
+    with open(path, "rb") as f:
+        raw_data: bytes = f.read()
+        result: chardet.ResultDict = chardet.detect(raw_data)
+        encoding: str | None = result.get("encoding")
+        return encoding if encoding else "utf-8"
 
 
 def _is_path_allowed(path_to_check: Path, allowed_paths: set[Path]) -> bool:
@@ -96,10 +114,11 @@ def read_file(path: str) -> str:
         if not abs_path.is_file():
             return f"错误：路径 '{path}' 不是一个有效的文件。"
 
-        with open(abs_path, encoding="utf-8") as f:
+        encoding: str = _get_encoding(abs_path)
+        with open(abs_path, encoding=encoding) as f:
             return f.read()
-    except Exception as e:
-        return f"读取文件时发生未知错误: {e}"
+    except Exception:
+        return f"读取文件时发生未知错误: {traceback.format_exc()}"
 
 
 def write_file(path: str, content: str) -> str:
@@ -115,11 +134,106 @@ def write_file(path: str, content: str) -> str:
         abs_path: Path = target_path.resolve()
         abs_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(abs_path, "w", encoding="utf-8") as f:
+        encoding: str = _get_encoding(abs_path)
+        with open(abs_path, "w", encoding=encoding) as f:
             f.write(content)
         return f"成功将内容写入到文件 '{path}'。"
-    except Exception as e:
-        return f"写入文件时发生未知错误: {e}"
+    except Exception:
+        return f"写入文件时发生未知错误: {traceback.format_exc()}"
+
+
+def delete_file(path: str) -> str:
+    """
+    删除指定路径的文件。
+    必须拥有该路径的写权限。
+    """
+    try:
+        target_path: Path = Path(path)
+        if not _check_write_allowed(target_path):
+            return f"错误：没有权限访问路径 '{path}'。"
+
+        abs_path: Path = target_path.resolve()
+        if not abs_path.is_file():
+            return f"错误：路径 '{path}' 不是一个有效的文件。"
+
+        abs_path.unlink()
+        return f"成功删除文件 '{path}'。"
+    except Exception:
+        return f"删除文件时发生未知错误: {traceback.format_exc()}"
+
+
+def glob_files(path: str, pattern: str) -> str:
+    """
+    根据给定的模式和路径，匹配符合条件的文件。
+    必须拥有该路径的读权限。
+    """
+    try:
+        target_path: Path = Path(path)
+        if not _check_read_allowed(target_path):
+            return f"错误：没有权限访问路径 '{path}'。"
+
+        abs_path: Path = target_path.resolve()
+        files: list[Path] = list(abs_path.glob(pattern))
+
+        return f"符合模式 '{pattern}' 的文件:\n" + "\n".join([str(file.resolve()) for file in files])
+    except Exception:
+        return f"匹配文件时发生未知错误: {traceback.format_exc()}"
+
+
+def search_content(path: str, content: str) -> str:
+    """
+    在指定路径下搜索包含指定内容的文件。
+    必须拥有该路径的读权限。
+    """
+    try:
+        target_path: Path = Path(path)
+        if not _check_read_allowed(target_path):
+            return f"错误：没有权限访问路径 '{path}'。"
+
+        abs_path: Path = target_path.resolve()
+        all_files: list[Path] = list(abs_path.rglob("**/*"))
+
+        files: list[Path] = []
+        for file in all_files:
+            if file.is_file():
+                encoding: str = _get_encoding(file)
+                try:
+                    if content in file.read_text(encoding=encoding):
+                        files.append(file)
+                except Exception:
+                    print(f"搜索时读取文件内容失败：{file}")
+
+        return f"包含内容 '{content}' 的文件:\n" + "\n".join([str(file.resolve()) for file in files])
+    except Exception:
+        return f"搜索内容时发生未知错误: {traceback.format_exc()}"
+
+
+def replace_content(path: str, old_content: str, new_content: str) -> str:
+    """
+    替换指定文件中的内容。
+    必须拥有该文件所在目录的写权限。
+    """
+    try:
+        target_path: Path = Path(path)
+        if not _check_write_allowed(target_path):
+            return f"错误：没有权限访问路径 '{path}'。"
+
+        abs_path: Path = target_path.resolve()
+        if not abs_path.is_file():
+            return f"错误：路径 '{path}' 不是一个有效的文件。"
+
+        encoding: str = _get_encoding(abs_path)
+        with open(abs_path, encoding=encoding) as f:
+            content = f.read()
+
+        content = content.replace(old_content, new_content)
+
+        with open(abs_path, "w", encoding=encoding) as f:
+            f.write(content)
+
+        return f"成功替换文件 '{path}' 中的内容。"
+    except Exception:
+        return f"替换内容时发生未知错误: {traceback.format_exc()}"
 
 
 # 注册工具
@@ -128,3 +242,11 @@ list_directory_tool: LocalTool = LocalTool(list_directory)
 read_file_tool: LocalTool = LocalTool(read_file)
 
 write_file_tool: LocalTool = LocalTool(write_file)
+
+delete_file_tool: LocalTool = LocalTool(delete_file)
+
+glob_files_tool: LocalTool = LocalTool(glob_files)
+
+search_content_tool: LocalTool = LocalTool(search_content)
+
+replace_content_tool: LocalTool = LocalTool(replace_content)
