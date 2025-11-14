@@ -93,6 +93,22 @@ def run() -> None:
     result = manager.execute_tool("get_public_ip", {})
     print(f"get_public_ip: {result}")
 
+    # web_tools
+    print("-" * 30)
+    result = manager.execute_tool("fetch_html", {"url": "http://www.vnpy.com"})
+    print(f"fetch_html (first 100 chars): {str(result)[:100]}...\n")
+
+    print("-" * 30)
+    result = manager.execute_tool(
+        "fetch_json",
+        {"url": "https://api.vnpy.com/ip"}
+    )
+    print(f"fetch_json: {result}\n")
+
+    print("-" * 30)
+    result = manager.execute_tool("check_link", {"url": "http://www.vnpy.com"})
+    print(f"check_link: {result}\n")
+
 
 if __name__ == "__main__":
     run()
