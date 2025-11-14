@@ -71,6 +71,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.input_widget.setMaximumHeight(desktop.height() // 4)
         self.input_widget.setPlaceholderText("在这里输入消息，点击下方按钮发送")
+        self.input_widget.installEventFilter(self)
 
         self.history_widget: HistoryWidget = HistoryWidget()
 
@@ -181,6 +182,28 @@ class MainWindow(QtWidgets.QMainWindow):
         worker.signals.error.connect(self.on_stream_error)
 
         QtCore.QThreadPool.globalInstance().start(worker)
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """
+        事件过滤器
+
+        实现输入框中按下Enter发送，Shift+Enter换行
+        """
+        if obj is self.input_widget and event.type() == QtCore.QEvent.Type.KeyPress:
+            if (
+                # 按下的是Enter或Return键
+                event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
+                # 如果不是Shift+Enter
+                and not event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            ):
+                # 发送消息
+                self.send_message()
+
+                # 返回True，表示事件已经被处理
+                return True
+
+        # 默认处理
+        return super().eventFilter(obj, event)
 
     def append_message(self, role: Role, content: str) -> None:
         """在会话历史组件中添加消息"""
