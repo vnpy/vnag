@@ -1,15 +1,12 @@
-from typing import Any
 from pathlib import Path
 from uuid import uuid4
 import json
 
 from ..engine import AgentEngine
-from ..utility import AGENT_DIR, save_json, load_json
-from ..object import Request, Message, Session
-from ..constant import Role
+from ..utility import AGENT_DIR
+from ..object import Session
 from .. import __version__
-from .widget import HistoryWidget, ToolsDialog
-from .worker import StreamWorker
+from .widget import SessionWidget, ToolsDialog
 from .qt import QtWidgets, QtGui, QtCore
 
 
@@ -20,21 +17,18 @@ SESSION_DIR.mkdir(parents=True, exist_ok=True)
 class MainWindow(QtWidgets.QMainWindow):
     """主窗口"""
 
-    setting_filename: str = "chat_setting.json"
-
     def __init__(self, engine: AgentEngine) -> None:
         """构造函数"""
         super().__init__()
 
         self.engine: AgentEngine = engine
 
-        self.setting: dict[str, Any] = {}
         self.sessions: dict[str, Session] = {}
+        self.session_widgets: dict[str, SessionWidget] = {}
         self.current_id: str = ""
         self.models: list[str] = self.engine.list_models()
 
         self.init_ui()
-        self.load_setting()
         self.load_sessions()
 
     def init_ui(self) -> None:
@@ -56,70 +50,43 @@ class MainWindow(QtWidgets.QMainWindow):
         self.new_button.clicked.connect(self.new_session)
 
         self.session_list: QtWidgets.QListWidget = QtWidgets.QListWidget()
-        self.session_list.itemClicked.connect(self.switch_session)
+
+        # 设置自定义样式表
+        stylesheet: str = """
+            QListWidget::item {
+                padding-top: 10px;
+                padding-bottom: 10px;
+                padding-left: 10px;
+                border-radius: 12px;
+            }
+            QListWidget::item:hover {
+                background-color: rgba(42, 92, 142, 0.3);
+                color: white;
+            }
+            QListWidget::item:selected {
+                background-color: #4a90e2;
+                color: white;
+            }
+        """
+        self.session_list.setStyleSheet(stylesheet)
+
+        self.session_list.itemClicked.connect(self.on_item_clicked)
         self.session_list.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
-        self.session_list.customContextMenuRequested.connect(self.show_menu)
+        self.session_list.customContextMenuRequested.connect(self.on_menu_requested)
         self.session_list.setFixedWidth(300)
+        self.session_list.installEventFilter(self)
 
         left_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         left_vbox.addWidget(self.session_list)
         left_vbox.addWidget(self.new_button)
 
         # 右侧聊天相关
-        desktop: QtCore.QRect = QtWidgets.QApplication.primaryScreen().availableGeometry()
-
-        self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
-        self.input_widget.setMaximumHeight(desktop.height() // 4)
-        self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
-        self.input_widget.installEventFilter(self)
-
-        self.history_widget: HistoryWidget = HistoryWidget()
-
-        button_width: int = 80
-        button_height: int = 50
-
-        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送")
-        self.send_button.clicked.connect(self.send_message)
-        self.send_button.setFixedWidth(button_width)
-        self.send_button.setFixedHeight(button_height)
-
-        self.resend_button: QtWidgets.QPushButton = QtWidgets.QPushButton("重发")
-        self.resend_button.clicked.connect(self.resend_round)
-        self.resend_button.setFixedWidth(button_width)
-        self.resend_button.setFixedHeight(button_height)
-        self.resend_button.setEnabled(False)
-
-        self.delete_button: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
-        self.delete_button.clicked.connect(self.delete_round)
-        self.delete_button.setFixedWidth(button_width)
-        self.delete_button.setFixedHeight(button_height)
-        self.delete_button.setEnabled(False)
-
-        completer: QtWidgets.QCompleter = QtWidgets.QCompleter(self.models)
-        completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
-
-        self.model_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
-        self.model_line.setFixedWidth(300)
-        self.model_line.setFixedHeight(50)
-        self.model_line.setPlaceholderText("请输入要使用的模型")
-        self.model_line.setCompleter(completer)
-
-        hbox3 = QtWidgets.QHBoxLayout()
-        hbox3.addStretch()
-        hbox3.addWidget(self.model_line)
-        hbox3.addWidget(self.delete_button)
-        hbox3.addWidget(self.resend_button)
-        hbox3.addWidget(self.send_button)
-
-        right_vbox = QtWidgets.QVBoxLayout()
-        right_vbox.addWidget(self.history_widget)
-        right_vbox.addWidget(self.input_widget)
-        right_vbox.addLayout(hbox3)
+        self.stacked_widget: QtWidgets.QStackedWidget = QtWidgets.QStackedWidget()
 
         # 主布局
         main_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         main_hbox.addLayout(left_vbox)
-        main_hbox.addLayout(right_vbox)
+        main_hbox.addWidget(self.stacked_widget)
 
         central_widget = QtWidgets.QWidget()
         central_widget.setLayout(main_hbox)
@@ -145,142 +112,10 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog: ToolsDialog = ToolsDialog(self.engine, self)
         dialog.exec()
 
-    def save_setting(self) -> None:
-        """保存设置"""
-        save_json(self.setting_filename, self.setting)
-
-    def load_setting(self) -> None:
-        """加载设置"""
-        self.setting = load_json(self.setting_filename)
-
-        self.model_line.setText(self.setting.get("model", ""))
-
-    def send_message(self) -> None:
-        """发送消息"""
-        # 检查模型名称
-        model: str = self.model_line.text()
-        if model not in self.models:
-            QtWidgets.QMessageBox.warning(self, "模型名称错误", f"找不到模型：{model}，请检查模型名称是否正确")
-            return
-
-        # 保存模型设置
-        self.setting["model"] = model
-        self.save_setting()
-
-        # 检查输入内容
-        text: str = self.input_widget.toPlainText().strip()
-        if not text:
-            return
-        self.input_widget.clear()
-
-        # 保存用户消息
-        session: Session = self.sessions[self.current_id]
-
-        user_message: Message = Message(role=Role.USER, content=text)
-        session.messages.append(user_message)
-        self.history_widget.append_message(user_message.role, user_message.content)
-
-        # 准备流式请求
-        self.history_widget.start_stream()
-
-        self.send_button.setEnabled(False)
-        self.resend_button.setEnabled(False)
-        self.delete_button.setEnabled(False)
-        self.status_label.setText("正在等待AI服务返回数据...")
-
-        request: Request = Request(
-            model=model,
-            messages=session.messages,
-            temperature=0.2
-        )
-
-        # 设置并启动Worker
-        worker: StreamWorker = StreamWorker(self.engine, request)
-        worker.signals.delta.connect(self.on_stream_delta)
-        worker.signals.finished.connect(self.on_stream_finished)
-        worker.signals.error.connect(self.on_stream_error)
-
-        QtCore.QThreadPool.globalInstance().start(worker)
-
-    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        """
-        事件过滤器
-
-        实现输入框中按下Enter发送，Shift+Enter换行
-        """
-        if obj is self.input_widget and event.type() == QtCore.QEvent.Type.KeyPress:
-            if (
-                # 按下的是Enter或Return键
-                event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
-                # 如果不是Shift+Enter
-                and not event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
-            ):
-                # 发送消息
-                self.send_message()
-
-                # 返回True，表示事件已经被处理
-                return True
-
-        # 默认处理
-        return super().eventFilter(obj, event)
-
-    def append_message(self, role: Role, content: str) -> None:
-        """在会话历史组件中添加消息"""
-        self.history_widget.append_message(role, content)
-
-    def on_stream_delta(self, content_delta: str) -> None:
-        """
-        处理数据流返回的数据块
-        """
-        self.history_widget.update_stream(content_delta)
-
-    def on_stream_finished(self) -> None:
-        """
-        处理数据流结束事件
-        """
-        self.send_button.setEnabled(True)
-        self.status_label.clear()
-
-        full_content: str = self.history_widget.finish_stream()
-
-        if full_content:
-            message: Message = Message(role=Role.ASSISTANT, content=full_content)
-            session: Session = self.sessions[self.current_id]
-            session.messages.append(message)
-
-        self.save_current()
-        self.update_buttons()
-
-    def on_stream_error(self, error_msg: str) -> None:
-        """
-        处理数据流错误事件
-        """
-        self.send_button.setEnabled(True)
-        self.status_label.setText("发生错误")
-        QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
-        self.update_buttons()
-
-    def save_current(self) -> None:
-        """保存当前会话"""
-        session: Session = self.sessions[self.current_id]
-        self.save_session(session)
-
-    def save_session(self, session: Session) -> None:
-        """保存单个会话到文件"""
-        data: dict = session.model_dump()
-        file_path: Path = SESSION_DIR.joinpath(f"{session.id}.json")
-
-        with open(file_path, mode="w+", encoding="UTF-8") as f:
-            json.dump(
-                data,
-                f,
-                indent=4,
-                ensure_ascii=False
-            )
-
     def load_sessions(self) -> None:
         """加载所有会话"""
         self.sessions.clear()
+        self.session_widgets.clear() # Clear existing widgets
 
         session_files: list[Path] = sorted(
             SESSION_DIR.glob("*.json"),
@@ -294,11 +129,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 session: Session = Session.model_validate(data)
                 self.sessions[session.id] = session
 
+                widget: SessionWidget = SessionWidget(self.engine, session, self.models)
+                self.stacked_widget.addWidget(widget)
+                self.session_widgets[session.id] = widget
+
         if not self.sessions:
             self.new_session()
         else:
             self.current_id = next(iter(self.sessions.keys()))
-            self.display_session()
+            self.switch_session(self.current_id)
 
         self.update_list()
 
@@ -314,19 +153,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if session_id == self.current_id:
                 self.session_list.setCurrentItem(item)
 
-    def display_session(self) -> None:
-        """显示当前会话的聊天记录"""
-        self.history_widget.clear()
-
-        session: Session | None = self.sessions.get(self.current_id)
-        if not session:
-            return
-
-        for message in session.messages:
-            self.history_widget.append_message(message.role, message.content)
-
-        self.update_buttons()
-
     def new_session(self) -> None:
         """创建新会话"""
         session: Session = Session(
@@ -337,78 +163,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.current_id = session.id
 
-        self.display_session()
+        widget: SessionWidget = SessionWidget(self.engine, session, self.models)
+        widget.save_session()
+
+        self.stacked_widget.addWidget(widget)
+        self.session_widgets[session.id] = widget
+
         self.update_list()
-        self.save_session(session)
+        self.switch_session(session.id)
 
-    def switch_session(self, item: QtWidgets.QListWidgetItem) -> None:
-        """切换会话"""
-        session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
+    def switch_session(self, session_id: str) -> None:
+        """根据ID切换会话"""
         self.current_id = session_id
-        self.display_session()
 
-    def delete_round(self) -> None:
-        """删除最后一轮对话"""
-        session: Session = self.sessions[self.current_id]
-
-        # 按钮状态已经保证了此时最后一条消息是AI
-        if not session.messages or session.messages[-1].role != Role.ASSISTANT:
-            return
-
-        # 删除AI和用户消息
-        session.messages.pop()
-        session.messages.pop()
-
-        self.display_session()
-        self.save_current()
-
-    def resend_round(self) -> None:
-        """重新发送最后一轮对话"""
-        session: Session = self.sessions[self.current_id]
-
-        # 按钮状态已经保证了此时最后一条消息是AI
-        if not session.messages or session.messages[-1].role != Role.ASSISTANT:
-            return
-
-        # 复制用户问题
-        user_message: Message = session.messages[-2]
-        self.input_widget.setText(user_message.content)
-
-        # 删除AI和用户消息
-        session.messages.pop()
-        session.messages.pop()
-
-        self.display_session()
-        self.save_current()
-
-    def update_buttons(self) -> None:
-        """更新功能按钮状态"""
-        session: Session = self.sessions[self.current_id]
-
-        if session.messages and session.messages[-1].role == Role.ASSISTANT:
-            self.resend_button.setEnabled(True)
-            self.delete_button.setEnabled(True)
-        else:
-            self.resend_button.setEnabled(False)
-            self.delete_button.setEnabled(False)
-
-    def show_menu(self, pos: QtCore.QPoint) -> None:
-        """显示会话的右键菜单"""
-        item: QtWidgets.QListWidgetItem | None = self.session_list.itemAt(pos)
-        if not item:
-            return
-
-        session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
-
-        menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
-
-        rename_action: QtGui.QAction = menu.addAction("重命名")
-        rename_action.triggered.connect(lambda: self.rename_session(session_id))
-
-        delete_action: QtGui.QAction = menu.addAction("删除")
-        delete_action.triggered.connect(lambda: self.delete_session(session_id))
-
-        menu.exec(self.session_list.mapToGlobal(pos))
+        widget: SessionWidget = self.session_widgets[session_id]
+        self.stacked_widget.setCurrentWidget(widget)
 
     def rename_session(self, session_id: str) -> None:
         """重命名会话"""
@@ -421,7 +190,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if ok and text:
             session.name = text
             self.update_list()
-            self.save_session(session)
+
+            widget: SessionWidget = self.session_widgets[session_id]
+            widget.save_session()
 
     def delete_session(self, session_id: str) -> None:
         """删除会话"""
@@ -430,12 +201,18 @@ class MainWindow(QtWidgets.QMainWindow):
             "删除会话",
             "确定要删除该会话吗？此操作不可恢复。",
             QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-            QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.Yes,
         )
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             # 从字典中移除
             self.sessions.pop(session_id, None)
+
+            # 移除对应的控件
+            widget: SessionWidget = self.session_widgets.pop(session_id, None)
+            if widget:
+                self.stacked_widget.removeWidget(widget)
+                widget.deleteLater()
 
             # 从文件系统中删除
             file_path: Path = SESSION_DIR.joinpath(f"{session_id}.json")
@@ -446,9 +223,9 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.current_id == session_id:
                 if self.sessions:
                     self.current_id = next(iter(self.sessions.keys()))
+                    self.switch_session(self.current_id)
                 else:
                     self.new_session()
-                self.display_session()
 
             self.update_list()
 
@@ -470,3 +247,37 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_website(self) -> None:
         """打开官网"""
         QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://www.github.com/vnpy/vnag"))
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """事件过滤器"""
+        if obj is self.session_list and event.type() == QtCore.QEvent.Type.KeyPress:
+            if event.key() == QtCore.Qt.Key.Key_Delete:
+                item: QtWidgets.QListWidgetItem = self.session_list.currentItem()
+                if item:
+                    self.delete_session(item.data(QtCore.Qt.ItemDataRole.UserRole))
+                    return True
+
+        return super().eventFilter(obj, event)
+
+    def on_item_clicked(self, item: QtWidgets.QListWidgetItem) -> None:
+        """处理列表项点击事件"""
+        session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        self.switch_session(session_id)
+
+    def on_menu_requested(self, pos: QtCore.QPoint) -> None:
+        """显示会话的右键菜单"""
+        item: QtWidgets.QListWidgetItem | None = self.session_list.itemAt(pos)
+        if not item:
+            return
+
+        session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
+
+        menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
+
+        rename_action: QtGui.QAction = menu.addAction("重命名")
+        rename_action.triggered.connect(lambda: self.rename_session(session_id))
+
+        delete_action: QtGui.QAction = menu.addAction("删除")
+        delete_action.triggered.connect(lambda: self.delete_session(session_id))
+
+        menu.exec(self.session_list.mapToGlobal(pos))

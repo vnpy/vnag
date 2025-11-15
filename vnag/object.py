@@ -60,6 +60,7 @@ class Session(BaseModel):
     id: str
     name: str
     messages: list[Message] = Field(default_factory=list)
+    model: str = ""
 
 
 class ToolSchema(BaseModel):

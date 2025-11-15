@@ -1,11 +1,21 @@
 import json
 import os
 import uuid
+from pathlib import Path
 
 from ..constant import Role
-from ..object import ToolSchema
 from ..engine import AgentEngine
-from .qt import QtWebEngineWidgets, QtWidgets, QtCore, QtWebEngineCore
+from ..object import Message, Request, Session, ToolSchema
+
+from .qt import (
+    QtCore,
+    QtGui,
+    QtWidgets,
+    QtWebEngineCore,
+    QtWebEngineWidgets
+)
+from .worker import StreamWorker
+from .base import SESSION_DIR
 
 
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
@@ -14,6 +24,9 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数"""
         super().__init__(parent)
+
+        # 设置页面背景色为透明，避免首次加载时闪烁
+        self.page().setBackgroundColor(QtGui.QColor("transparent"))
 
         # 流式请求相关状态
         self.full_content: str = ""
@@ -109,6 +122,213 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         # 返回完整的流式输出内容
         return self.full_content
+
+
+class SessionWidget(QtWidgets.QWidget):
+    """会话控件"""
+
+    def __init__(
+        self,
+        engine: AgentEngine,
+        session: Session,
+        models: list[str],
+        parent: QtWidgets.QWidget | None = None
+    ) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self.engine: AgentEngine = engine
+        self.session: Session = session
+        self.models: list[str] = models
+
+        self.init_ui()
+        self.display_history()
+
+    def init_ui(self) -> None:
+        """初始化UI"""
+        desktop: QtCore.QRect = QtWidgets.QApplication.primaryScreen().availableGeometry()
+
+        self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+        self.input_widget.setMaximumHeight(desktop.height() // 4)
+        self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
+        self.input_widget.installEventFilter(self)
+
+        self.history_widget: HistoryWidget = HistoryWidget()
+
+        button_width: int = 80
+        button_height: int = 50
+
+        self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送")
+        self.send_button.clicked.connect(self.send_message)
+        self.send_button.setFixedWidth(button_width)
+        self.send_button.setFixedHeight(button_height)
+
+        self.resend_button: QtWidgets.QPushButton = QtWidgets.QPushButton("重发")
+        self.resend_button.clicked.connect(self.resend_round)
+        self.resend_button.setFixedWidth(button_width)
+        self.resend_button.setFixedHeight(button_height)
+        self.resend_button.setEnabled(False)
+
+        self.delete_button: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
+        self.delete_button.clicked.connect(self.delete_round)
+        self.delete_button.setFixedWidth(button_width)
+        self.delete_button.setFixedHeight(button_height)
+        self.delete_button.setEnabled(False)
+
+        completer: QtWidgets.QCompleter = QtWidgets.QCompleter(self.models)
+        completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
+
+        self.model_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.model_line.setFixedWidth(300)
+        self.model_line.setFixedHeight(50)
+        self.model_line.setPlaceholderText("请输入要使用的模型")
+        self.model_line.setCompleter(completer)
+        self.model_line.setText(self.session.model)
+        self.model_line.editingFinished.connect(self.on_model_changed)
+
+        hbox = QtWidgets.QHBoxLayout()
+        hbox.addStretch()
+        hbox.addWidget(self.model_line)
+        hbox.addWidget(self.delete_button)
+        hbox.addWidget(self.resend_button)
+        hbox.addWidget(self.send_button)
+
+        vbox = QtWidgets.QVBoxLayout(self)
+        vbox.addWidget(self.history_widget)
+        vbox.addWidget(self.input_widget)
+        vbox.addLayout(hbox)
+
+    def display_history(self) -> None:
+        """显示当前会话的聊天记录"""
+        self.history_widget.clear()
+
+        for message in self.session.messages:
+            self.history_widget.append_message(message.role, message.content)
+
+        self.update_buttons()
+
+    def send_message(self) -> None:
+        """发送消息"""
+        model: str = self.model_line.text()
+        if model not in self.models:
+            QtWidgets.QMessageBox.warning(self, "模型名称错误", f"找不到模型：{model}，请检查模型名称是否正确")
+            return
+
+        text: str = self.input_widget.toPlainText().strip()
+        if not text:
+            return
+        self.input_widget.clear()
+
+        user_message: Message = Message(role=Role.USER, content=text)
+        self.session.messages.append(user_message)
+        self.history_widget.append_message(user_message.role, user_message.content)
+
+        self.history_widget.start_stream()
+
+        self.send_button.setEnabled(False)
+        self.resend_button.setEnabled(False)
+        self.delete_button.setEnabled(False)
+
+        request: Request = Request(
+            model=model,
+            messages=self.session.messages,
+            temperature=0.2
+        )
+
+        worker: StreamWorker = StreamWorker(self.engine, request)
+        worker.signals.delta.connect(self.on_stream_delta)
+        worker.signals.finished.connect(self.on_stream_finished)
+        worker.signals.error.connect(self.on_stream_error)
+
+        QtCore.QThreadPool.globalInstance().start(worker)
+
+    def save_session(self) -> None:
+        """保存会话"""
+        data: dict = self.session.model_dump()
+        file_path: Path = SESSION_DIR.joinpath(f"{self.session.id}.json")
+
+        with open(file_path, mode="w+", encoding="UTF-8") as f:
+            json.dump(
+                data,
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
+
+    def delete_round(self) -> None:
+        """删除最后一轮对话"""
+        if not self.session.messages or self.session.messages[-1].role != Role.ASSISTANT:
+            return
+
+        self.session.messages.pop()
+        self.session.messages.pop()
+
+        self.display_history()
+        self.save_session()
+
+    def resend_round(self) -> None:
+        """重新发送最后一轮对话"""
+        if not self.session.messages or self.session.messages[-1].role != Role.ASSISTANT:
+            return
+
+        user_message: Message = self.session.messages[-2]
+        self.input_widget.setText(user_message.content)
+
+        self.session.messages.pop()
+        self.session.messages.pop()
+
+        self.display_history()
+        self.save_session()
+
+    def update_buttons(self) -> None:
+        """更新功能按钮状态"""
+        if self.session.messages and self.session.messages[-1].role == Role.ASSISTANT:
+            self.resend_button.setEnabled(True)
+            self.delete_button.setEnabled(True)
+        else:
+            self.resend_button.setEnabled(False)
+            self.delete_button.setEnabled(False)
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """事件过滤器"""
+        if obj is self.input_widget and event.type() == QtCore.QEvent.Type.KeyPress:
+            if (
+                event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
+                and not event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            ):
+                self.send_message()
+                return True
+        return super().eventFilter(obj, event)
+
+    def on_stream_delta(self, content_delta: str) -> None:
+        """处理数据流返回的数据块"""
+        self.history_widget.update_stream(content_delta)
+
+    def on_stream_finished(self) -> None:
+        """处理数据流结束事件"""
+        self.send_button.setEnabled(True)
+
+        full_content: str = self.history_widget.finish_stream()
+
+        if full_content:
+            message: Message = Message(role=Role.ASSISTANT, content=full_content)
+            self.session.messages.append(message)
+
+        self.save_session()
+        self.update_buttons()
+
+    def on_stream_error(self, error_msg: str) -> None:
+        """处理数据流错误事件"""
+        self.send_button.setEnabled(True)
+        QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+        self.update_buttons()
+
+    def on_model_changed(self) -> None:
+        """处理模型变更"""
+        model: str = self.model_line.text()
+        if model in self.models:
+            self.session.model = model
+            self.save_session()
 
 
 class ToolsDialog(QtWidgets.QDialog):
