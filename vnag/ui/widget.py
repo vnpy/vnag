@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from collections import defaultdict
 from pathlib import Path
 
 from ..constant import Role
@@ -348,10 +349,13 @@ class ToolsDialog(QtWidgets.QDialog):
         self.setMinimumSize(800, 600)
 
         # 左侧树
+        headers: list[str] = ["分类", "模块", "工具"]
         self.tree_widget: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
-        self.tree_widget.setColumnCount(1)
-        self.tree_widget.setHeaderLabels(["工具列表"])
+        self.tree_widget.setColumnCount(len(headers))
+        self.tree_widget.setHeaderLabels(headers)
         self.tree_widget.itemClicked.connect(self.on_item_clicked)
+        self.tree_widget.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
 
         # 右侧详情
         self.detail_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
@@ -380,12 +384,26 @@ class ToolsDialog(QtWidgets.QDialog):
         if local_tools:
             local_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                 self.tree_widget,
-                ["本地工具"]
+                ["本地工具", "", ""]
             )
 
+            module_tools: dict[str, list[ToolSchema]] = defaultdict(list)
             for schema in local_tools.values():
-                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(local_root, [schema.name])
-                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
+                module, _ = schema.name.split(".", 1)
+                module_tools[module].append(schema)
+
+            for module, schemas in sorted(module_tools.items()):
+                module_item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                    local_root,
+                    ["", module, ""]
+                )
+                for schema in sorted(schemas, key=lambda s: s.name):
+                    _, name = schema.name.split(".", 1)
+                    item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                        module_item,
+                        ["", "", name]
+                    )
+                    item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
 
             self.tree_widget.expandItem(local_root)
 
@@ -394,14 +412,31 @@ class ToolsDialog(QtWidgets.QDialog):
         if mcp_tools:
             mcp_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                 self.tree_widget,
-                ["MCP工具"]
+                ["MCP工具", "", ""]
             )
 
+            server_tools: dict[str, list[ToolSchema]] = defaultdict(list)
             for schema in mcp_tools.values():
-                item = QtWidgets.QTreeWidgetItem(mcp_root, [schema.name])
-                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
+                server, _ = schema.name.split("_", 1)
+                server_tools[server].append(schema)
+
+            for server, schemas in sorted(server_tools.items()):
+                server_item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                    mcp_root,
+                    ["", server, ""]
+                )
+                for schema in sorted(schemas, key=lambda s: s.name):
+                    _, name = schema.name.split("_", 1)
+                    item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                        server_item,
+                        ["", "", name]
+                    )
+                    item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema)
 
             self.tree_widget.expandItem(mcp_root)
+
+        for i in range(self.tree_widget.columnCount()):
+            self.tree_widget.resizeColumnToContents(i)
 
     def on_item_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int) -> None:
         """处理项目点击事件"""
@@ -414,3 +449,103 @@ class ToolsDialog(QtWidgets.QDialog):
                 f"[参数]\n{json.dumps(schema.parameters, indent=4, ensure_ascii=False)}"
             )
             self.detail_widget.setText(text)
+
+    def show_context_menu(self, pos: QtCore.QPoint) -> None:
+        """显示右键菜单"""
+        menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
+
+        expand_action: QtGui.QAction = menu.addAction("全部展开")
+        expand_action.triggered.connect(self.tree_widget.expandAll)
+
+        collapse_action: QtGui.QAction = menu.addAction("全部折叠")
+        collapse_action.triggered.connect(self.tree_widget.collapseAll)
+
+        menu.exec(self.tree_widget.viewport().mapToGlobal(pos))
+
+
+class ModelsDialog(QtWidgets.QDialog):
+    """显示可用模型的对话框"""
+
+    def __init__(self, engine: AgentEngine, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self._engine: AgentEngine = engine
+
+        self.init_ui()
+
+    def init_ui(self) -> None:
+        """初始化UI"""
+        self.setWindowTitle("模型浏览器")
+        self.setMinimumSize(800, 600)
+
+        headers: list[str] = ["厂商", "模型"]
+        self.tree_widget: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
+        self.tree_widget.setColumnCount(len(headers))
+        self.tree_widget.setHeaderLabels(headers)
+        self.tree_widget.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
+
+        vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
+        vbox.addWidget(self.tree_widget)
+
+        models: list[str] = self._engine.list_models()
+
+        separator: str | None = self._detect_separator(models)
+        vendor_models: dict[str, list[str]] = defaultdict(list)
+
+        if separator:
+            for name in models:
+                parts: list[str] = name.split(separator, 1)
+                if len(parts) == 2:
+                    vendor, model = parts
+                    vendor_models[vendor].append(model)
+                else:
+                    vendor_models["其他"].append(name)
+        else:
+            for name in models:
+                vendor_models["其他"].append(name)
+
+        for vendor, model_list in sorted(vendor_models.items()):
+            vendor_item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                self.tree_widget,
+                [vendor, ""]
+            )
+            for model in sorted(model_list):
+                QtWidgets.QTreeWidgetItem(vendor_item, ["", model])
+
+        self.tree_widget.expandAll()
+
+        for i in range(self.tree_widget.columnCount()):
+            self.tree_widget.resizeColumnToContents(i)
+
+    def show_context_menu(self, pos: QtCore.QPoint) -> None:
+        """显示右键菜单"""
+        menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
+
+        expand_action: QtGui.QAction = menu.addAction("全部展开")
+        expand_action.triggered.connect(self.tree_widget.expandAll)
+
+        collapse_action: QtGui.QAction = menu.addAction("全部折叠")
+        collapse_action.triggered.connect(self.tree_widget.collapseAll)
+
+        menu.exec(self.tree_widget.viewport().mapToGlobal(pos))
+
+    def _detect_separator(self, models: list[str]) -> str | None:
+        """检测模型名称中的分隔符"""
+        if not models:
+            return None
+
+        candidates: list[str] = ["/", ":", "\\"]
+        counts: dict[str, int] = defaultdict(int)
+
+        for name in models:
+            for sep in candidates:
+                if sep in name:
+                    counts[sep] += 1
+
+        if not counts:
+            return None
+
+        return max(counts, key=counts.get)
+

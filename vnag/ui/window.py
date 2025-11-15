@@ -6,7 +6,7 @@ from ..engine import AgentEngine
 from ..utility import AGENT_DIR
 from ..object import Session
 from .. import __version__
-from .widget import SessionWidget, ToolsDialog
+from .widget import SessionWidget, ToolsDialog, ModelsDialog
 from .qt import QtWidgets, QtGui, QtCore
 
 
@@ -73,19 +73,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.session_list.itemClicked.connect(self.on_item_clicked)
         self.session_list.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self.on_menu_requested)
-        self.session_list.setFixedWidth(300)
         self.session_list.installEventFilter(self)
 
         left_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         left_vbox.addWidget(self.session_list)
         left_vbox.addWidget(self.new_button)
 
+        left_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        left_widget.setLayout(left_vbox)
+        left_widget.setFixedWidth(300)
+
         # 右侧聊天相关
         self.stacked_widget: QtWidgets.QStackedWidget = QtWidgets.QStackedWidget()
 
         # 主布局
         main_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
-        main_hbox.addLayout(left_vbox)
+        main_hbox.addWidget(left_widget)
         main_hbox.addWidget(self.stacked_widget)
 
         central_widget = QtWidgets.QWidget()
@@ -102,6 +105,7 @@ class MainWindow(QtWidgets.QMainWindow):
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
         function_menu.addAction("新建会话", self.new_session)
         function_menu.addAction("查看工具", self.show_tools)
+        function_menu.addAction("查看模型", self.show_models)
 
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
@@ -110,6 +114,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_tools(self) -> None:
         """显示工具"""
         dialog: ToolsDialog = ToolsDialog(self.engine, self)
+        dialog.exec()
+
+    def show_models(self) -> None:
+        """显示模型"""
+        dialog: ModelsDialog = ModelsDialog(self.engine, self)
         dialog.exec()
 
     def load_sessions(self) -> None:

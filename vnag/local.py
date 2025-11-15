@@ -25,12 +25,14 @@ class LocalTool:
             name = function.__name__
 
         if description == "" and function.__doc__:
-            description = function.__doc__.split("\n")[0]
+            description = function.__doc__
 
         if parameters is None:
             parameters = generate_function_schema(function)
 
-        self.name: str = name
+        module: str = function.__module__.split(".")[-1]
+
+        self.name: str = f"{module}.{name}"
         self.description: str = description
         self.parameters: dict[str, Any] = parameters
         self.function: Callable[..., Any] = function
