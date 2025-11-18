@@ -30,7 +30,7 @@ class Request(BaseModel):
     """标准化的LLM请求对象"""
     model: str
     messages: list[Message]
-    tools_schemas: list["ToolSchema"] = Field(default_factory=list)
+    tool_schemas: list["ToolSchema"] = Field(default_factory=list)
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     max_tokens: int | None = Field(default=None, gt=0)
@@ -53,14 +53,6 @@ class Delta(BaseModel):
     calls: list["ToolCall"] | None = None
     finish_reason: FinishReason | None = None
     usage: Usage | None = None
-
-
-class Session(BaseModel):
-    """聊天交互会话历史"""
-    id: str
-    name: str
-    messages: list[Message] = Field(default_factory=list)
-    model: str = ""
 
 
 class ToolSchema(BaseModel):
@@ -94,3 +86,22 @@ class ToolResult(BaseModel):
     name: str  # 工具名称，某些API（如Gemini）需要
     content: str  # 工具执行结果内容
     is_error: bool = False  # 标识是否为错误结果（Anthropic支持）
+
+
+class Profile(BaseModel):
+    """智能体配置数据"""
+    name: str
+    prompt: str
+    tools: list[str]
+    temperature: float | None = None
+    max_tokens: int | None = None
+    max_iterations: int = 10
+
+
+class Session(BaseModel):
+    """聊天交互会话历史"""
+    id: str
+    profile: str
+    name: str
+    model: str = ""
+    messages: list[Message] = Field(default_factory=list)

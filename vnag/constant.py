@@ -6,7 +6,6 @@ class Role(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
-    TOOL = "tool"
 
 
 class FinishReason(str, Enum):

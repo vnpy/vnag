@@ -133,7 +133,7 @@ class AnthropicGateway(BaseGateway):
         }
 
         # 添加工具定义（如果有）
-        if request.tools_schemas:
+        if request.tool_schemas:
             # 转换为 Anthropic 格式
             tools: list[dict[str, Any]] = [
                 {
@@ -141,7 +141,7 @@ class AnthropicGateway(BaseGateway):
                     "description": schema.description,
                     "input_schema": schema.parameters
                 }
-                for schema in request.tools_schemas
+                for schema in request.tool_schemas
             ]
             create_params["tools"] = tools
 
@@ -218,7 +218,7 @@ class AnthropicGateway(BaseGateway):
         }
 
         # 添加工具定义（如果有）
-        if request.tools_schemas:
+        if request.tool_schemas:
             # 转换为 Anthropic 格式
             tools: list[dict[str, Any]] = [
                 {
@@ -226,7 +226,7 @@ class AnthropicGateway(BaseGateway):
                     "description": schema.description,
                     "input_schema": schema.parameters
                 }
-                for schema in request.tools_schemas
+                for schema in request.tool_schemas
             ]
             create_params["tools"] = tools
 

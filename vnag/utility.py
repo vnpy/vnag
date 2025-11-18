@@ -14,7 +14,7 @@ def _get_agent_dir(temp_name: str) -> tuple[Path, Path]:
     if temp_path.exists():
         return cwd, temp_path
 
-    # 否则使用系统家目录
+    # 否则使用系统用户目录
     home_path: Path = Path.home()
     temp_path = home_path.joinpath(temp_name)
 
@@ -25,8 +25,8 @@ def _get_agent_dir(temp_name: str) -> tuple[Path, Path]:
     return home_path, temp_path
 
 
-AGENT_DIR, TEMP_DIR = _get_agent_dir(".vnag")
-sys.path.append(str(AGENT_DIR))
+WORKING_DIR, TEMP_DIR = _get_agent_dir(".vnag")
+sys.path.append(str(WORKING_DIR))
 
 
 def get_file_path(filename: str) -> Path:
@@ -92,3 +92,10 @@ def write_text_file(path: str | Path, content: str) -> None:
     """写入文本文件，使用 UTF-8 编码（覆盖写）。"""
     p: Path = Path(path)
     p.write_text(content, encoding="utf-8")
+
+
+PROFILE_DIR: Path = TEMP_DIR.joinpath("profile")
+PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+SESSION_DIR: Path = TEMP_DIR.joinpath("session")
+SESSION_DIR.mkdir(parents=True, exist_ok=True)

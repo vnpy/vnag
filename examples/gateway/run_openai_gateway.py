@@ -63,7 +63,7 @@ def main() -> None:
     tool_request: Request = Request(
         model="gpt-4o",
         messages=[Message(role=Role.USER, content="上海今天天气如何?")],
-        tools_schemas=[get_weather_schema],
+        tool_schemas=[get_weather_schema],
     )
 
     # 调用接口

@@ -115,8 +115,8 @@ class OpenaiGateway(BaseGateway):
         }
 
         # 添加工具定义（如果有）
-        if request.tools_schemas:
-            create_params["tools"] = [t.get_schema() for t in request.tools_schemas]
+        if request.tool_schemas:
+            create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
 
         # 发起请求并获取响应
         response: ChatCompletion = self.client.chat.completions.create(**create_params)
@@ -182,8 +182,8 @@ class OpenaiGateway(BaseGateway):
         }
 
         # 添加工具定义（如果有）
-        if request.tools_schemas:
-            create_params["tools"] = [t.get_schema() for t in request.tools_schemas]
+        if request.tool_schemas:
+            create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
 
         stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(**create_params)
 

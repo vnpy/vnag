@@ -61,7 +61,7 @@ def main() -> None:
     tool_request: Request = Request(
         model="claude-3-opus-20240229",
         messages=[Message(role=Role.USER, content="今天上海的天气如何？")],
-        tools_schemas=[get_weather_schema],
+        tool_schemas=[get_weather_schema],
         max_tokens=1024,
     )
 
