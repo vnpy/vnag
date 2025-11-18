@@ -53,17 +53,18 @@
                 scrollToBottom();
             }
 
-            window.appendAssistantMessage = function(markdownContent) {
+            window.appendAssistantMessage = function(markdownContent, assistantName) {
                 const history = document.getElementById("history");
                 const messageDiv = document.createElement("div");
                 messageDiv.className = "message assistant";
                 
                 const htmlContent = md.render(markdownContent);
+                const roleName = assistantName || 'Assistant';
 
                 messageDiv.innerHTML = `
                     <div class="message-header">
                         <div class="icon">🤖</div>
-                        <div class="role">Assistant</div>
+                        <div class="role">${roleName}</div>
                         <div class="timestamp">${getCurrentTime()}</div>
                     </div>
                     <div class="message-content">${htmlContent}</div>
@@ -74,16 +75,18 @@
                 scrollToBottom();
             }
 
-            window.startAssistantMessage = function(msgId) {
+            window.startAssistantMessage = function(msgId, assistantName) {
                 const history = document.getElementById("history");
                 const messageDiv = document.createElement("div");
                 messageDiv.id = msgId;
                 messageDiv.className = "message assistant";
 
+                const roleName = assistantName || 'Assistant';
+
                 messageDiv.innerHTML = `
                     <div class="message-header">
                         <div class="icon">🤖</div>
-                        <div class="role">Assistant</div>
+                        <div class="role">${roleName}</div>
                         <div class="timestamp">${getCurrentTime()}</div>
                     </div>
                     <div class="message-content"></div>
@@ -97,8 +100,15 @@
                 const messageDiv = document.getElementById(msgId);
                 if (messageDiv) {
                     const contentDiv = messageDiv.querySelector('.message-content');
+
+                    const el = document.documentElement;
+                    const isScrolledToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 1;
+
                     contentDiv.innerHTML = md.render(markdownContent);
-                    scrollToBottom();
+
+                    if (isScrolledToBottom) {
+                        window.scrollTo(0, document.body.scrollHeight);
+                    }
                 }
             }
 

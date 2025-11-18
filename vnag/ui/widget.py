@@ -2,11 +2,12 @@ import json
 import os
 import uuid
 from collections import defaultdict
-from pathlib import Path
+from typing import cast
 
 from ..constant import Role
-from ..engine import AgentEngine
-from ..object import Message, Request, Session, ToolSchema
+from ..engine import AgentEngine, default_profile
+from ..object import ToolSchema
+from ..agent import Profile, TaskAgent
 
 from .qt import (
     QtCore,
@@ -16,15 +17,17 @@ from .qt import (
     QtWebEngineWidgets
 )
 from .worker import StreamWorker
-from .base import SESSION_DIR
+from .setting import load_favorite_models, save_favorite_models
 
 
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
     """会话历史控件"""
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(self,  profile_name: str, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数"""
         super().__init__(parent)
+
+        self.profile_name: str = profile_name
 
         # 设置页面背景色为透明，避免首次加载时闪烁
         self.page().setBackgroundColor(QtGui.QColor("transparent"))
@@ -40,22 +43,23 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # 连接页面加载完成信号
         self.page().loadFinished.connect(self._on_load_finished)
 
+        # 连接权限请求信号，处理剪贴板权限
+        self.page().permissionRequested.connect(self._on_permission_requested)
+
         # 加载本地HTML文件
         current_path: str = os.path.dirname(os.path.abspath(__file__))
         html_path: str = os.path.join(current_path, "resources", "chat.html")
         self.load(QtCore.QUrl.fromLocalFile(html_path))
 
+    def _on_permission_requested(self, permission: QtWebEngineCore.QWebEnginePermission) -> None:
+        """处理权限请求，自动授予剪贴板权限"""
+        if permission.permissionType() == QtWebEngineCore.QWebEnginePermission.PermissionType.ClipboardReadWrite:
+            permission.grant()
+
     def _on_load_finished(self, success: bool) -> None:
         """页面加载完成后的回调"""
         if not success:
             return
-
-        # 设置页面权限，允许复制代码块
-        self.page().setFeaturePermission(
-            self.page().url(),
-            QtWebEngineCore.QWebEnginePage.Feature.ClipboardReadWrite,
-            QtWebEngineCore.QWebEnginePage.PermissionPolicy.PermissionGrantedByUser,
-        )
 
         # 设置页面加载完成标志，并处理消息队列
         self.page_loaded = True
@@ -94,7 +98,8 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # AI消息，需要被渲染
         elif role is Role.ASSISTANT:
             js_content = json.dumps(content)
-            self.page().runJavaScript(f"appendAssistantMessage({js_content})")
+            js_name: str = json.dumps(self.profile_name)
+            self.page().runJavaScript(f"appendAssistantMessage({js_content}, {js_name})")
 
     def start_stream(self) -> None:
         """开始新的流式输出"""
@@ -103,7 +108,8 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.msg_id = f"msg-{uuid.uuid4().hex}"
 
         # 调用前端函数，开始新的流式输出
-        self.page().runJavaScript(f"startAssistantMessage('{self.msg_id}')")
+        js_name: str = json.dumps(self.profile_name)
+        self.page().runJavaScript(f"startAssistantMessage('{self.msg_id}', {js_name})")
 
     def update_stream(self, content_delta: str) -> None:
         """更新流式输出"""
@@ -125,13 +131,13 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         return self.full_content
 
 
-class SessionWidget(QtWidgets.QWidget):
+class AgentWidget(QtWidgets.QWidget):
     """会话控件"""
 
     def __init__(
         self,
         engine: AgentEngine,
-        session: Session,
+        agent: TaskAgent,
         models: list[str],
         parent: QtWidgets.QWidget | None = None
     ) -> None:
@@ -139,10 +145,12 @@ class SessionWidget(QtWidgets.QWidget):
         super().__init__(parent)
 
         self.engine: AgentEngine = engine
-        self.session: Session = session
+        self.agent: TaskAgent = agent
         self.models: list[str] = models
+        self.worker: StreamWorker | None = None
 
         self.init_ui()
+        self.load_favorite_models()
         self.display_history()
 
     def init_ui(self) -> None:
@@ -154,7 +162,7 @@ class SessionWidget(QtWidgets.QWidget):
         self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
         self.input_widget.installEventFilter(self)
 
-        self.history_widget: HistoryWidget = HistoryWidget()
+        self.history_widget: HistoryWidget = HistoryWidget(profile_name=self.agent.profile.name)
 
         button_width: int = 80
         button_height: int = 50
@@ -163,6 +171,12 @@ class SessionWidget(QtWidgets.QWidget):
         self.send_button.clicked.connect(self.send_message)
         self.send_button.setFixedWidth(button_width)
         self.send_button.setFixedHeight(button_height)
+
+        self.stop_button: QtWidgets.QPushButton = QtWidgets.QPushButton("停止")
+        self.stop_button.clicked.connect(self.stop_stream)
+        self.stop_button.setFixedWidth(button_width)
+        self.stop_button.setFixedHeight(button_height)
+        self.stop_button.setVisible(False)
 
         self.resend_button: QtWidgets.QPushButton = QtWidgets.QPushButton("重发")
         self.resend_button.clicked.connect(self.resend_round)
@@ -176,22 +190,17 @@ class SessionWidget(QtWidgets.QWidget):
         self.delete_button.setFixedHeight(button_height)
         self.delete_button.setEnabled(False)
 
-        completer: QtWidgets.QCompleter = QtWidgets.QCompleter(self.models)
-        completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
-
-        self.model_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
-        self.model_line.setFixedWidth(300)
-        self.model_line.setFixedHeight(50)
-        self.model_line.setPlaceholderText("请输入要使用的模型")
-        self.model_line.setCompleter(completer)
-        self.model_line.setText(self.session.model)
-        self.model_line.editingFinished.connect(self.on_model_changed)
+        self.model_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
+        self.model_combo.setFixedWidth(300)
+        self.model_combo.setFixedHeight(50)
+        self.model_combo.currentTextChanged.connect(self.on_model_changed)
 
         hbox = QtWidgets.QHBoxLayout()
         hbox.addStretch()
-        hbox.addWidget(self.model_line)
+        hbox.addWidget(self.model_combo)
         hbox.addWidget(self.delete_button)
         hbox.addWidget(self.resend_button)
+        hbox.addWidget(self.stop_button)
         hbox.addWidget(self.send_button)
 
         vbox = QtWidgets.QVBoxLayout(self)
@@ -203,16 +212,53 @@ class SessionWidget(QtWidgets.QWidget):
         """显示当前会话的聊天记录"""
         self.history_widget.clear()
 
-        for message in self.session.messages:
-            self.history_widget.append_message(message.role, message.content)
+        assistant_content: str = ""
+
+        for message in self.agent.messages:
+            # 系统消息，不显示
+            if message.role is Role.SYSTEM:
+                continue
+            # 用户消息
+            elif message.role is Role.USER:
+                # 有内容
+                if message.content:
+                    # 如果助手内容不为空，则先显示助手内容（包含之前的工具调用记录）
+                    if assistant_content:
+                        self.history_widget.append_message(Role.ASSISTANT, assistant_content)
+                        assistant_content = ""
+
+                    # 显示用户内容
+                    self.history_widget.append_message(Role.USER, message.content)
+                # 没有内容（工具调用结果返回），则跳过
+                else:
+                    continue
+            # 助手消息
+            elif message.role is Role.ASSISTANT:
+                # 有内容，则添加到助手内容
+                if message.content:
+                    assistant_content += message.content
+
+                # 有工具调用请求，则记录调用工具名称
+                if message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        assistant_content += f"\n\n[执行工具: {tool_call.name}]\n\n"
+
+        # 显示消息
+        if assistant_content:
+            self.history_widget.append_message(Role.ASSISTANT, assistant_content)
+            assistant_content = ""
 
         self.update_buttons()
 
     def send_message(self) -> None:
         """发送消息"""
-        model: str = self.model_line.text()
-        if model not in self.models:
-            QtWidgets.QMessageBox.warning(self, "模型名称错误", f"找不到模型：{model}，请检查模型名称是否正确")
+        model: str = self.model_combo.currentText()
+        if not model:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "模型未选择",
+                "请先前往【主菜单-查看-模型浏览器】配置常用模型"
+            )
             return
 
         text: str = self.input_widget.toPlainText().strip()
@@ -220,70 +266,45 @@ class SessionWidget(QtWidgets.QWidget):
             return
         self.input_widget.clear()
 
-        user_message: Message = Message(role=Role.USER, content=text)
-        self.session.messages.append(user_message)
-        self.history_widget.append_message(user_message.role, user_message.content)
-
+        # 将用户输入添加到UI历史
+        self.history_widget.append_message(Role.USER, text)
         self.history_widget.start_stream()
 
-        self.send_button.setEnabled(False)
+        self.send_button.setVisible(False)
+        self.stop_button.setVisible(True)
         self.resend_button.setEnabled(False)
         self.delete_button.setEnabled(False)
 
-        request: Request = Request(
-            model=model,
-            messages=self.session.messages,
-            temperature=0.2
-        )
-
-        worker: StreamWorker = StreamWorker(self.engine, request)
+        worker: StreamWorker = StreamWorker(self.agent, text)
         worker.signals.delta.connect(self.on_stream_delta)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)
 
+        self.worker = worker
         QtCore.QThreadPool.globalInstance().start(worker)
 
-    def save_session(self) -> None:
-        """保存会话"""
-        data: dict = self.session.model_dump()
-        file_path: Path = SESSION_DIR.joinpath(f"{self.session.id}.json")
-
-        with open(file_path, mode="w+", encoding="UTF-8") as f:
-            json.dump(
-                data,
-                f,
-                indent=4,
-                ensure_ascii=False
-            )
+    def stop_stream(self) -> None:
+        """停止当前流式请求"""
+        if self.worker:
+            self.worker.stop()
 
     def delete_round(self) -> None:
         """删除最后一轮对话"""
-        if not self.session.messages or self.session.messages[-1].role != Role.ASSISTANT:
-            return
-
-        self.session.messages.pop()
-        self.session.messages.pop()
-
+        self.agent.delete_round()
         self.display_history()
-        self.save_session()
 
     def resend_round(self) -> None:
         """重新发送最后一轮对话"""
-        if not self.session.messages or self.session.messages[-1].role != Role.ASSISTANT:
-            return
+        prompt: str = self.agent.resend_round()
 
-        user_message: Message = self.session.messages[-2]
-        self.input_widget.setText(user_message.content)
-
-        self.session.messages.pop()
-        self.session.messages.pop()
+        if prompt:
+            self.input_widget.setText(prompt)
 
         self.display_history()
-        self.save_session()
 
     def update_buttons(self) -> None:
         """更新功能按钮状态"""
-        if self.session.messages and self.session.messages[-1].role == Role.ASSISTANT:
+        if self.agent.messages and self.agent.messages[-1].role == Role.ASSISTANT:
             self.resend_button.setEnabled(True)
             self.delete_button.setEnabled(True)
         else:
@@ -293,9 +314,11 @@ class SessionWidget(QtWidgets.QWidget):
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """事件过滤器"""
         if obj is self.input_widget and event.type() == QtCore.QEvent.Type.KeyPress:
+            # 将 QEvent 转换为 QKeyEvent
+            key_event: QtGui.QKeyEvent = cast(QtGui.QKeyEvent, event)
             if (
-                event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
-                and not event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+                key_event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
+                and not key_event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
             ):
                 self.send_message()
                 return True
@@ -307,32 +330,367 @@ class SessionWidget(QtWidgets.QWidget):
 
     def on_stream_finished(self) -> None:
         """处理数据流结束事件"""
-        self.send_button.setEnabled(True)
+        self.worker = None
 
-        full_content: str = self.history_widget.finish_stream()
-
-        if full_content:
-            message: Message = Message(role=Role.ASSISTANT, content=full_content)
-            self.session.messages.append(message)
-
-        self.save_session()
+        self.history_widget.finish_stream()
         self.update_buttons()
+
+        self.send_button.setVisible(True)
+        self.stop_button.setVisible(False)
 
     def on_stream_error(self, error_msg: str) -> None:
         """处理数据流错误事件"""
-        self.send_button.setEnabled(True)
-        QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+        self.worker = None
+
+        self.history_widget.finish_stream()
         self.update_buttons()
 
-    def on_model_changed(self) -> None:
+        self.send_button.setVisible(True)
+        self.stop_button.setVisible(False)
+
+        QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+
+    def on_model_changed(self, model: str) -> None:
         """处理模型变更"""
-        model: str = self.model_line.text()
-        if model in self.models:
-            self.session.model = model
-            self.save_session()
+        if model:
+            self.agent.set_model(model)
+
+    def load_favorite_models(self) -> None:
+        """加载常用模型"""
+        current_text: str = self.model_combo.currentText()
+
+        # 阻止信号重复触发on_model_changed
+        self.model_combo.blockSignals(True)
+
+        self.model_combo.clear()
+        favorite_models: list[str] = load_favorite_models()
+        self.model_combo.addItems(favorite_models)
+
+        # 恢复之前的选项
+        if current_text in favorite_models:
+            self.model_combo.setCurrentText(current_text)
+        elif self.agent.model in favorite_models:
+            self.model_combo.setCurrentText(self.agent.model)
+        elif favorite_models:
+            self.model_combo.setCurrentIndex(0)
+
+        self.model_combo.blockSignals(False)
+
+        # 如果模型选择在刷新后发生了变化，则手动同步到Agent
+        if self.model_combo.currentText() != self.agent.model:
+            self.on_model_changed(self.model_combo.currentText())
 
 
-class ToolsDialog(QtWidgets.QDialog):
+class ProfileDialog(QtWidgets.QDialog):
+    """智能体管理界面"""
+
+    def __init__(self, engine: AgentEngine, parent: QtWidgets.QWidget | None = None):
+        """"""
+        super().__init__(parent)
+
+        self.engine: AgentEngine = engine
+        self.profiles: dict[str, Profile] = {}
+
+        self.init_ui()
+        self.load_profiles()
+
+    def init_ui(self) -> None:
+        """"""
+        self.setWindowTitle("智能体配置管理")
+        self.setMinimumSize(1000, 600)
+
+        # 左侧列表
+        self.profile_list: QtWidgets.QListWidget = QtWidgets.QListWidget()
+        self.profile_list.itemClicked.connect(self.on_profile_selected)
+
+        # 右侧表单
+        self.name_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.prompt_text: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+
+        # 温度
+        self.temperature_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        temperature_validator: QtGui.QDoubleValidator = QtGui.QDoubleValidator(0.0, 2.0, 1)
+        temperature_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
+        self.temperature_line.setValidator(temperature_validator)
+        self.temperature_line.setPlaceholderText("可选，0.0-2.0之间，1位小数")
+
+        # 最大Token数
+        self.tokens_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        max_tokens_validator: QtGui.QIntValidator = QtGui.QIntValidator(1, 10_000_000)
+        self.tokens_line.setValidator(max_tokens_validator)
+        self.tokens_line.setPlaceholderText("可选，正整数")
+
+        self.iterations_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
+        self.iterations_spin.setRange(1, 200)
+        self.iterations_spin.setSingleStep(1)
+        self.iterations_spin.setValue(10)
+
+        # 工具列表
+        self.tool_tree: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
+        self.tool_tree.setHeaderHidden(True)
+        self.populate_tree()
+
+        # 中间区域表单
+        settings_form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+        settings_form.addRow("配置名称", self.name_line)
+        settings_form.addRow("系统提示词", self.prompt_text)
+        settings_form.addRow("温度", self.temperature_line)
+        settings_form.addRow("最大Token数", self.tokens_line)
+        settings_form.addRow("最大迭代次数", self.iterations_spin)
+
+        middle_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        middle_widget.setLayout(settings_form)
+
+        # 三栏分割器
+        splitter = QtWidgets.QSplitter()
+        splitter.addWidget(self.profile_list)
+        splitter.addWidget(middle_widget)
+        splitter.addWidget(self.tool_tree)
+        splitter.setSizes([200, 500, 300])
+
+        # 底部按钮
+        self.add_button: QtWidgets.QPushButton = QtWidgets.QPushButton("新建")
+        self.add_button.clicked.connect(self.new_profile)
+
+        self.save_button: QtWidgets.QPushButton = QtWidgets.QPushButton("保存")
+        self.save_button.clicked.connect(self.save_profile)
+
+        self.delete_button: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
+        self.delete_button.clicked.connect(self.delete_profile)
+
+        buttons_hbox = QtWidgets.QHBoxLayout()
+        buttons_hbox.addStretch()
+        buttons_hbox.addWidget(self.add_button)
+        buttons_hbox.addWidget(self.save_button)
+        buttons_hbox.addWidget(self.delete_button)
+
+        # 主布局
+        main_vbox = QtWidgets.QVBoxLayout()
+        main_vbox.addWidget(splitter)
+        main_vbox.addLayout(buttons_hbox)
+        self.setLayout(main_vbox)
+
+    def load_profiles(self) -> None:
+        """加载配置"""
+        self.profile_list.clear()
+
+        self.profiles = {p.name: p for p in self.engine.get_all_profiles()}
+
+        for profile in self.profiles.values():
+            item: QtWidgets.QListWidgetItem = QtWidgets.QListWidgetItem(profile.name, self.profile_list)
+            item.setData(QtCore.Qt.ItemDataRole.UserRole, profile.name)
+
+    def populate_tree(self) -> None:
+        """填充工具树"""
+        self.tool_tree.clear()
+
+        # 添加本地工具
+        local_tools: dict[str, ToolSchema] = self.engine._local_tools
+        if local_tools:
+            local_root = QtWidgets.QTreeWidgetItem(self.tool_tree, ["本地工具"])
+
+            module_tools: dict[str, list[ToolSchema]] = defaultdict(list)
+            for schema in local_tools.values():
+                module, _ = schema.name.split("_", 1)
+                module_tools[module].append(schema)
+
+            for module, schemas in sorted(module_tools.items()):
+                module_item = QtWidgets.QTreeWidgetItem(local_root, [module])
+                module_item.setFlags(
+                    module_item.flags()
+                    | QtCore.Qt.ItemFlag.ItemIsUserCheckable
+                    | QtCore.Qt.ItemFlag.ItemIsAutoTristate
+                )
+                module_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+
+                for schema in sorted(schemas, key=lambda s: s.name):
+                    tool_item = QtWidgets.QTreeWidgetItem(module_item, [schema.name])
+                    tool_item.setFlags(tool_item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                    tool_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+                    tool_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema.name)
+
+        # 添加MCP工具
+        mcp_tools: dict[str, ToolSchema] = self.engine._mcp_tools
+        if mcp_tools:
+            mcp_root = QtWidgets.QTreeWidgetItem(self.tool_tree, ["MCP工具"])
+
+            server_tools: dict[str, list[ToolSchema]] = defaultdict(list)
+            for schema in mcp_tools.values():
+                server, _ = schema.name.split("_", 1)
+                server_tools[server].append(schema)
+
+            for server, schemas in sorted(server_tools.items()):
+                server_item = QtWidgets.QTreeWidgetItem(mcp_root, [server])
+                server_item.setFlags(
+                    server_item.flags()
+                    | QtCore.Qt.ItemFlag.ItemIsUserCheckable
+                    | QtCore.Qt.ItemFlag.ItemIsAutoTristate
+                )
+                server_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+
+                for schema in sorted(schemas, key=lambda s: s.name):
+                    tool_item = QtWidgets.QTreeWidgetItem(server_item, [schema.name])
+                    tool_item.setFlags(tool_item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
+                    tool_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+                    tool_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema.name)
+
+        self.tool_tree.expandAll()
+
+    def new_profile(self) -> None:
+        """新建智能体配置"""
+        self.profile_list.clearSelection()
+
+        self.name_line.setReadOnly(False)
+        self.name_line.clear()
+        self.prompt_text.clear()
+
+        self.temperature_line.clear()
+        self.tokens_line.clear()
+        self.iterations_spin.setValue(10)
+
+        iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
+        while iterator.value():
+            item = iterator.value()
+            item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+            iterator += 1
+
+        self.name_line.setFocus()
+
+    def save_profile(self) -> None:
+        """保存智能体配置"""
+        name: str = self.name_line.text()
+        if not name:
+            QtWidgets.QMessageBox.warning(self, "错误", "名称不能为空！")
+            return
+
+        if name == default_profile.name:
+            QtWidgets.QMessageBox.warning(self, "错误", "默认智能体配置不能修改！")
+            return
+
+        prompt: str = self.prompt_text.toPlainText()
+        if not prompt:
+            QtWidgets.QMessageBox.warning(self, "错误", "系统提示词不能为空！")
+            return
+
+        temp_text: str = self.temperature_line.text()
+        temperature: float | None = float(temp_text) if temp_text else None
+
+        max_tokens_text: str = self.tokens_line.text()
+        max_tokens: int | None = int(max_tokens_text) if max_tokens_text else None
+
+        max_iterations: int = self.iterations_spin.value()
+
+        selected_tools: list[str] = []
+        iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
+        while iterator.value():
+            item: QtWidgets.QTreeWidgetItem = iterator.value()
+            if item.checkState(0) == QtCore.Qt.CheckState.Checked:
+                tool_name: str = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+                if tool_name:  # 工具项，不是分类
+                    selected_tools.append(tool_name)
+            iterator += 1
+
+        # 更新现有配置
+        if name in self.profiles:
+            profile: Profile = self.profiles[name]
+
+            profile.prompt = prompt
+            profile.tools = selected_tools
+            profile.temperature = temperature
+            profile.max_tokens = max_tokens
+            profile.max_iterations = max_iterations
+
+            self.engine.update_profile(profile)
+        # 创建新配置
+        else:
+            profile = Profile(
+                name=name,
+                prompt=prompt,
+                tools=selected_tools,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                max_iterations=max_iterations,
+            )
+            self.engine.add_profile(profile)
+
+        self.load_profiles()
+
+        QtWidgets.QMessageBox.information(self, "成功", f"{name} 智能体配置已保存！", QtWidgets.QMessageBox.StandardButton.Ok)
+
+    def delete_profile(self) -> None:
+        """删除智能体配置"""
+        item: QtWidgets.QListWidgetItem | None = self.profile_list.currentItem()
+        if not item:
+            return
+
+        profile_name: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        if profile_name == default_profile.name:
+            QtWidgets.QMessageBox.warning(self, "错误", "默认智能体配置不能删除！")
+            return
+
+        # 检查智能体依赖
+        agents: list[TaskAgent] = self.engine.get_all_agents()
+
+        dependent_agents: list[str] = [a.name for a in agents if a.profile.name == profile_name]
+
+        if dependent_agents:
+            msg: str = "无法删除，以下智能体正在使用该配置: \n" + "\n".join(dependent_agents)
+            QtWidgets.QMessageBox.warning(self, "删除失败", msg)
+            return
+
+        reply: QtWidgets.QMessageBox.StandardButton = QtWidgets.QMessageBox.question(
+            self,
+            "删除配置",
+            "确定要删除该智能体配置吗？",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.engine.delete_profile(profile_name)
+            self.load_profiles()
+            self.new_profile()
+
+    def on_profile_selected(self, item: QtWidgets.QListWidgetItem) -> None:
+        """显示选中智能体配置"""
+        self.name_line.setReadOnly(True)
+
+        profile_name: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
+        profile: Profile = self.profiles[profile_name]
+
+        self.name_line.setText(profile.name)
+        self.prompt_text.setPlainText(profile.prompt)
+
+        if profile.temperature is not None:
+            self.temperature_line.setText(str(profile.temperature))
+        else:
+            self.temperature_line.clear()
+
+        if profile.max_tokens is not None:
+            self.tokens_line.setText(str(profile.max_tokens))
+        else:
+            self.tokens_line.clear()
+
+        self.iterations_spin.setValue(profile.max_iterations)
+
+        # 取消选中所有工具项（包括父节点）
+        iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
+        while iterator.value():
+            tree_item: QtWidgets.QTreeWidgetItem = iterator.value()
+            tree_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+            iterator += 1
+
+        # 检查配置中的工具
+        iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
+        while iterator.value():
+            tool_item: QtWidgets.QTreeWidgetItem = iterator.value()
+            tool_name = tool_item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+            if tool_name in profile.tools:
+                tool_item.setCheckState(0, QtCore.Qt.CheckState.Checked)
+            iterator += 1
+
+
+class ToolDialog(QtWidgets.QDialog):
     """显示可用工具的对话框"""
 
     def __init__(self, engine: AgentEngine, parent: QtWidgets.QWidget | None = None) -> None:
@@ -389,7 +747,7 @@ class ToolsDialog(QtWidgets.QDialog):
 
             module_tools: dict[str, list[ToolSchema]] = defaultdict(list)
             for schema in local_tools.values():
-                module, _ = schema.name.split(".", 1)
+                module, _ = schema.name.split("_", 1)
                 module_tools[module].append(schema)
 
             for module, schemas in sorted(module_tools.items()):
@@ -398,7 +756,7 @@ class ToolsDialog(QtWidgets.QDialog):
                     ["", module, ""]
                 )
                 for schema in sorted(schemas, key=lambda s: s.name):
-                    _, name = schema.name.split(".", 1)
+                    _, name = schema.name.split("_", 1)
                     item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                         module_item,
                         ["", "", name]
@@ -427,7 +785,7 @@ class ToolsDialog(QtWidgets.QDialog):
                 )
                 for schema in sorted(schemas, key=lambda s: s.name):
                     _, name = schema.name.split("_", 1)
-                    item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                    item = QtWidgets.QTreeWidgetItem(
                         server_item,
                         ["", "", name]
                     )
@@ -463,7 +821,7 @@ class ToolsDialog(QtWidgets.QDialog):
         menu.exec(self.tree_widget.viewport().mapToGlobal(pos))
 
 
-class ModelsDialog(QtWidgets.QDialog):
+class ModelDialog(QtWidgets.QDialog):
     """显示可用模型的对话框"""
 
     def __init__(self, engine: AgentEngine, parent: QtWidgets.QWidget | None = None) -> None:
@@ -479,16 +837,67 @@ class ModelsDialog(QtWidgets.QDialog):
         self.setWindowTitle("模型浏览器")
         self.setMinimumSize(800, 600)
 
+        # 左侧所有模型树
         headers: list[str] = ["厂商", "模型"]
         self.tree_widget: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
         self.tree_widget.setColumnCount(len(headers))
         self.tree_widget.setHeaderLabels(headers)
         self.tree_widget.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree_widget.customContextMenuRequested.connect(self.show_context_menu)
+        self.tree_widget.itemDoubleClicked.connect(self.add_model)
 
+        # 右侧常用模型列表
+        self.favorite_list: QtWidgets.QListWidget = QtWidgets.QListWidget()
+        self.favorite_list.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+        self.favorite_list.customContextMenuRequested.connect(self.show_favorite_context_menu)
+
+        # 中间按钮
+        add_button: QtWidgets.QPushButton = QtWidgets.QPushButton(">")
+        add_button.clicked.connect(self.add_model)
+        add_button.setFixedWidth(40)
+
+        remove_button: QtWidgets.QPushButton = QtWidgets.QPushButton("<")
+        remove_button.clicked.connect(self.remove_model)
+        remove_button.setFixedWidth(40)
+
+        button_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        button_vbox.addStretch()
+        button_vbox.addWidget(add_button)
+        button_vbox.addWidget(remove_button)
+        button_vbox.addStretch()
+
+        # 分割器
+        splitter: QtWidgets.QSplitter = QtWidgets.QSplitter()
+        splitter.addWidget(self.tree_widget)
+
+        button_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        button_widget.setLayout(button_vbox)
+        splitter.addWidget(button_widget)
+
+        splitter.addWidget(self.favorite_list)
+        splitter.setSizes([350, 50, 400])
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 4)
+
+        # 底部按钮
+        self.save_button: QtWidgets.QPushButton = QtWidgets.QPushButton("保存")
+        self.save_button.clicked.connect(self.save_settings)
+
+        buttons_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        buttons_hbox.addStretch()
+        buttons_hbox.addWidget(self.save_button)
+
+        # 主布局
         vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
-        vbox.addWidget(self.tree_widget)
+        vbox.addWidget(splitter)
+        vbox.addLayout(buttons_hbox)
 
+        self.populate_models()
+        self.load_settings()
+
+    def populate_models(self) -> None:
+        """填充所有模型树"""
         models: list[str] = self._engine.list_models()
 
         separator: str | None = self._detect_separator(models)
@@ -499,7 +908,7 @@ class ModelsDialog(QtWidgets.QDialog):
                 parts: list[str] = name.split(separator, 1)
                 if len(parts) == 2:
                     vendor, model = parts
-                    vendor_models[vendor].append(model)
+                    vendor_models[vendor].append(name)
                 else:
                     vendor_models["其他"].append(name)
         else:
@@ -511,13 +920,73 @@ class ModelsDialog(QtWidgets.QDialog):
                 self.tree_widget,
                 [vendor, ""]
             )
-            for model in sorted(model_list):
-                QtWidgets.QTreeWidgetItem(vendor_item, ["", model])
+            for model_name in sorted(model_list):
+                _, model_display = model_name.split(separator, 1)
+                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(vendor_item, ["", model_display])
+                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, model_name)
 
         self.tree_widget.expandAll()
 
         for i in range(self.tree_widget.columnCount()):
             self.tree_widget.resizeColumnToContents(i)
+
+    def load_settings(self) -> None:
+        """加载配置"""
+        self.favorite_list.clear()
+        favorite_models: list[str] = load_favorite_models()
+        self.favorite_list.addItems(favorite_models)
+
+    def save_settings(self) -> None:
+        """保存配置"""
+        models: list[str] = []
+        for i in range(self.favorite_list.count()):
+            item: QtWidgets.QListWidgetItem = self.favorite_list.item(i)
+            models.append(item.text())
+
+        save_favorite_models(models)
+        QtWidgets.QMessageBox.information(self, "成功", "常用模型配置已保存！", QtWidgets.QMessageBox.StandardButton.Ok)
+
+        self.close()
+
+    def add_model(self) -> None:
+        """添加模型到常用列表"""
+        item: QtWidgets.QTreeWidgetItem = self.tree_widget.currentItem()
+        if not item:
+            return
+
+        model_name: str | None = item.data(0, QtCore.Qt.ItemDataRole.UserRole)
+        if not model_name:
+            return
+
+        current_models: list[str] = [
+            self.favorite_list.item(i).text()
+            for i in range(self.favorite_list.count())
+        ]
+        if model_name not in current_models:
+            self.favorite_list.addItem(model_name)
+
+    def remove_model(self) -> None:
+        """从常用列表移除模型"""
+        item: QtWidgets.QListWidgetItem = self.favorite_list.currentItem()
+        if item:
+            row: int = self.favorite_list.row(item)
+            self.favorite_list.takeItem(row)
+
+    def move_model_up(self) -> None:
+        """上移常用模型"""
+        current_row: int = self.favorite_list.currentRow()
+        if current_row > 0:
+            item: QtWidgets.QListWidgetItem = self.favorite_list.takeItem(current_row)
+            self.favorite_list.insertItem(current_row - 1, item)
+            self.favorite_list.setCurrentRow(current_row - 1)
+
+    def move_model_down(self) -> None:
+        """下移常用模型"""
+        current_row: int = self.favorite_list.currentRow()
+        if 0 <= current_row < self.favorite_list.count() - 1:
+            item: QtWidgets.QListWidgetItem = self.favorite_list.takeItem(current_row)
+            self.favorite_list.insertItem(current_row + 1, item)
+            self.favorite_list.setCurrentRow(current_row + 1)
 
     def show_context_menu(self, pos: QtCore.QPoint) -> None:
         """显示右键菜单"""
@@ -530,6 +999,27 @@ class ModelsDialog(QtWidgets.QDialog):
         collapse_action.triggered.connect(self.tree_widget.collapseAll)
 
         menu.exec(self.tree_widget.viewport().mapToGlobal(pos))
+
+    def show_favorite_context_menu(self, pos: QtCore.QPoint) -> None:
+        """显示常用列表右键菜单"""
+        item: QtWidgets.QListWidgetItem | None = self.favorite_list.itemAt(pos)
+        if not item:
+            return
+
+        menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
+
+        up_action: QtGui.QAction = menu.addAction("上移")
+        up_action.triggered.connect(self.move_model_up)
+
+        down_action: QtGui.QAction = menu.addAction("下移")
+        down_action.triggered.connect(self.move_model_down)
+
+        menu.addSeparator()
+
+        remove_action: QtGui.QAction = menu.addAction("移除")
+        remove_action.triggered.connect(self.remove_model)
+
+        menu.exec(self.favorite_list.viewport().mapToGlobal(pos))
 
     def _detect_separator(self, models: list[str]) -> str | None:
         """检测模型名称中的分隔符"""
@@ -547,5 +1037,4 @@ class ModelsDialog(QtWidgets.QDialog):
         if not counts:
             return None
 
-        return max(counts, key=counts.get)
-
+        return max(counts, key=lambda x: counts[x])

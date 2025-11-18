@@ -1,7 +1,6 @@
 import traceback
 
-from ..engine import AgentEngine
-from ..object import Request
+from ..agent import TaskAgent
 from .qt import QtCore
 
 
@@ -23,26 +22,35 @@ class StreamWorker(QtCore.QRunnable):
     """
     在线程池中处理流式网关请求的Worker
     """
-    def __init__(self, engine: AgentEngine, request: Request) -> None:
+    def __init__(self, agent: TaskAgent, prompt: str) -> None:
         """构造函数"""
         super().__init__()
 
-        self.engine: AgentEngine = engine
-        self.request: Request = request
+        self.agent: TaskAgent = agent
+        self.prompt: str = prompt
         self.signals: StreamSignals = StreamSignals()
+        self.stopped: bool = False
+
+    def stop(self) -> None:
+        """停止流式请求"""
+        self.stopped = True
 
     def run(self) -> None:
         """处理数据流"""
         try:
-            for delta in self.engine.stream(
-                messages=self.request.messages,
-                model=self.request.model,
-                temperature=self.request.temperature,
-                max_tokens=self.request.max_tokens,
-            ):
-                if delta.content:
+            for delta in self.agent.stream(self.prompt):
+                # 用户手动停止
+                if self.stopped:
+                    # 中止流式生成，保存已生成的部分内容
+                    self.agent.abort_stream()
+                    break
+                # 收到数据块
+                elif delta.content:
                     self.signals.delta.emit(delta.content)
         except Exception:
+            # 中止流式生成，保存已生成的部分内容
+            self.agent.abort_stream()
+
             error_msg: str = traceback.format_exc()
             self.signals.error.emit(error_msg)
         finally:
