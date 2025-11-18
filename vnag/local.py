@@ -32,7 +32,11 @@ class LocalTool:
 
         module: str = function.__module__.split(".")[-1]
 
-        self.name: str = f"{module}.{name}"
+        # 使用"-"替换"_"，和MCP保持一致
+        name = name.replace("_", "-")
+        module = module.replace("_", "-")
+
+        self.name: str = f"{module}_{name}"
         self.description: str = description
         self.parameters: dict[str, Any] = parameters
         self.function: Callable[..., Any] = function
