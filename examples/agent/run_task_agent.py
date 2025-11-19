@@ -78,7 +78,7 @@ def main() -> None:
         prompt="你是一个智能的任务型助理，能够根据用户需求调用本地工具和MCP工具来完成任务。",
         tools=[
             "day_of_week",                  # 本地工具：获取星期几
-            "file-tools_list-directory",    # MCP工具：列出目录（filesystem服务器）
+            "filesystem_list_directory",    # MCP工具：列出目录（filesystem服务器）
         ],
         temperature=0,
         max_tokens=10000,
