@@ -16,6 +16,19 @@ if TYPE_CHECKING:
     from .engine import AgentEngine
 
 
+# 构建总结请求的提示词
+TITLE_PROMPT: str = """
+请根据以上对话内容，生成一个简洁的标题来概括这次会话的主题。
+
+要求：
+1. 标题应该准确反映对话的核心内容和主要议题
+2. 标题长度不超过{max_length}个字
+3. 使用简洁、专业、易懂的语言
+4. 直接返回标题文本，不需要引号、标点或额外说明
+5. 如果对话涉及多个话题，提取最主要的主题
+"""
+
+
 class TaskAgent:
     """
     标准的、可直接使用的任务智能体。
@@ -297,3 +310,35 @@ class TaskAgent:
         self.session.model = model
 
         self._save_session()
+
+    def generate_title(self, max_length: int = 20) -> str:
+        """生成会话标题"""
+        # 复制会话消息并添加总结请求
+        messages: list[Message] = self.session.messages.copy()
+        messages.append(Message(role=Role.USER, content=TITLE_PROMPT.format(max_length=max_length)))
+
+        # 构造请求（使用较低温度以获得更稳定的结果）
+        request: Request = Request(
+            model=self.session.model,
+            messages=messages,
+            tool_schemas=[],
+            temperature=0.5,
+            max_tokens=max(max_length * 3, 50)  # 设置为 max_length 的 3 倍，留出足够的余量
+        )
+
+        # 调用 LLM 生成标题
+        full_content: str = ""
+        for delta in self.engine.stream(request):
+            if delta.content:
+                full_content += delta.content
+
+        # 返回生成的标题（去除首尾空白和可能的引号）
+        title: str = full_content.strip()
+
+        # 移除可能的引号
+        for quote in ['"', "'", '"', '"', ''', ''']:
+            if title.startswith(quote) and title.endswith(quote):
+                title = title[1:-1]
+                break
+
+        return title

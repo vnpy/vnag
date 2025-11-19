@@ -2,6 +2,7 @@ import json
 import os
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from typing import cast
 
 from ..constant import Role
@@ -139,6 +140,7 @@ class AgentWidget(QtWidgets.QWidget):
         engine: AgentEngine,
         agent: TaskAgent,
         models: list[str],
+        update_list: Callable[[], None],
         parent: QtWidgets.QWidget | None = None
     ) -> None:
         """构造函数"""
@@ -148,6 +150,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.agent: TaskAgent = agent
         self.models: list[str] = models
         self.worker: StreamWorker | None = None
+        self.update_list: Callable[[], None] = update_list
 
         self.init_ui()
         self.load_favorite_models()
@@ -279,6 +282,7 @@ class AgentWidget(QtWidgets.QWidget):
         worker.signals.delta.connect(self.on_stream_delta)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)
+        worker.signals.title.connect(self.on_title_generated)
 
         self.worker = worker
         QtCore.QThreadPool.globalInstance().start(worker)
@@ -349,6 +353,13 @@ class AgentWidget(QtWidgets.QWidget):
         self.stop_button.setVisible(False)
 
         QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+
+    def on_title_generated(self, title: str) -> None:
+        """处理标题生成完成"""
+        self.agent.rename(title)
+
+        # 通知主窗口更新列表
+        self.update_list()
 
     def on_model_changed(self, model: str) -> None:
         """处理模型变更"""

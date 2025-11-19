@@ -1,6 +1,7 @@
 import traceback
 
 from ..agent import TaskAgent
+from ..constant import Role
 from .qt import QtCore
 
 
@@ -16,6 +17,9 @@ class StreamSignals(QtCore.QObject):
 
     # 流式响应错误
     error: QtCore.Signal = QtCore.Signal(str)
+
+    # 标题生成完成
+    title: QtCore.Signal = QtCore.Signal(str)
 
 
 class StreamWorker(QtCore.QRunnable):
@@ -47,6 +51,13 @@ class StreamWorker(QtCore.QRunnable):
                 # 收到数据块
                 elif delta.content:
                     self.signals.delta.emit(delta.content)
+
+            # 流式响应完成后，检查是否需要自动生成标题
+            if not self.stopped and self._should_generate_title():
+                title: str = self.agent.generate_title(max_length=10)
+                if title:
+                    self.signals.title.emit(title)
+
         except Exception:
             # 中止流式生成，保存已生成的部分内容
             self.agent.abort_stream()
@@ -55,3 +66,19 @@ class StreamWorker(QtCore.QRunnable):
             self.signals.error.emit(error_msg)
         finally:
             self.signals.finished.emit()
+
+    def _should_generate_title(self) -> bool:
+        """判断是否需要自动生成标题"""
+        # 检查是否还是默认名称
+        if self.agent.name != "默认会话":
+            return False
+
+        # 检查是否完成了首次对话（系统消息 + 用户消息 + 助手消息 = 3条）
+        if len(self.agent.messages) < 3:
+            return False
+
+        # 确保最后一条是助手消息
+        if self.agent.messages[-1].role != Role.ASSISTANT:
+            return False
+
+        return True

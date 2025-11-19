@@ -251,7 +251,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def add_agent_widget(self, agent: TaskAgent) -> None:
         """添加会话窗口"""
-        widget: AgentWidget = AgentWidget(self.engine, agent, self.models)
+        widget: AgentWidget = AgentWidget(
+            engine=self.engine,
+            agent=agent,
+            models=self.models,
+            update_list=self.update_agent_list
+        )
         self.stacked_widget.addWidget(widget)
         self.agent_widgets[agent.id] = widget
 
