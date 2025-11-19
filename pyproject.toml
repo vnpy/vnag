@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
     # 核心框架
     "pydantic",
+    "loguru",
     # AI服务
     "openai",
     "anthropic",

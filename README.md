@@ -1,14 +1,14 @@
 # VNAG - Your Agent, Your Data.
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-0.0.1-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-0.2.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
     <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnag.svg?color=orange"/>
 </p>
 
 <p align="center">
-  <img src="https://vnag.oss-cn-shanghai.aliyuncs.com/vnag_0.1.0.png" width="800" alt="VNAG Screenshot">
+  <img src="https://vnag.oss-cn-shanghai.aliyuncs.com/vnag_0.2.0.png" width="800" alt="VNAG Screenshot">
 </p>
 
 VeighNa Agent (vnag) 是一款专为AI Agent开发而设计的Python框架，致力于为开发者提供简洁、强大且易于扩展的Agent构建工具。秉承"Your Agent, Your Data"的理念，vnag让您能够完全掌控自己的AI Agent和数据流程。
@@ -19,10 +19,10 @@ vnag是VeighNa团队推出的全新AI Agent开发框架，旨在降低AI Agent�
 
 ### 核心特点
 
-- **🤖 Agent 引擎**: 强大的 Agent 引擎，负责对话流程编排和多轮工具调用。
+- **🤖 可定制智能体**: 轻松创建和管理多个智能体，每个都可拥有独立的角色（系统提示词）、能力（工具集）和行为模式（模型参数）。
 - **🔧 双核工具体系**: 同时支持简单易用的本地函数工具和功能强大的 MCP 远程工具。
 - **🔌 统一API接口**：支持OpenAI兼容的各种大模型API
-- **🎨 现代化UI**：基于PySide6的美观用户界面
+- **🎨 现代化UI**：基于PySide6的图形化界面，不仅是聊天窗口，更是强大的智能体调试和管理工具。
 - **📝 智能对话**：支持Markdown渲染的聊天界面
 - **💾 数据管控**：本地化的对话历史和配置管理
 - **🧩 易于扩展**：清晰的模块化架构，便于二次开发
@@ -93,6 +93,28 @@ python examples/ui/run_chat_ui.py
 
 现在，您应该能看到一个美观的聊天窗口了！恭喜您成功运行了第一个 Agent！
 
+运行后，您将看到一个完整的 Agent 管理界面。在这里，您可以创建和配置自己的智能体（Agent），定义它的系统提示词（System Prompt）、选择需要使用的工具、并调整模型参数（如温度）等。
+
+### 自定义您的 Agent
+
+vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定义和管理多个具有不同功能和行为的智能体。
+
+**核心概念:**
+
+- **Agent (智能体)**: 一个独立的智能体实例，拥有自己的对话历史和配置。
+- **Profile (配置)**: 定义了 Agent 行为的配置模板，包括：
+  - **系统提示词 (Prompt)**: 设定 Agent 的角色和行为准则。
+  - **工具集 (Tools)**: 从本地工具和MCP工具中选择 Agent 可以使用的工具。
+  - **模型参数**: 如 `temperature`, `max_tokens` 等，用于控制模型的生成行为。
+
+**两种方式来自定义 Agent:**
+
+1.  **通过UI界面（推荐）**:
+    运行 `python examples/ui/run_chat_ui.py` 启动图形化界面。在界面中，您可以直观地创建和管理 Profile，然后基于选定的 Profile 创建 Agent 实例进行对话。
+
+2.  **通过代码**:
+    `examples/agent/run_task_agent.py` 脚本详细演示了如何通过代码来创建 `Profile` 对象，并使用 `AgentEngine` 来创建一个 `TaskAgent` 实例。这为您提供了更大的灵活性，可以将 vnag 集成到您自己的应用程序中。
+
 ### 更多示例
 
 通过 `examples` 目录下的丰富示例，您可以快速了解和掌握 vnag 框架的各项功能。
@@ -155,19 +177,19 @@ python examples/ui/run_chat_ui.py
 
 ### Agent引擎
 
-- 功能：展示 Agent 引擎如何编排对话流和工具调用。
+- 功能：演示如何通过代码创建和配置 `TaskAgent`。该示例展示了如何定义 `Profile`（包含系统提示词、工具、模型参数），并使用 `AgentEngine` 来驱动一个智能体完成调用本地工具和MCP工具的任务。
 - 示例：
   ```bash
-  # 运行 Agent 引擎
+  # 运行任务型 Agent
   python examples/agent/run_task_agent.py
   ```
 
 ### UI 界面
 
-- 功能：启动一个完整的图形化聊天界面。
+- 功能：启动一个功能强大的图形化智能体管理和调试界面。您可以在此创建和管理不同的智能体配置（Profile），并与基于这些配置创建的智能体（Agent）进行交互。
 - 示例：
   ```bash
-  # 运行聊天UI
+  # 运行 Agent 管理UI
   python examples/ui/run_chat_ui.py
   ```
 

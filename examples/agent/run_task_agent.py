@@ -1,7 +1,7 @@
 """
-本脚本用于演示和测试 AgentEngine 的核心功能。
+本脚本用于演示和测试 AgentEngine 和 TaskAgent 的核心功能。
 
-它会初始化一个 Agent 引擎，并向其发送两个不同的用户请求， 分别用于触发本地工具和MCP工具的调用。
+它会初始化一个 Agent 引擎，并创建一个任务型智能体，然后向其发送两个不同的用户请求， 分别用于触发本地工具和MCP工具的调用。
 
 请确保您已在.vnag/connect_openai.json文件中添加了接口配置，同时在.vnag/mcp_config.json文件中添加了MCP工具配置。
 """
