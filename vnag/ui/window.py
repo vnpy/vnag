@@ -80,7 +80,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """
         self.session_list.setStyleSheet(stylesheet)
 
-        self.session_list.itemClicked.connect(self.on_item_clicked)
+        self.session_list.currentItemChanged.connect(self.on_current_item_changed)
         self.session_list.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_list.customContextMenuRequested.connect(self.on_menu_requested)
         self.session_list.installEventFilter(self)
@@ -116,11 +116,15 @@ class MainWindow(QtWidgets.QMainWindow):
         sys_menu: QtWidgets.QMenu = menu_bar.addMenu("系统")
         sys_menu.addAction("退出", self.close)
 
+        session_menu: QtWidgets.QMenu = menu_bar.addMenu("会话")
+        session_menu.addAction("新建会话", self.new_agent_widget)
+        session_menu.addAction("重命名会话", self.rename_current_widget)
+        session_menu.addAction("删除会话", self.delete_current_widget)
+
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
-        function_menu.addAction("新建会话", self.new_agent_widget)
-        function_menu.addAction("管理智能体", self.show_profile_dialog)
-        function_menu.addAction("查看工具", self.show_tool_dialog)
-        function_menu.addAction("查看模型", self.show_model_dialog)
+        function_menu.addAction("智能体配置", self.show_profile_dialog)
+        function_menu.addAction("工具浏览器", self.show_tool_dialog)
+        function_menu.addAction("模型浏览器", self.show_model_dialog)
 
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
@@ -152,6 +156,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_profile_dialog(self) -> None:
         """显示智能体管理界面"""
         dialog: ProfileDialog = ProfileDialog(self.engine, self)
+        dialog.setWindowState(QtCore.Qt.WindowState.WindowMaximized)
         dialog.exec()
 
         # 重新加载智能体配置
@@ -160,11 +165,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_tool_dialog(self) -> None:
         """显示工具"""
         dialog: ToolDialog = ToolDialog(self.engine, self)
+        dialog.setWindowState(QtCore.Qt.WindowState.WindowMaximized)
         dialog.exec()
 
     def show_model_dialog(self) -> None:
         """显示模型"""
         dialog: ModelDialog = ModelDialog(self.engine, self)
+        dialog.setWindowState(QtCore.Qt.WindowState.WindowMaximized)
         dialog.exec()
 
         for agent_widget in self.agent_widgets.values():
@@ -194,14 +201,20 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_agent_list(self) -> None:
         """更新会话列表UI"""
+        # 阻塞信号，避免触发递归
+        self.session_list.blockSignals(True)
+
+        # 清空列表
         self.session_list.clear()
 
+        # 排序会话（新会话在前）
         sorted_widgets = sorted(
             self.agent_widgets.values(),
             key=lambda w: w.agent.id,
             reverse=True
         )
 
+        # 添加会话到列表
         for widget in sorted_widgets:
             agent: TaskAgent = widget.agent
             item: QtWidgets.QListWidgetItem = QtWidgets.QListWidgetItem(agent.name)
@@ -210,6 +223,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
             if agent.id == self.current_id:
                 self.session_list.setCurrentItem(item)
+
+        # 恢复信号
+        self.session_list.blockSignals(False)
 
     def new_agent_widget(self) -> None:
         """创建新会话"""
@@ -295,6 +311,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
             self.update_agent_list()
 
+    def rename_current_widget(self) -> None:
+        """重命名当前选中的会话"""
+        if not self.current_id:
+            QtWidgets.QMessageBox.warning(self, "警告", "没有选中的会话")
+            return
+
+        self.rename_agent_widget(self.current_id)
+
+    def delete_current_widget(self) -> None:
+        """删除当前选中的会话"""
+        if not self.current_id:
+            QtWidgets.QMessageBox.warning(self, "警告", "没有选中的会话")
+            return
+
+        self.delete_agent_widget(self.current_id)
+
     def show_about(self) -> None:
         """显示关于"""
         QtWidgets.QMessageBox.information(
@@ -326,10 +358,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return super().eventFilter(obj, event)
 
-    def on_item_clicked(self, item: QtWidgets.QListWidgetItem) -> None:
-        """处理列表项点击事件"""
-        session_id: str = item.data(QtCore.Qt.ItemDataRole.UserRole)
-        self.switch_agent_widget(session_id)
+    def on_current_item_changed(
+        self,
+        current: QtWidgets.QListWidgetItem | None,
+        previous: QtWidgets.QListWidgetItem | None
+    ) -> None:
+        """处理当前列表项改变事件（支持键盘导航）"""
+        if current:
+            session_id: str = current.data(QtCore.Qt.ItemDataRole.UserRole)
+            self.switch_agent_widget(session_id)
 
     def on_menu_requested(self, pos: QtCore.QPoint) -> None:
         """显示会话的右键菜单"""

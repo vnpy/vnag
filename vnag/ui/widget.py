@@ -257,7 +257,7 @@ class AgentWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(
                 self,
                 "模型未选择",
-                "请先前往【主菜单-查看-模型浏览器】配置常用模型"
+                "请先在【菜单栏-功能-模型浏览器】配置常用模型"
             )
             return
 
@@ -396,7 +396,7 @@ class ProfileDialog(QtWidgets.QDialog):
 
     def init_ui(self) -> None:
         """"""
-        self.setWindowTitle("智能体配置管理")
+        self.setWindowTitle("智能体配置")
         self.setMinimumSize(1000, 600)
 
         # 左侧列表
@@ -673,20 +673,19 @@ class ProfileDialog(QtWidgets.QDialog):
 
         self.iterations_spin.setValue(profile.max_iterations)
 
-        # 取消选中所有工具项（包括父节点）
-        iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
-        while iterator.value():
-            tree_item: QtWidgets.QTreeWidgetItem = iterator.value()
-            tree_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
-            iterator += 1
-
-        # 检查配置中的工具
+        # 只操作叶子节点（工具项），让AutoTristate自动更新父节点
         iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
         while iterator.value():
             tool_item: QtWidgets.QTreeWidgetItem = iterator.value()
             tool_name = tool_item.data(0, QtCore.Qt.ItemDataRole.UserRole)
-            if tool_name in profile.tools:
-                tool_item.setCheckState(0, QtCore.Qt.CheckState.Checked)
+
+            # 只处理有UserRole数据的叶子节点（工具项）
+            if tool_name:
+                if tool_name in profile.tools:
+                    tool_item.setCheckState(0, QtCore.Qt.CheckState.Checked)
+                else:
+                    tool_item.setCheckState(0, QtCore.Qt.CheckState.Unchecked)
+
             iterator += 1
 
 
@@ -860,10 +859,21 @@ class ModelDialog(QtWidgets.QDialog):
         remove_button.clicked.connect(self.remove_model)
         remove_button.setFixedWidth(40)
 
+        up_button: QtWidgets.QPushButton = QtWidgets.QPushButton("↑")
+        up_button.clicked.connect(self.move_model_up)
+        up_button.setFixedWidth(40)
+
+        down_button: QtWidgets.QPushButton = QtWidgets.QPushButton("↓")
+        down_button.clicked.connect(self.move_model_down)
+        down_button.setFixedWidth(40)
+
         button_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         button_vbox.addStretch()
         button_vbox.addWidget(add_button)
         button_vbox.addWidget(remove_button)
+        button_vbox.addSpacing(20)
+        button_vbox.addWidget(up_button)
+        button_vbox.addWidget(down_button)
         button_vbox.addStretch()
 
         # 分割器
@@ -872,6 +882,7 @@ class ModelDialog(QtWidgets.QDialog):
 
         button_widget: QtWidgets.QWidget = QtWidgets.QWidget()
         button_widget.setLayout(button_vbox)
+        button_widget.setFixedWidth(60)
         splitter.addWidget(button_widget)
 
         splitter.addWidget(self.favorite_list)
