@@ -139,7 +139,6 @@ class AgentWidget(QtWidgets.QWidget):
         self,
         engine: AgentEngine,
         agent: TaskAgent,
-        models: list[str],
         update_list: Callable[[], None],
         parent: QtWidgets.QWidget | None = None
     ) -> None:
@@ -148,7 +147,6 @@ class AgentWidget(QtWidgets.QWidget):
 
         self.engine: AgentEngine = engine
         self.agent: TaskAgent = agent
-        self.models: list[str] = models
         self.worker: StreamWorker | None = None
         self.update_list: Callable[[], None] = update_list
 

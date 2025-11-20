@@ -10,9 +10,12 @@ from .utility import get_folder_path
 # 配置全局日志记录器
 logger.remove()
 
+# 配置默认的 extra 值，避免其他模块使用 logger 时缺少 profile_name
+logger.configure(extra={"profile_name": "General"})
+
 logger.add(
     sys.stdout,
-    level="DEBUG",
+    level="INFO",
     format=(
         "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
         "<level>{level: <8}</level> | "

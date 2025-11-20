@@ -111,8 +111,8 @@ class LocalManager:
         try:
             result: Any = tool.function(**arguments)
             return str(result)
-        except Exception as e:
-            return f"Error executing tool [{tool_name}]: {str(e)}"
+        except Exception:
+            return f"Error executing tool [{tool_name}]: {traceback.format_exc()}"
 
 
 def convert_python_type(python_type: type[Any]) -> str:

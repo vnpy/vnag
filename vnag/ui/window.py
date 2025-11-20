@@ -254,7 +254,6 @@ class MainWindow(QtWidgets.QMainWindow):
         widget: AgentWidget = AgentWidget(
             engine=self.engine,
             agent=agent,
-            models=self.models,
             update_list=self.update_agent_list
         )
         self.stacked_widget.addWidget(widget)

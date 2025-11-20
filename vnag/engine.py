@@ -13,7 +13,7 @@ from .object import (
     Session
 )
 from .mcp import McpManager
-from .local import LocalManager
+from .local import LocalManager, LocalTool
 from .agent import Profile, TaskAgent
 from .utility import PROFILE_DIR, SESSION_DIR
 
@@ -172,6 +172,12 @@ class AgentEngine:
     def get_all_agents(self) -> list[TaskAgent]:
         """获取所有智能体"""
         return list(self._agents.values())
+
+    def register_tool(self, tool: LocalTool) -> None:
+        """注册本地工具函数"""
+        self._local_manager.register_tool(tool)
+
+        self._local_tools[tool.name] = tool.get_schema()
 
     def get_tool_schemas(self, tools: list[str] | None = None) -> list[ToolSchema]:
         """获取所有工具的Schema"""
