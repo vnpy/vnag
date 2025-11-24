@@ -333,7 +333,7 @@ class TaskAgent:
             messages=messages,
             tool_schemas=[],
             temperature=0.5,
-            max_tokens=max(max_length * 3, 50)  # 设置为 max_length 的 3 倍，留出足够的余量
+            max_tokens=self.profile.max_tokens
         )
 
         # 调用 LLM 生成标题

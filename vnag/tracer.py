@@ -7,22 +7,34 @@ from .object import Request, Delta, Message, ToolCall, ToolResult
 from .utility import get_folder_path
 
 
-# 配置全局日志记录器
-logger.remove()
+# 使用模块级变量记录是否已配置
+_logger_configured = False
 
-# 配置默认的 extra 值，避免其他模块使用 logger 时缺少 profile_name
-logger.configure(extra={"profile_name": "General"})
 
-logger.add(
-    sys.stdout,
-    level="INFO",
-    format=(
-        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-        "<level>{level: <8}</level> | "
-        "<cyan>{extra[profile_name]}</cyan> | "
-        "<level>{message}</level>"
+def _configure_logger() -> None:
+    """配置 vnag 专用的 logger，只执行一次"""
+    global _logger_configured
+
+    if _logger_configured:
+        return
+
+    # 移除 loguru 默认的 handler (ID=0)，避免 DEBUG 日志输出到 stderr
+    logger.remove(0)
+
+    # 添加 stdout handler，只处理带有 vnag_module 标记的日志
+    logger.add(
+        sys.stdout,
+        level="INFO",
+        filter=lambda record: record["extra"].get("vnag_module") is True,
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{extra[profile_name]}</cyan> | "
+            "<level>{message}</level>"
+        )
     )
-)
+
+    _logger_configured = True
 
 
 class LogTracer:
@@ -35,9 +47,14 @@ class LogTracer:
         self.session_id: str = session_id
         self.profile_name: str = profile_name
 
+        # 配置全局 handler
+        _configure_logger()
+
+        # 绑定上下文，添加 vnag_module 标记用于隔离
         self.logger = logger.bind(
             session_id=self.session_id,
-            profile_name=self.profile_name
+            profile_name=self.profile_name,
+            vnag_module=True  # 用于 filter 识别，避免与其他库冲突
         )
 
         log_path: Path = get_folder_path("log")
@@ -47,7 +64,10 @@ class LogTracer:
         logger.add(
             file_path,
             level="DEBUG",
-            filter=lambda record: record["extra"].get("session_id") == self.session_id,
+            filter=lambda record: (
+                record["extra"].get("vnag_module") is True                  # 确保是 vnag 模块的日志
+                and record["extra"].get("session_id") == self.session_id    # 确保是当前会话的日志
+            ),
             format=(
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
                 "{level: <8} | "
