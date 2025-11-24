@@ -34,11 +34,18 @@ class TaskAgent:
     标准的、可直接使用的任务智能体。
     """
 
-    def __init__(self, engine: "AgentEngine", profile: Profile, session: Session):
+    def __init__(
+        self,
+        engine: "AgentEngine",
+        profile: Profile,
+        session: Session,
+        save: bool = False
+    ) -> None:
         """构造函数"""
         self.engine: AgentEngine = engine
         self.profile: Profile = profile
         self.session: Session = session
+        self.save: bool = save
 
         self.tracer: LogTracer = LogTracer(
             session_id=self.session.id,
@@ -61,6 +68,9 @@ class TaskAgent:
 
     def _save_session(self) -> None:
         """保存会话状态到文件"""
+        if not self.save:
+            return
+
         data: dict = self.session.model_dump()
         file_path: Path = SESSION_DIR.joinpath(f"{self.session.id}.json")
 

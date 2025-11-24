@@ -87,7 +87,7 @@ class AgentEngine:
                 data: dict = json.load(f)
                 session: Session = Session.model_validate(data)
                 profile: Profile = self._profiles[session.profile]
-                agent: TaskAgent = TaskAgent(self, profile, session)
+                agent: TaskAgent = TaskAgent(self, profile, session, save=True)
                 self._agents[session.id] = agent
 
     def add_profile(self, profile: Profile) -> bool:
@@ -132,7 +132,7 @@ class AgentEngine:
         """获取所有智能体配置"""
         return list(self._profiles.values())
 
-    def create_agent(self, profile: Profile) -> TaskAgent:
+    def create_agent(self, profile: Profile, save: bool = False) -> TaskAgent:
         """新建智能体"""
         # 使用时间戳作为会话编号
         now: datetime = datetime.now()
@@ -146,7 +146,7 @@ class AgentEngine:
         )
 
         # 创建智能体
-        agent: TaskAgent = TaskAgent(self, profile, session)
+        agent: TaskAgent = TaskAgent(self, profile, session, save=save)
 
         # 保存会话
         self._agents[session.id] = agent

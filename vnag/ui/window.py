@@ -242,7 +242,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         # 创建新智能体和窗口
-        agent: TaskAgent = self.engine.create_agent(profile)
+        agent: TaskAgent = self.engine.create_agent(profile, save=True)
         self.add_agent_widget(agent)
 
         # 更新列表并切换到新窗口
