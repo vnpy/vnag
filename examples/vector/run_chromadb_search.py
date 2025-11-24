@@ -14,6 +14,15 @@ def main() -> None:
     # embedder = DashscopeEmbedder(api_key="your_api_key", model_name="text-embedding-v3")
     # vector = ChromaVector(name="dashscope", embedder=embedder)
 
+    # 如使用 OpenRouter 写入，检索时也需使用相同的 name：
+    # from vnag.embedders.openai_embedder import OpenAIEmbedder
+    # embedder = OpenAIEmbedder(
+    #     base_url="https://openrouter.ai/api/v1",
+    #     api_key="your_api_key",
+    #     model_name="qwen/qwen3-embedding-8b"
+    # )
+    # vector = ChromaVector(name="openai", embedder=embedder)
+
     # 执行查询
     segments: list[Segment] = vector.retrieve(query_text="如何实现 VeighNa Station 登录", k=5)
     for segment in segments:

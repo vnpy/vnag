@@ -31,8 +31,17 @@ def main() -> None:
 
     # 如需使用 DashScope API，替换为（注意修改 name）：
     # from vnag.embedders.dashscope_embedder import DashscopeEmbedder
-    # embedder = DashscopeEmbedder(api_key="your_api_key", model_name="text-embedder-v3")
+    # embedder = DashscopeEmbedder(api_key="your_api_key", model_name="text-embedding-v3")
     # vector = ChromaVector(name="dashscope", embedder=embedder)
+
+    # 如需使用 OpenRouter API，替换为（注意修改 name）：
+    # from vnag.embedders.openai_embedder import OpenAIEmbedder
+    # embedder = OpenAIEmbedder(
+    #     base_url="https://openrouter.ai/api/v1",
+    #     api_key="your_api_key",
+    #     model_name="qwen/qwen3-embedding-8b"
+    # )
+    # vector = ChromaVector(name="openai", embedder=embedder)
 
     vector.add_segments(segments)
 
