@@ -1,7 +1,7 @@
 # VNAG - Your Agent, Your Data.
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-0.2.0-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-0.3.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
     <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnag.svg?color=orange"/>
@@ -115,83 +115,31 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 2.  **通过代码**:
     `examples/agent/run_task_agent.py` 脚本详细演示了如何通过代码来创建 `Profile` 对象，并使用 `AgentEngine` 来创建一个 `TaskAgent` 实例。这为您提供了更大的灵活性，可以将 vnag 集成到您自己的应用程序中。
 
-### 更多示例
+## 功能示例
 
-通过 `examples` 目录下的丰富示例，您可以快速了解和掌握 vnag 框架的各项功能。
+`examples` 目录提供了丰富的示例脚本，帮助您快速了解和掌握 vnag 框架的各项功能。所有示例均可在项目根目录下直接运行。
 
-所有示例均可在项目根目录下直接运行。
+| 功能模块 | 示例脚本 | 说明 |
+|---------|---------|------|
+| **Gateway<br/>网关** | `run_openai_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py` | 测试与不同大模型提供商的 API 连接 |
+| **Segmenter<br/>分段器** | `run_simple_segmenter.py`<br/>`run_markdown_segmenter.py`<br/>`run_python_segmenter.py`<br/>`run_cpp_segmenter.py` | 将不同类型的文档切分为结构化数据段 |
+| **Vector<br/>向量库** | `run_chromadb_add.py` / `run_chromadb_search.py`<br/>`run_qdrant_add.py` / `run_qdrant_search.py` | 文本向量化存储和相似度搜索 |
+| **RAG** | `run_ctp_rag.py` | 完整的 RAG 流程：分段、入库、检索生成 |
+| **Tool<br/>工具** | `run_local_tool.py`<br/>`run_mcp_tool.py` | 本地工具和 MCP 远程工具调用 |
+| **Agent<br/>智能体** | `run_task_agent.py`<br/>`run_agent_tool.py` | 通过代码创建和配置 TaskAgent |
+| **UI<br/>界面** | `run_chat_ui.py` | 图形化智能体管理和调试界面 |
 
-### 网关（Gateway）
+运行示例：
 
-- 功能：测试与不同大模型提供商的 API 连接。
-- 示例：
-  ```bash
-  # 测试 OpenAI Gataway
-  python examples/gateway/run_openai_gateway.py
-  ```
+```bash
+# 示例：测试 OpenAI Gateway
+python examples/gateway/run_openai_gateway.py
 
-### 分段器（Segmenter）
+# 示例：运行聊天 UI
+python examples/ui/run_chat_ui.py
 
-- 功能：展示如何将不同类型的文档（Markdown, Python, C++）切分为结构化的数据段。
-- 示例：
-  ```bash
-  # 运行 Markdown 分段器
-  python examples/segmenter/run_markdown_segmenter.py
-  ```
-
-### 向量库（Vector）
-
-- 功能：演示如何将文本数据向量化后存入向量数据库（ChromaDB 或 Qdrant），并进行相似度搜索。
-- 示例：
-  ```bash
-  # 添加数据到 ChromaDB 向量库
-  python examples/vector/run_chromadb_add.py
-
-  # 从 ChromaDB 向量库搜索数据
-  python examples/vector/run_chromadb_search.py
-
-  # 添加数据到 Qdrant 向量库
-  python examples/vector/run_qdrant_add.py
-
-  # 从 Qdrant 向量库搜索数据
-  python examples/vector/run_qdrant_search.py
-  ```
-
-### RAG
-
-- 功能：一个完整的 RAG（检索增强生成）流程，结合了分段、入库和检索生成。
-- 示例：
-  ```bash
-  # 运行一个基于CTP API文档的RAG问答
-  python examples/rag/run_ctp_rag.py
-  ```
-
-### 工具调用（Tool）
-
-- 功能：演示 Agent 如何调用本地或远程（MCP）工具。
-- 示例：
-  ```bash
-  # 运行本地工具调用
-  python examples/tool/run_local_tool.py
-  ```
-
-### Agent引擎
-
-- 功能：演示如何通过代码创建和配置 `TaskAgent`。该示例展示了如何定义 `Profile`（包含系统提示词、工具、模型参数），并使用 `AgentEngine` 来驱动一个智能体完成调用本地工具和MCP工具的任务。
-- 示例：
-  ```bash
-  # 运行任务型 Agent
-  python examples/agent/run_task_agent.py
-  ```
-
-### UI 界面
-
-- 功能：启动一个功能强大的图形化智能体管理和调试界面。您可以在此创建和管理不同的智能体配置（Profile），并与基于这些配置创建的智能体（Agent）进行交互。
-- 示例：
-  ```bash
-  # 运行 Agent 管理UI
-  python examples/ui/run_chat_ui.py
-  ```
+# 其他示例类似，将对应路径和文件名替换即可
+```
 
 ## 配置
 
@@ -255,34 +203,95 @@ vnag/
 │   ├── object.py              # 数据对象（Message/Request等）
 │   ├── constant.py            # 枚举常量
 │   ├── utility.py             # 工具函数
+│   ├── agent.py               # Agent基类
+│   ├── engine.py              # Agent引擎
+│   ├── tracer.py              # 执行追踪器
 │   ├── gateway.py             # 网关基类
+│   ├── gateways/              # 网关实现
+│   │   ├── openai_gateway.py
+│   │   ├── anthropic_gateway.py
+│   │   └── dashscope_gateway.py
+│   ├── embedder.py            # 嵌入器基类
+│   ├── embedders/             # 嵌入器实现
+│   │   ├── openai_embedder.py
+│   │   ├── dashscope_embedder.py
+│   │   └── sentence_embedder.py
 │   ├── segmenter.py           # 分段器基类
+│   ├── segmenters/            # 分段器实现
+│   │   ├── simple_segmenter.py
+│   │   ├── markdown_segmenter.py
+│   │   ├── python_segmenter.py
+│   │   └── cpp_segmenter.py
 │   ├── vector.py              # 向量库基类
+│   ├── vectors/               # 向量库实现
+│   │   ├── chromadb_vector.py
+│   │   └── qdrant_vector.py
 │   ├── local.py               # 本地工具管理器
 │   ├── mcp.py                 # MCP远程工具管理器
-│   ├── engine.py              # Agent引擎
-│   ├── gateways/              # 网关实现（OpenAI/Anthropic/Dashscope）
-│   ├── segmenters/            # 分段器实现（Markdown/Python/C++）
-│   ├── vectors/               # 向量库实现（ChromaDB/Qdrant）
-│   ├── tools/                 # 本地工具实现示例
+│   ├── tools/                 # 内置本地工具
+│   │   ├── datetime_tools.py  # 日期时间工具
+│   │   ├── file_tools.py      # 文件系统工具
+│   │   ├── network_tools.py   # 网络工具
+│   │   ├── code_tools.py      # 代码工具
+│   │   └── web_tools.py       # Web工具
 │   └── ui/                    # GUI界面实现
+│       ├── base.py            # UI基类
+│       ├── qt.py              # Qt主界面
+│       ├── widget.py          # 界面组件
+│       ├── window.py          # 窗口管理
+│       ├── worker.py          # 异步工作线程
+│       ├── setting.py         # 设置管理
+│       ├── logo.ico           # 应用图标
+│       └── resources/         # 前端资源
 ├── examples/                  # 功能示例脚本集合
+│   ├── agent/                 # Agent示例
+│   │   ├── run_task_agent.py  # 任务型Agent
+│   │   └── run_agent_tool.py  # Agent工具调用
+│   ├── gateway/               # 网关示例
+│   │   ├── run_openai_gateway.py
+│   │   ├── run_anthropic_gateway.py
+│   │   └── run_dashscope_gateway.py
+│   ├── segmenter/             # 分段器示例
+│   │   ├── run_simple_segmenter.py
+│   │   ├── run_markdown_segmenter.py
+│   │   ├── run_python_segmenter.py
+│   │   └── run_cpp_segmenter.py
+│   ├── vector/                # 向量库示例
+│   │   ├── run_chromadb_add.py
+│   │   ├── run_chromadb_search.py
+│   │   ├── run_qdrant_add.py
+│   │   └── run_qdrant_search.py
+│   ├── rag/                   # RAG示例
+│   │   ├── run_ctp_rag.py
+│   │   └── knowledge/         # 示例知识库
+│   ├── tool/                  # 工具调用示例
+│   │   ├── run_local_tool.py
+│   │   └── run_mcp_tool.py
+│   └── ui/                    # UI示例
+│       └── run_chat_ui.py
+├── dist/                      # 发布包
 ├── pyproject.toml             # 项目配置
 ├── README.md                  # 项目文档
+├── CHANGELOG.md               # 更新日志
 └── LICENSE                    # 开源协议
 ```
 
 ### 核心模块说明
 
+- **`object.py`**: 定义了框架中所有核心数据对象，如 `Message`, `Request`, `ToolCall` 等。
+- **`constant.py`**: 定义了框架使用的枚举常量，如角色类型、工具调用状态等。
+- **`utility.py`**: 提供通用工具函数，如配置文件加载、JSON处理等。
+- **`agent.py`**: Agent 基类，定义了智能体的基本接口和行为规范。
 - **`engine.py`**: Agent 引擎，负责对话管理、工具调用编排和与大模型交互。
+- **`tracer.py`**: 执行追踪器，用于记录和调试 Agent 的执行过程。
 - **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope 等多种实现。
+- **`embedder.py` & `embedders/`**: 定义了文本嵌入的统一接口，并提供了 OpenAI、Dashscope、Sentence Transformers 等多种实现。
 - **`segmenter.py` & `segmenters/`**: 用于将文档（如 Markdown、Python、C++ 源码）解析为结构化数据段，是 RAG 的基础。
 - **`vector.py` & `vectors/`**: 向量数据库的统一接口和实现（支持 ChromaDB 和 Qdrant），用于存储和检索知识片段。
 - **`local.py`**: 本地工具管理器，可以自动加载和执行本地 Python 函数作为工具。
 - **`mcp.py`**: MCP（元计算平台）工具管理器，用于连接 `fastmcp` 服务，实现在远端执行更复杂的工具。
-- **`tools/`**: 提供一系列开箱即用的本地工具，详情请见下方“内置本地工具”章节。
-- **`ui/`**: 基于 PySide6 的图形用户界面，提供一个开箱即用的聊天应用。
-- **`object.py`**: 定义了框架中所有核心数据对象，如 `Message`, `Request`, `ToolCall` 等。
+- **`tools/`**: 提供一系列开箱即用的本地工具（日期时间、文件系统、网络、代码、Web等），详情请见下方"内置本地工具"章节。
+- **`ui/`**: 基于 PySide6 的图形用户界面，提供一个开箱即用的聊天应用，包含完整的 Agent 管理和调试功能。
 - **`examples/`**: 包含各个模块的独立示例脚本，是学习和测试框架功能的最佳入口。
 
 ### 内置本地工具
@@ -291,41 +300,78 @@ vnag/
 
 #### 日期时间工具 (`datetime_tools.py`)
 
-- **get_current_date**: 获取 YYYY-MM-DD 格式的当前日期。
-- **get_current_time**: 获取 HH:MM:SS 格式的当前时间。
-- **get_current_datetime**: 获取 YYYY-MM-DD HH:MM:SS 格式的当前日期和时间。
-- **get_day_of_week**: 获取中文格式的当天星期数（如：星期一）。
+- **current_date**: 获取 YYYY-MM-DD 格式的当前日期字符串。
+- **current_time**: 获取 HH:MM:SS 格式的当前时间字符串。
+- **current_datetime**: 获取 YYYY-MM-DD HH:MM:SS 格式的当前日期和时间字符串。
+- **day_of_week**: 获取中文格式的当天星期数（如：星期一）。
 
 #### 文件系统工具 (`file_tools.py`)
 
 > **安全说明**：文件系统工具的使用受到权限控制。您需要在 `.vnag/file_system_tool.json` 配置文件中明确指定允许读写的路径，以防止 Agent 访问未授权的文件。
 
 - **list_directory**: 列出指定路径下的所有文件和子目录。
-- **read_file**: 读取指定文件的文本内容。
-- **write_file**: 将指定的文本内容写入文件（会覆盖已有内容）。
+- **read_file**: 读取指定文件的文本内容（自动检测编码）。
+- **write_file**: 将文本内容写入到指定文件（如果文件已存在，则会覆盖）。
+- **delete_file**: 删除指定路径的文件。
+- **glob_files**: 根据给定的模式和路径，匹配符合条件的文件。
+- **search_content**: 在指定路径下递归搜索包含指定内容的文件。
+- **replace_content**: 替换指定文件中的内容。
 
 #### 网络工具 (`network_tools.py`)
 
-- **ping**: 检查与目标主机的网络连通性。
-- **telnet**: 测试目标主机上的特定端口是否开放。
+- **ping**: 通过执行 ping 命令检查与主机的网络连通性。
+- **telnet**: 通过尝试建立套接字连接来测试目标主机的端口是否开放。
 - **get_local_ip**: 获取本机的局域网 IP 地址。
-- **get_public_ip**: 获取本机的公网 IP 地址。
-- **get_mac_address**: 获取本机的 MAC 地址。
+- **get_public_ip**: 通过请求外部服务获取本机的公网 IP 地址。
+- **get_mac_address**: 获取本机的 MAC 地址，格式为 XX:XX:XX:XX:XX:XX。
+
+#### 代码执行工具 (`code_tools.py`)
+
+> **安全警告**：代码执行工具会在独立进程中执行 Python 代码，但并未提供安全的沙箱环境。被执行的代码将拥有与主进程相同的权限，包括文件系统和网络访问权限。请仅对可信代码和文件使用此功能。
+
+- **execute_file**: 在独立进程中执行指定路径的 Python 文件（默认超时30秒）。
+- **execute_code**: 在独立进程中执行 Python 代码字符串（默认超时30秒）。
+
+#### Web工具 (`web_tools.py`)
+
+- **fetch_html**: 获取并返回指定 URL 的 HTML 内容。
+- **fetch_json**: 获取并解析来自 URL 的 JSON 数据。
+- **check_link**: 检查链接的 HTTP 状态码和状态信息。
 
 ## 开发状态
 
 ### 当前功能 ✅
 
-- [x] **Agent引擎**：支持多轮对话和自动工具调用编排。
-- [x] **LLM网关**：兼容 OpenAI、Anthropic、Dashscope API，支持流式输出。
+- [x] **Agent引擎**：
+    - [x] 支持多轮对话管理
+    - [x] 自动工具调用编排
+    - [x] 可配置的 Profile 系统（系统提示词、工具集、模型参数）
+    - [x] 执行追踪和日志记录
+- [x] **LLM网关**：
+    - [x] OpenAI API 兼容
+    - [x] Anthropic Claude API 支持
+    - [x] 阿里云 Dashscope API 支持
+    - [x] 流式输出和非流式输出
+    - [x] 统一的网关接口，易于扩展
+- [x] **嵌入器**：
+    - [x] OpenAI Embeddings
+    - [x] Dashscope Embeddings
+    - [x] Sentence Transformers（本地嵌入模型）
 - [x] **RAG支持**：
-    - [x] **分段器**：Markdown（按标题）、Python（AST）、C++（libclang AST）。
-    - [x] **向量库**：集成 ChromaDB 和 Qdrant，支持高效的本地向量存储和检索。
+    - [x] **分段器**：Simple（固定长度）、Markdown（按标题层级）、Python（AST语法树）、C++（libclang AST）
+    - [x] **向量库**：集成 ChromaDB 和 Qdrant，支持高效的本地向量存储和检索
+    - [x] 完整的 RAG 流程示例
 - [x] **工具系统**：
-    - [x] **本地工具**：自动加载 Python 函数作为工具。
-    - [x] **MCP工具**：通过 `fastmcp` 客户端集成远程工具。
-- [x] **图形界面**：基于 PySide6 的现代化聊天 UI。
-- [x] **示例脚本**：覆盖所有核心功能的详细 `examples` 示例。
+    - [x] **本地工具**：自动加载 Python 函数作为工具，支持类型提示和文档字符串
+    - [x] **MCP工具**：通过 MCP 客户端集成远程工具服务器
+    - [x] **内置工具**：日期时间、文件系统、网络、代码执行、Web 工具
+- [x] **图形界面**：
+    - [x] 基于 PySide6 的现代化聊天 UI
+    - [x] Profile 配置管理（创建、编辑、删除）
+    - [x] Agent 实例管理（多智能体切换）
+    - [x] Markdown 渲染和代码高亮
+    - [x] 执行追踪日志查看
+- [x] **示例脚本**：覆盖所有核心功能的详细 `examples` 示例，包括网关、分段器、向量库、RAG、工具调用、Agent 和 UI。
 
 ## 常见问题 (FAQ)
 
@@ -341,23 +387,45 @@ vnag/
 
 **A:** 这个错误表示您的系统中没有安装 Node.js，或者 Node.js 的路径没有被添加到系统环境变量中。请参考本文档 "配置" 章节中的提示，从 [Node.js官网](https://nodejs.org/) 下载并安装 LTS (长期支持) 版本。
 
+**Q: 使用文件系统工具时提示"没有权限访问"怎么办？**
+
+**A:** 出于安全考虑，文件系统工具需要明确的权限配置。请在 `.vnag/file_system_tool.json` 文件中的 `read_allowed` 或 `write_allowed` 数组中添加您需要访问的目录路径。配置文件会在首次加载工具时自动生成。
+
+**Q: 如何为不同的项目使用不同的配置？**
+
+**A:** vnag 支持项目级配置。只需在项目目录下创建 `.vnag` 文件夹并放置配置文件即可。程序会优先加载当前目录下的配置，如果不存在则使用用户主目录下的全局配置。
+
+**Q: UI 界面中创建的 Agent 和 Profile 保存在哪里？**
+
+**A:** 所有 Agent 实例和 Profile 配置都保存在 `.vnag` 目录下，以 JSON 格式存储。您可以直接编辑这些文件，或者在 UI 界面中进行管理。
+
+**Q: 运行 C++ 分段器时报错找不到 libclang？**
+
+**A:** C++ 分段器依赖 libclang 库。请确保您已安装 LLVM/Clang，并且系统能够找到 `libclang` 动态链接库。在 Windows 上，可能需要将 LLVM 的 bin 目录添加到 PATH 环境变量中。
+
+**Q: 如何自定义本地工具？**
+
+**A:** 创建一个 Python 函数，并使用 `LocalTool` 包装即可。函数需要有清晰的类型提示和文档字符串，以便 Agent 理解如何使用。可以参考 `vnag/tools/` 目录下的示例。
+
 ## 贡献代码
 
 我们欢迎所有形式的贡献！无论是bug报告、功能建议还是代码贡献。
 
 ### 开发流程
 
-1. Fork本项目
-2. 创建您的功能分支：`git checkout -b feature/AmazingFeature`
-3. 提交您的更改：`git commit -m 'Add some AmazingFeature'`
-4. 推送到分支：`git push origin feature/AmazingFeature`
-5. 提交Pull Request
+1. **Fork 本项目**：点击 GitHub 页面右上角的 Fork 按钮
+2. **克隆到本地**：`git clone https://github.com/your-username/vnag.git`
+3. **创建功能分支**：`git checkout -b feature/AmazingFeature`
+4. **进行开发**：编写代码、添加测试、更新文档
+5. **提交更改**：`git commit -m 'Add some AmazingFeature'`
+6. **推送到远程**：`git push origin feature/AmazingFeature`
+7. **提交 Pull Request**：在 GitHub 上创建 PR，详细描述您的更改
 
 ### 代码规范
 
 项目使用以下工具确保代码质量：
 
-- **Ruff**：代码格式化和linting
+- **Ruff**：代码格式化和 linting
 - **MyPy**：静态类型检查
 
 在提交代码前，请运行：
@@ -375,7 +443,7 @@ mypy vnag
 如果您遇到任何问题或有建议，请通过以下方式联系我们：
 
 - 在GitHub上提交[Issue](https://github.com/vnpy/vnag/issues)
-- 发送邮件至：xiaoyou.chen@mail.vnpy.com
+- 发送邮件至：contact@mail.vnpy.com
 
 ## 版权说明
 
