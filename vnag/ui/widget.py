@@ -494,7 +494,7 @@ class ProfileDialog(QtWidgets.QDialog):
         self.tool_tree.clear()
 
         # 添加本地工具
-        local_tools: dict[str, ToolSchema] = self.engine._local_tools
+        local_tools: dict[str, ToolSchema] = self.engine.get_local_schemas()
         if local_tools:
             local_root = QtWidgets.QTreeWidgetItem(self.tool_tree, ["本地工具"])
 
@@ -519,7 +519,7 @@ class ProfileDialog(QtWidgets.QDialog):
                     tool_item.setData(0, QtCore.Qt.ItemDataRole.UserRole, schema.name)
 
         # 添加MCP工具
-        mcp_tools: dict[str, ToolSchema] = self.engine._mcp_tools
+        mcp_tools: dict[str, ToolSchema] = self.engine.get_mcp_schemas()
         if mcp_tools:
             mcp_root = QtWidgets.QTreeWidgetItem(self.tool_tree, ["MCP工具"])
 
@@ -746,7 +746,7 @@ class ToolDialog(QtWidgets.QDialog):
         self.tree_widget.clear()
 
         # 添加本地工具
-        local_tools: dict[str, ToolSchema] = self._engine._local_tools
+        local_tools: dict[str, ToolSchema] = self._engine.get_local_schemas()
         if local_tools:
             local_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                 self.tree_widget,
@@ -774,7 +774,7 @@ class ToolDialog(QtWidgets.QDialog):
             self.tree_widget.expandItem(local_root)
 
         # 添加MCP工具
-        mcp_tools: dict[str, ToolSchema] = self._engine._mcp_tools
+        mcp_tools: dict[str, ToolSchema] = self._engine.get_mcp_schemas()
         if mcp_tools:
             mcp_root: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                 self.tree_widget,

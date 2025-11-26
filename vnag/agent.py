@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from uuid import uuid4
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from collections.abc import Generator
 
 from .object import (
@@ -352,3 +352,71 @@ class TaskAgent:
                 break
 
         return title
+
+
+class AgentTool:
+    """
+    智能体工具：将 Profile 封装为可调用的工具。
+
+    每次调用时创建新的 TaskAgent 实例，不保留对话历史。
+    """
+
+    def __init__(
+        self,
+        engine: "AgentEngine",
+        profile: Profile,
+        model: str,
+        name: str = "",
+        description: str = "",
+    ) -> None:
+        """构造函数"""
+        if not name:
+            name = profile.name
+
+        if not description:
+            description = f"调用智能体 [{profile.name}] 处理任务"
+
+        # 使用"-"替换"_"，和其他工具保持一致
+        name = name.replace("_", "-")
+        self.name: str = f"agent_{name}"
+
+        self.description: str = description
+        self.engine: AgentEngine = engine
+        self.profile: Profile = profile
+        self.model: str = model
+
+        self.parameters: dict[str, Any] = {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": "发送给智能体的提示词"
+                }
+            },
+            "required": ["prompt"]
+        }
+
+    def get_schema(self) -> ToolSchema:
+        """获取工具的 Schema"""
+        return ToolSchema(
+            name=self.name,
+            description=self.description,
+            parameters=self.parameters
+        )
+
+    def execute(self, prompt: str) -> str:
+        """执行工具"""
+        # 创建新的 TaskAgent 实例
+        agent: TaskAgent = self.engine.create_agent(
+            self.profile,
+            save=False      # 不保存会话，因为每次调用都是新的会话
+        )
+
+        # 设置模型
+        agent.set_model(self.model)
+
+        # 使用invoke方法执行任务
+        response: Response = agent.invoke(prompt)
+
+        # 返回AI模型的回复内容
+        return response.content
