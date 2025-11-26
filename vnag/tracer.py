@@ -19,7 +19,10 @@ def _configure_logger() -> None:
         return
 
     # 移除 loguru 默认的 handler (ID=0)，避免 DEBUG 日志输出到 stderr
-    logger.remove(0)
+    try:
+        logger.remove(0)
+    except ValueError:
+        pass
 
     # 添加 stdout handler，只处理带有 vnag_module 标记的日志
     logger.add(
