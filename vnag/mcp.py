@@ -26,9 +26,16 @@ class McpManager:
         self.shutdown_future: asyncio.Future | None = None
         self.started_event: Event = Event()
 
+        self.server_name: str = ""      # 当仅配置了一个MCP服务时，需要为工具拼接服务器名前缀
+
         config_data: dict[str, Any] = load_json(self.config_path)
+
         if config_data:
             mcp_config: MCPConfig = MCPConfig.from_dict(config_data)
+
+            if len(mcp_config.mcpServers) == 1:
+                self.server_name = list(mcp_config.mcpServers.keys())[0]
+
             self.client = Client(mcp_config)
 
             self.thread = Thread(target=self._run_loop, daemon=True)
@@ -95,8 +102,13 @@ class McpManager:
                 tool_schemas: list[ToolSchema] = []
 
                 for mcp_tool in mcp_tools:
+                    if self.server_name:
+                        name: str = f"{self.server_name}_{mcp_tool.name}"
+                    else:
+                        name = mcp_tool.name
+
                     tool_schema: ToolSchema = ToolSchema(
-                        name=mcp_tool.name,
+                        name=name,
                         description=mcp_tool.description or "",
                         parameters=mcp_tool.inputSchema
                     )
@@ -121,6 +133,10 @@ class McpManager:
 
         # 等待后台服务启动完成
         self.started_event.wait()
+
+        # 如果工具名包含服务器名前缀，则去掉前缀
+        if self.server_name:
+            tool_name = tool_name.replace(self.server_name + "_", "")
 
         # 在后台事件循环中执行任务
         async def _async_execute_tool() -> str:
