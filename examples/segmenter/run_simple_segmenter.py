@@ -7,7 +7,8 @@ def main() -> None:
     """运行简单的文本分段器"""
     segmenter = SimpleSegmenter(chunk_size=500)
 
-    filepath: Path = Path("../rag/knowledge/backtesting.py").resolve()
+    base_dir: Path = Path(__file__).resolve().parent.parent
+    filepath: Path = (base_dir / "rag/knowledge/backtesting.py").resolve()
     with open(filepath, encoding="utf-8") as f:
         text: str = f.read()
 

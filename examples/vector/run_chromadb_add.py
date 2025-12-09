@@ -10,7 +10,8 @@ def main() -> None:
     """将指定 Markdown 文件切分后写入本地 Chroma 向量库"""
     # 读取文件内容
     filename: str = "veighna_station.md"
-    filepath: Path = Path(f"../rag/knowledge/{filename}").resolve()
+    base_dir: Path = Path(__file__).resolve().parent.parent
+    filepath: Path = (base_dir / "rag/knowledge" / filename).resolve()
     with open(filepath, encoding="utf-8") as f:
         text: str = f.read()
 
