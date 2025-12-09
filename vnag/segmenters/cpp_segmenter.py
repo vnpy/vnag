@@ -124,7 +124,7 @@ def ast_split(text: str, source_name: str, clang_args: list[str]) -> Generator[t
 
     blocks: list[tuple[int, int, str, str, str, str]] = []
     for cursor in translation_unit.cursor.get_children():
-        collect_blocks(cursor, blocks)
+        collect_blocks(cursor, blocks, source_name)
 
     if not blocks:
         yield "module", text, "module", "", ""
@@ -188,7 +188,7 @@ def parse_translation_unit(source_name: str, text: str, clang_args: list[str]) -
     return tu
 
 
-def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]]) -> None:
+def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]], source_name: str = "") -> None:
     """深度遍历 AST，收集结构块（以行号为边界）- 模块级工具。
 
     采集的块类型：namespace/class/struct/enum/function/ctor/dtor/typedef
@@ -202,6 +202,15 @@ def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]
         # 过滤没有位置信息的节点（无法映射到具体源码行号）。
         if not child.location or not child.extent:
             continue
+
+        # 过滤非当前文件的节点（来自 #include 的声明）
+        if source_name and child.location.file:
+            # 规范化路径进行比较（统一使用 / 分隔符）
+            child_file: str = str(child.location.file.name).replace("\\", "/")
+            src_file: str = source_name.replace("\\", "/")
+            if child_file != src_file:
+                continue
+
         # 提取起止行（1-based）。某些节点可能没有 end line，兜底为 start。
         start = getattr(child.extent.start, "line", 1)
         end = getattr(child.extent.end, "line", start)
@@ -212,7 +221,7 @@ def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]
             qualified_name = get_qualified_name(child)
             blocks.append((start, end, title, "namespace", qualified_name, ""))
             # 继续深入命名空间内部，捕获嵌套的类/函数等结构。
-            collect_blocks(child, blocks)
+            collect_blocks(child, blocks, source_name)
 
         # 类/结构体：记录自身区间，并递归以采集其内部的方法/嵌套类。
         elif kind in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL):
@@ -220,7 +229,7 @@ def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]
             title = f"{tag} {child.spelling}"
             qualified_name = get_qualified_name(child)
             blocks.append((start, end, title, tag, qualified_name, ""))
-            collect_blocks(child, blocks)
+            collect_blocks(child, blocks, source_name)
 
         # 枚举：仅记录区间与限定名。
         elif kind in (CursorKind.ENUM_DECL,):
@@ -258,7 +267,7 @@ def collect_blocks(cursor: Any, blocks: list[tuple[int, int, str, str, str, str]
 
         else:
             # 其他语法实体（字段/别名等）继续递归，捕获其子层级的结构化信息。
-            collect_blocks(child, blocks)
+            collect_blocks(child, blocks, source_name)
 
 
 def get_qualified_name(cursor: Any) -> str:
