@@ -18,7 +18,12 @@ from .qt import (
     QtWebEngineWidgets
 )
 from .worker import StreamWorker
-from .setting import load_favorite_models, save_favorite_models
+from .setting import (
+    load_favorite_models,
+    save_favorite_models,
+    load_zoom_factor,
+    save_zoom_factor
+)
 
 
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
@@ -47,6 +52,13 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # 连接权限请求信号，处理剪贴板权限
         self.page().permissionRequested.connect(self._on_permission_requested)
 
+        # 加载并应用保存的缩放倍数
+        zoom_factor: float = load_zoom_factor()
+        self.setZoomFactor(zoom_factor)
+
+        # 连接缩放变化信号，自动保存缩放倍数
+        self.page().zoomFactorChanged.connect(self._on_zoom_factor_changed)
+
         # 加载本地HTML文件
         current_path: str = os.path.dirname(os.path.abspath(__file__))
         html_path: str = os.path.join(current_path, "resources", "chat.html")
@@ -56,6 +68,10 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         """处理权限请求，自动授予剪贴板权限"""
         if permission.permissionType() == QtWebEngineCore.QWebEnginePermission.PermissionType.ClipboardReadWrite:
             permission.grant()
+
+    def _on_zoom_factor_changed(self, zoom_factor: float) -> None:
+        """处理缩放倍数变化，自动保存"""
+        save_zoom_factor(zoom_factor)
 
     def _on_load_finished(self, success: bool) -> None:
         """页面加载完成后的回调"""
@@ -198,7 +214,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.delete_button.setEnabled(False)
 
         self.model_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.model_combo.setFixedWidth(300)
+        self.model_combo.setFixedWidth(500)
         self.model_combo.setFixedHeight(50)
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
 

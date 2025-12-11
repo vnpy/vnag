@@ -6,6 +6,8 @@ from pathlib import Path
 import qdarkstyle
 from PySide6 import QtGui, QtWidgets, QtCore, QtWebEngineWidgets, QtWebEngineCore
 
+from .setting import load_font_family, load_font_size
+
 
 def create_qapp() -> QtWidgets.QApplication:
     """创建Qt应用"""
@@ -14,7 +16,9 @@ def create_qapp() -> QtWidgets.QApplication:
     qapp.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyside6"))
 
     # 设置字体
-    font: QtGui.QFont = QtGui.QFont("微软雅黑", 14)
+    font_family: str = load_font_family()
+    font_size: int = load_font_size()
+    font: QtGui.QFont = QtGui.QFont(font_family, font_size)
     qapp.setFont(font)
 
     # 设置图标
