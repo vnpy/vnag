@@ -166,6 +166,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.input_widget.setMaximumHeight(desktop.height() // 4)
         self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
+        self.input_widget.setAcceptRichText(False)
         self.input_widget.installEventFilter(self)
 
         self.history_widget: HistoryWidget = HistoryWidget(profile_name=self.agent.profile.name)
