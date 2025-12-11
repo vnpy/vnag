@@ -36,6 +36,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.init_menu()
         self.init_widgets()
+        self.init_tray()
 
         self.status_label: QtWidgets.QLabel = QtWidgets.QLabel()
         self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -114,7 +115,7 @@ class MainWindow(QtWidgets.QMainWindow):
         menu_bar: QtWidgets.QMenuBar = self.menuBar()
 
         sys_menu: QtWidgets.QMenu = menu_bar.addMenu("系统")
-        sys_menu.addAction("退出", self.close)
+        sys_menu.addAction("退出", self.quit_application)
 
         session_menu: QtWidgets.QMenu = menu_bar.addMenu("会话")
         session_menu.addAction("新建会话", self.new_agent_widget)
@@ -129,6 +130,30 @@ class MainWindow(QtWidgets.QMainWindow):
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
         help_menu.addAction("关于", self.show_about)
+
+    def init_tray(self) -> None:
+        """初始化系统托盘"""
+        # 创建托盘图标
+        self.tray_icon: QtWidgets.QSystemTrayIcon = QtWidgets.QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.windowIcon())
+        self.tray_icon.setToolTip(f"VeighNa Agent - {__version__}")
+
+        # 创建托盘菜单
+        tray_menu: QtWidgets.QMenu = QtWidgets.QMenu(self)
+
+        show_action: QtGui.QAction = tray_menu.addAction("显示")
+        show_action.triggered.connect(self.show_normal)
+
+        tray_menu.addSeparator()
+
+        quit_action: QtGui.QAction = tray_menu.addAction("退出")
+        quit_action.triggered.connect(self.quit_application)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.activated.connect(
+            lambda reason: self.show_normal() if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger else None
+        )
+        self.tray_icon.show()
 
     def update_profile_combo(self) -> None:
         """更新智能体配置下拉框"""
@@ -349,6 +374,32 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_website(self) -> None:
         """打开官网"""
         QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://www.github.com/vnpy/vnag"))
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        """重写关闭事件，最小化到托盘而不是退出"""
+        event.ignore()
+        self.hide()
+        self.tray_icon.showMessage(
+            "VeighNa Agent",
+            "程序已最小化到系统托盘",
+            QtWidgets.QSystemTrayIcon.MessageIcon.Information,
+            2000
+        )
+
+    def on_tray_icon_activated(self, reason: QtWidgets.QSystemTrayIcon.ActivationReason) -> None:
+        """处理托盘图标激活事件"""
+        if reason == QtWidgets.QSystemTrayIcon.ActivationReason.Trigger:
+            self.show_normal()
+
+    def show_normal(self) -> None:
+        """显示主界面"""
+        self.show()
+        self.activateWindow()
+
+    def quit_application(self) -> None:
+        """退出应用程序"""
+        self.tray_icon.hide()
+        QtWidgets.QApplication.quit()
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """事件过滤器"""
