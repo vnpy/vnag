@@ -1,3 +1,17 @@
+# 0.4.0
+
+## Add
+
+1. 增加托盘栏小图标
+2. HistoryWidget自动显示当前智能体欢迎语
+3. input_widget关闭富文本支持
+
+## Mod
+
+1. 实现HistoryWidget缩放系数自动存储
+2. 自动切换运行目录到.vnag所在路径
+3. 优化CppSegmenter分段器，过滤include文件内容
+
 # 0.3.0
 
 ## Add

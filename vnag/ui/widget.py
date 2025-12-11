@@ -214,7 +214,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.delete_button.setEnabled(False)
 
         self.model_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.model_combo.setFixedWidth(500)
+        self.model_combo.setFixedWidth(400)
         self.model_combo.setFixedHeight(50)
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
 

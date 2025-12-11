@@ -85,7 +85,7 @@ def save_font_family(font_family: str) -> None:
 
 def load_font_size() -> int:
     """加载字体大小"""
-    return cast(int, get_setting("font_size", 20))
+    return cast(int, get_setting("font_size", 16))
 
 
 def save_font_size(font_size: int) -> None:
