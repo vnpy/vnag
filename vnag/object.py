@@ -16,6 +16,7 @@ class Message(BaseModel):
     """标准化的消息对象"""
     role: Role
     content: str = ""
+    thinking: str = ""
     tool_calls: list["ToolCall"] = Field(default_factory=list)
     tool_results: list["ToolResult"] = Field(default_factory=list)
 
@@ -40,6 +41,7 @@ class Response(BaseModel):
     """标准化的LLM阻塞式响应对象"""
     id: str
     content: str
+    thinking: str = ""
     usage: Usage
     finish_reason: FinishReason | None = None
     message: Message | None = None
@@ -50,6 +52,7 @@ class Delta(BaseModel):
 
     id: str
     content: str | None = None
+    thinking: str | None = None
     calls: list["ToolCall"] | None = None
     finish_reason: FinishReason | None = None
     usage: Usage | None = None

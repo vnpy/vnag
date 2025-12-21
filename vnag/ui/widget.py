@@ -40,6 +40,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         # 流式请求相关状态
         self.full_content: str = ""
+        self.full_thinking: str = ""
         self.msg_id: str = ""
 
         # 页面加载状态和消息队列
@@ -131,6 +132,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         """开始新的流式输出"""
         # 清空当前流式输出内容和消息ID
         self.full_content = ""
+        self.full_thinking = ""
         self.msg_id = f"msg-{uuid.uuid4().hex}"
 
         # 调用前端函数，开始新的流式输出
@@ -138,7 +140,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.page().runJavaScript(f"startAssistantMessage('{self.msg_id}', {js_name})")
 
     def update_stream(self, content_delta: str) -> None:
-        """更新流式输出"""
+        """更新流式输出（content 内容）"""
         # 累积收到的内容
         self.full_content += content_delta
 
@@ -147,6 +149,17 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         # 调用前端函数，更新流式输出
         self.page().runJavaScript(f"updateAssistantMessage('{self.msg_id}', {js_content})")
+
+    def update_thinking(self, thinking_delta: str) -> None:
+        """更新流式输出（thinking 内容）"""
+        # 累积收到的 thinking 内容
+        self.full_thinking += thinking_delta
+
+        # 将内容转换为JSON字符串
+        js_thinking: str = json.dumps(self.full_thinking)
+
+        # 调用前端函数，更新 thinking 输出
+        self.page().runJavaScript(f"updateThinking('{self.msg_id}', {js_thinking})")
 
     def finish_stream(self) -> str:
         """结束流式输出"""
@@ -304,6 +317,7 @@ class AgentWidget(QtWidgets.QWidget):
 
         worker: StreamWorker = StreamWorker(self.agent, text)
         worker.signals.delta.connect(self.on_stream_delta)
+        worker.signals.thinking.connect(self.on_stream_thinking)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)
         worker.signals.title.connect(self.on_title_generated)
@@ -353,8 +367,12 @@ class AgentWidget(QtWidgets.QWidget):
         return super().eventFilter(obj, event)
 
     def on_stream_delta(self, content_delta: str) -> None:
-        """处理数据流返回的数据块"""
+        """处理数据流返回的 content 数据块"""
         self.history_widget.update_stream(content_delta)
+
+    def on_stream_thinking(self, thinking_delta: str) -> None:
+        """处理数据流返回的 thinking 数据块"""
+        self.history_widget.update_thinking(thinking_delta)
 
     def on_stream_finished(self) -> None:
         """处理数据流结束事件"""

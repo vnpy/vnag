@@ -126,3 +126,64 @@ th {
 tr:nth-child(2n) {
     background-color: #2c3138;
 }
+
+/* Thinking container */
+.thinking-container {
+    margin-bottom: 15px;
+    border: 1px solid #3d4450;
+    border-radius: 8px;
+    background-color: #1e2530;
+    overflow: hidden;
+}
+
+.thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 15px;
+    background-color: #252d38;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+}
+
+.thinking-header:hover {
+    background-color: #2a3340;
+}
+
+.thinking-icon {
+    font-size: 16px;
+}
+
+.thinking-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #9ca3af;
+}
+
+.thinking-toggle {
+    margin-left: auto;
+    font-size: 10px;
+    color: #6b7280;
+    transition: transform 0.2s;
+}
+
+.thinking-content {
+    padding: 15px;
+    font-size: 14px;
+    color: #9ca3af;
+    line-height: 1.6;
+    border-top: 1px solid #3d4450;
+}
+
+.thinking-container.collapsed .thinking-content {
+    display: none;
+}
+
+.thinking-content p {
+    margin: 0 0 10px 0;
+}
+
+.thinking-content p:last-child {
+    margin-bottom: 0;
+}

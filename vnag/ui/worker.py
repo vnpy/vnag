@@ -9,8 +9,11 @@ class StreamSignals(QtCore.QObject):
     """
     定义StreamWorker可以发出的信号
     """
-    # 流式响应块
+    # 流式响应块（content 内容）
     delta: QtCore.Signal = QtCore.Signal(str)
+
+    # 流式响应块（thinking 内容）
+    thinking: QtCore.Signal = QtCore.Signal(str)
 
     # 流式响应结束
     finished: QtCore.Signal = QtCore.Signal()
@@ -48,8 +51,11 @@ class StreamWorker(QtCore.QRunnable):
                     # 中止流式生成，保存已生成的部分内容
                     self.agent.abort_stream()
                     break
-                # 收到数据块
-                elif delta.content:
+                # 收到 thinking 数据块
+                if delta.thinking:
+                    self.signals.thinking.emit(delta.thinking)
+                # 收到 content 数据块
+                if delta.content:
                     self.signals.delta.emit(delta.content)
 
         except Exception:
