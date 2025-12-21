@@ -27,22 +27,27 @@ dependencies = [
     "anthropic",
     "dashscope",
     # UI界面
-    "markdown-it-py",
     "PySide6",
     "PySide6-Addons",
     "QDarkStyle",
+    # 工具调用
+    "fastmcp",
+    "requests",
+    "chardet",
+]
+
+[project.optional-dependencies]
+rag = [
     # 分段器
-    "sentence-transformers",
+    "markdown-it-py",
     "pypdf",
     "libclang",
+    # 嵌入模型
+    "sentence-transformers",
     # 向量数据库
     "chromadb",
     "qdrant-client",
     "numpy",
-    # 工具调用
-    "fastmcp",
-    "requests",
-    "chardet"
 ]
 requires-python = ">=3.10"
 keywords = ["ai", "agent"]
