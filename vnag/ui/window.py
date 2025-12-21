@@ -8,10 +8,6 @@ from .widget import AgentWidget, ToolDialog, ModelDialog, ProfileDialog
 from .qt import QtWidgets, QtGui, QtCore
 
 
-SESSION_DIR = WORKING_DIR.joinpath("session")
-SESSION_DIR.mkdir(parents=True, exist_ok=True)
-
-
 class MainWindow(QtWidgets.QMainWindow):
     """主窗口"""
 

@@ -8,6 +8,7 @@ import importlib
 import traceback
 
 from .object import ToolSchema
+from .utility import WORKING_DIR
 
 
 class LocalTool:
@@ -73,7 +74,7 @@ class LocalManager:
         path_1: Path = Path(__file__).parent.joinpath("tools")
         self._load_tools_from_folder(path_1, "vnag.tools")
 
-        path_2: Path = Path.cwd().joinpath("tools")
+        path_2: Path = WORKING_DIR.joinpath("tools")
         self._load_tools_from_folder(path_2, "tools")
 
     def _load_tools_from_folder(self, folder_path: Path, module_name: str) -> None:

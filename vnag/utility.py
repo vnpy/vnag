@@ -1,6 +1,5 @@
 import json
 import sys
-import os
 
 from pathlib import Path
 import pypdf
@@ -31,9 +30,6 @@ WORKING_DIR, TEMP_DIR = _get_agent_dir(".vnag")
 
 # 添加到path路径
 sys.path.append(str(WORKING_DIR))
-
-# 切换到运行目录
-os.chdir(WORKING_DIR)
 
 
 def get_file_path(filename: str) -> Path:
