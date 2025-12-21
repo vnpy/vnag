@@ -52,12 +52,6 @@ class StreamWorker(QtCore.QRunnable):
                 elif delta.content:
                     self.signals.delta.emit(delta.content)
 
-            # 流式响应完成后，检查是否需要自动生成标题
-            if not self.stopped and self._should_generate_title():
-                title: str = self.agent.generate_title(max_length=10)
-                if title:
-                    self.signals.title.emit(title)
-
         except Exception:
             # 中止流式生成，保存已生成的部分内容
             self.agent.abort_stream()
@@ -66,6 +60,16 @@ class StreamWorker(QtCore.QRunnable):
             self.signals.error.emit(error_msg)
         finally:
             self.signals.finished.emit()
+
+        # 流式响应完成后，检查是否需要自动生成标题
+        if not self.stopped and self._should_generate_title():
+            try:
+                title: str = self.agent.generate_title(max_length=10)
+                if title:
+                    self.signals.title.emit(title)
+            except Exception:
+                error_msg = traceback.format_exc()
+                self.signals.error.emit(error_msg)
 
     def _should_generate_title(self) -> bool:
         """判断是否需要自动生成标题"""
