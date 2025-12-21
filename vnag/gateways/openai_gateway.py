@@ -20,7 +20,12 @@ FINISH_REASON_MAP = {
 
 
 class OpenaiGateway(BaseGateway):
-    """OpenAI风格的AI大模型网关"""
+    """
+    OpenAI 兼容的 AI 大模型网关基类
+
+    标准 OpenAI API 不返回 thinking/reasoning 内容。
+    如需支持 thinking，请继承此类并覆盖相关钩子方法。
+    """
 
     default_name: str = "OpenAI"
 
@@ -36,6 +41,38 @@ class OpenaiGateway(BaseGateway):
         self.gateway_name = gateway_name
 
         self.client: OpenAI | None = None
+
+    def _extract_thinking(self, message: Any) -> str:
+        """
+        从消息对象中提取 thinking 内容（子类可覆盖）
+
+        标准 OpenAI API 不返回 thinking 内容，返回空字符串。
+        """
+        return ""
+
+    def _extract_thinking_delta(self, delta: Any) -> str:
+        """
+        从流式 delta 对象中提取 thinking 增量（子类可覆盖）
+
+        标准 OpenAI API 不返回 thinking 内容，返回空字符串。
+        """
+        return ""
+
+    def _get_extra_body(self) -> dict[str, Any] | None:
+        """
+        获取请求的额外参数（子类可覆盖）
+
+        标准 OpenAI API 不需要额外参数，返回 None。
+        """
+        return None
+
+    def _convert_thinking_for_request(self, thinking: str) -> dict[str, Any] | None:
+        """
+        将 thinking 转换为请求格式（子类可覆盖）
+
+        标准 OpenAI API 不支持回传 thinking，返回 None。
+        """
+        return None
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """
@@ -76,6 +113,12 @@ class OpenaiGateway(BaseGateway):
                         for tc in msg.tool_calls
                     ]
 
+                # 回传 thinking 内容（通过钩子方法，子类可定制）
+                if msg.thinking:
+                    thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
+                    if thinking_data:
+                        message_dict.update(thinking_data)
+
                 openai_messages.append(message_dict)
 
         return openai_messages
@@ -114,6 +157,11 @@ class OpenaiGateway(BaseGateway):
             "max_tokens": request.max_tokens,
         }
 
+        # 添加额外参数（通过钩子方法，子类可定制）
+        extra_body: dict[str, Any] | None = self._get_extra_body()
+        if extra_body:
+            create_params["extra_body"] = extra_body
+
         # 添加工具定义（如果有）
         if request.tool_schemas:
             create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
@@ -132,6 +180,9 @@ class OpenaiGateway(BaseGateway):
         finish_reason: FinishReason = FINISH_REASON_MAP.get(
             choice.finish_reason, FinishReason.UNKNOWN
         )
+
+        # 提取 thinking 内容（通过钩子方法，子类可定制）
+        thinking: str = self._extract_thinking(choice.message)
 
         # 提取工具调用
         tool_calls: list[ToolCall] = []
@@ -152,12 +203,14 @@ class OpenaiGateway(BaseGateway):
         message = Message(
             role=Role.ASSISTANT,
             content=choice.message.content or "",
+            thinking=thinking,
             tool_calls=tool_calls
         )
 
         return Response(
             id=response.id,
             content=choice.message.content or "",
+            thinking=thinking,
             usage=usage,
             finish_reason=finish_reason,
             message=message
@@ -181,6 +234,11 @@ class OpenaiGateway(BaseGateway):
             "stream": True,
         }
 
+        # 添加额外参数（通过钩子方法，子类可定制）
+        extra_body: dict[str, Any] | None = self._get_extra_body()
+        if extra_body:
+            create_params["extra_body"] = extra_body
+
         # 添加工具定义（如果有）
         if request.tool_schemas:
             create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
@@ -199,6 +257,12 @@ class OpenaiGateway(BaseGateway):
             should_yield: bool = False
 
             choice: ChunkChoice = chuck.choices[0]
+
+            # 检查 thinking 增量（通过钩子方法，子类可定制）
+            thinking_delta: str = self._extract_thinking_delta(choice.delta)
+            if thinking_delta:
+                delta.thinking = thinking_delta
+                should_yield = True
 
             # 检查内容增量
             delta_content: str | None = choice.delta.content
