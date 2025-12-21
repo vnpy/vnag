@@ -78,10 +78,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         if not success:
             return
 
-        # 显示助手名称
-        js_content: str = json.dumps(f"你好，我是{self.profile_name}，有什么能帮上你的吗？")
-        js_name: str = json.dumps(self.profile_name)
-        self.page().runJavaScript(f"appendAssistantMessage({js_content}, {js_name})")
+        self._show_welcome_message()
 
         # 设置页面加载完成标志，并处理消息队列
         self.page_loaded = True
@@ -91,10 +88,17 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         self.message_queue.clear()
 
+    def _show_welcome_message(self) -> None:
+        """显示助手欢迎消息"""
+        js_content: str = json.dumps(f"你好，我是{self.profile_name}，有什么能帮上你的吗？")
+        js_name: str = json.dumps(self.profile_name)
+        self.page().runJavaScript(f"appendAssistantMessage({js_content}, {js_name})")
+
     def clear(self) -> None:
         """清空会话历史"""
         if self.page_loaded:
             self.page().runJavaScript("document.getElementById('history').innerHTML = '';")
+            self._show_welcome_message()
         else:
             self.message_queue.clear()
 

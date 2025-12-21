@@ -279,7 +279,11 @@ class TaskAgent:
         self._save_session()
 
     def delete_round(self) -> None:
-        """删除最后一轮对话"""
+        """删除最后一轮对话
+
+        一轮对话包含：用户prompt -> [助手回复 -> 工具结果 -> ...] -> 最终助手回复
+        删除时需要回溯到用户发送的真正prompt（content非空的USER消息）
+        """
         # 必须有对话历史，且最后一条是助手消息
         if (
             not self.messages
@@ -287,15 +291,28 @@ class TaskAgent:
         ):
             return
 
-        # 删除最后一轮对话（用户消息和助手消息）
-        self.messages.pop()
-        self.messages.pop()
+        # 从后往前删除，直到删除用户发送的真正prompt为止
+        while self.messages:
+            message: Message = self.messages.pop()
+
+            # 如果遇到系统消息，需要恢复并停止
+            if message.role == Role.SYSTEM:
+                self.messages.append(message)
+                break
+
+            # 如果是用户发送的真正prompt（有content内容），则停止删除
+            if message.role == Role.USER and message.content:
+                break
 
         # 保存会话状态
         self._save_session()
 
     def resend_round(self) -> str:
-        """重新发送最后一轮对话"""
+        """重新发送最后一轮对话
+
+        一轮对话包含：用户prompt -> [助手回复 -> 工具结果 -> ...] -> 最终助手回复
+        删除时需要回溯到用户发送的真正prompt（content非空的USER消息）
+        """
         # 必须有对话历史，且最后一条是助手消息
         if (
             not self.messages
@@ -303,17 +320,27 @@ class TaskAgent:
         ):
             return ""
 
-        # 删除助手消息
-        self.messages.pop()
+        user_prompt: str = ""
 
-        # 删除用户消息
-        user_message: Message = self.messages.pop()
+        # 从后往前删除，直到删除用户发送的真正prompt为止
+        while self.messages:
+            message: Message = self.messages.pop()
+
+            # 如果遇到系统消息，需要恢复并停止
+            if message.role == Role.SYSTEM:
+                self.messages.append(message)
+                break
+
+            # 如果是用户发送的真正prompt（有content内容），则停止删除
+            if message.role == Role.USER and message.content:
+                user_prompt = message.content
+                break
 
         # 保存会话状态
         self._save_session()
 
         # 返回用户消息内容
-        return user_message.content
+        return user_prompt
 
     def set_model(self, model: str) -> None:
         """设置模型"""
