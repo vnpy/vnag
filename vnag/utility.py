@@ -1,5 +1,8 @@
 import json
 import sys
+import os
+from datetime import datetime
+from typing import TextIO
 
 from pathlib import Path
 import pypdf
@@ -30,6 +33,21 @@ WORKING_DIR, TEMP_DIR = _get_agent_dir(".vnag")
 
 # 添加到path路径
 sys.path.append(str(WORKING_DIR))
+
+# 切换到运行目录
+os.chdir(WORKING_DIR)
+
+# 重定向 stdout/stderr，解决 pythonw.exe 启动问题
+if sys.executable.endswith("pythonw.exe"):
+    pythonw_log_folder: Path = TEMP_DIR.joinpath("pythonw_log")
+    pythonw_log_folder.mkdir(parents=True, exist_ok=True)
+
+    file_name: str = datetime.now().strftime("%Y%m%d_%H%M%S.log")
+    file_path: Path = pythonw_log_folder.joinpath(file_name)
+
+    f: TextIO = open(file_path, "w")
+    sys.stdout = f
+    sys.stderr = f
 
 
 def get_file_path(filename: str) -> Path:
