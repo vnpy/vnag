@@ -28,7 +28,8 @@ class BailianGateway(OpenaiGateway):
         适用于 Qwen3、QwQ 等支持深度思考的模型。
         """
         if hasattr(message, "reasoning_content") and message.reasoning_content:
-            return message.reasoning_content
+            return str(message.reasoning_content)
+
         return ""
 
     def _extract_thinking_delta(self, delta: Any) -> str:
@@ -38,7 +39,8 @@ class BailianGateway(OpenaiGateway):
         处理流式响应中的 reasoning_content 增量数据
         """
         if hasattr(delta, "reasoning_content") and delta.reasoning_content:
-            return delta.reasoning_content
+            return str(delta.reasoning_content)
+
         return ""
 
     def _get_extra_body(self) -> dict[str, Any] | None:

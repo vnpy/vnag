@@ -1,12 +1,28 @@
 import ctypes
 import platform
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import TextIO
 
 import qdarkstyle
 from PySide6 import QtGui, QtWidgets, QtCore, QtWebEngineWidgets, QtWebEngineCore
 
+from ..utility import TEMP_DIR
 from .setting import load_font_family, load_font_size
+
+
+# 重定向 stdout/stderr，解决 pythonw.exe 启动问题
+if sys.executable.endswith("pythonw.exe"):
+    pythonw_log_folder: Path = TEMP_DIR.joinpath("pythonw_log")
+    pythonw_log_folder.mkdir(parents=True, exist_ok=True)
+
+    file_name: str = datetime.now().strftime("%Y%m%d_%H%M%S.log")
+    file_path: Path = pythonw_log_folder.joinpath(file_name)
+
+    f: TextIO = open(file_path, "w", buffering=1)  # 行缓冲，便于实时查看
+    sys.stdout = f
+    sys.stderr = f
 
 
 def create_qapp() -> QtWidgets.QApplication:
