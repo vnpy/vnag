@@ -188,7 +188,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(
                 self,
                 "配置已保存",
-                "连接配置已保存，需要重启应用程序才能生效。",
+                "AI服务配置已保存，需要重启应用程序才能生效。",
                 QtWidgets.QMessageBox.StandardButton.Ok
             )
 

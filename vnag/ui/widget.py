@@ -26,6 +26,7 @@ from .setting import (
     save_zoom_factor,
     load_gateway_type,
     save_gateway_type,
+    get_setting
 )
 from .factory import (
     load_gateway_setting,
@@ -299,6 +300,16 @@ class AgentWidget(QtWidgets.QWidget):
 
     def send_message(self) -> None:
         """发送消息"""
+        # 检查是否已配置 AI Gateway
+        gateway_type: str = get_setting("gateway_type")
+        if not gateway_type:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "AI服务未配置",
+                "请先在【菜单栏-功能-AI服务配置】配置AI服务"
+            )
+            return
+
         model: str = self.model_combo.currentText()
         if not model:
             QtWidgets.QMessageBox.warning(
