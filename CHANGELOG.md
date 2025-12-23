@@ -1,3 +1,25 @@
+# 0.5.0
+
+## Add
+
+1. 增加对于推理思考（thinking）内容的支持
+2. 添加DeepseekGateway，支持思维链输出和输入
+3. 添加MinimaxGateway，支持交错思维
+4. 添加BailianGateway，阿里云百炼AI服务
+5. 添加OpenrouterGateway，支持思考推理输出
+6. 添加AI服务配置对话框
+7. 支持pythonw.exe运行（重定向std输出）
+
+## Mod
+
+1. AgentWidget发送消息前检查AI服务是否已配置
+2. 支持AI服务配置中的列表选项
+3. 优化运行时目录的管理
+4. 标题生成独立处理，避免失败触发abort_stream()导致消息重复
+5. 优化会话历史的删除和重发
+6. 精简默认安装依赖项
+7. 支持模型名称中不包含厂商名的情况
+
 # 0.4.0
 
 ## Add

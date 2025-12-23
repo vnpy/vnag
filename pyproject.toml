@@ -35,12 +35,13 @@ dependencies = [
     "requests",
     "chardet",
 ]
+requires-python = ">=3.10"
+keywords = ["ai", "agent"]
 
 [project.optional-dependencies]
 rag = [
     # 分段器
     "markdown-it-py",
-    "pypdf",
     "libclang",
     # 嵌入模型
     "sentence-transformers",
@@ -49,8 +50,6 @@ rag = [
     "qdrant-client",
     "numpy",
 ]
-requires-python = ">=3.10"
-keywords = ["ai", "agent"]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
