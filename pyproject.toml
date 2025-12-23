@@ -35,6 +35,8 @@ dependencies = [
     "requests",
     "chardet",
 ]
+requires-python = ">=3.10"
+keywords = ["ai", "agent"]
 
 [project.optional-dependencies]
 rag = [
@@ -49,8 +51,6 @@ rag = [
     "qdrant-client",
     "numpy",
 ]
-requires-python = ">=3.10"
-keywords = ["ai", "agent"]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
