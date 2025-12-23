@@ -1124,7 +1124,8 @@ class GatewayDialog(QtWidgets.QDialog):
 
         self.setting_modified: bool = False
 
-        self.setting_widgets: dict[str, dict[str, QtWidgets.QLineEdit]] = {}    # 嵌套字典: {gateway_type: {key: QLineEdit}}
+        # 嵌套字典: {gateway_type: {key: QLineEdit | QComboBox}}
+        self.setting_widgets: dict[str, dict[str, QtWidgets.QWidget]] = {}
 
         self.page_indices: dict[str, int] = {}      # Gateway类型到页面索引的映射
 
@@ -1192,17 +1193,32 @@ class GatewayDialog(QtWidgets.QDialog):
             saved_setting: dict = load_gateway_setting(gateway_type)
 
             # 创建配置字段
-            widgets: dict[str, QtWidgets.QLineEdit] = {}
+            widgets: dict[str, QtWidgets.QWidget] = {}
             for key, default_value in default_setting.items():
                 label: str = self.get_field_label(key)
-                line_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
 
-                # 使用已保存的值，否则使用默认值
-                value: str = saved_setting.get(key, default_value)
-                line_edit.setText(str(value) if value else "")
+                # 列表类型使用 QComboBox
+                if isinstance(default_value, list):
+                    combo_box: QtWidgets.QComboBox = QtWidgets.QComboBox()
+                    combo_box.addItems(default_value)
 
-                page_layout.addRow(label, line_edit)
-                widgets[key] = line_edit
+                    # 使用已保存的值设置当前选项
+                    saved_value: str = saved_setting.get(key, "")
+                    if saved_value and saved_value in default_value:
+                        combo_box.setCurrentText(saved_value)
+
+                    page_layout.addRow(label, combo_box)
+                    widgets[key] = combo_box
+                # 其他类型使用 QLineEdit
+                else:
+                    line_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+
+                    # 使用已保存的值，否则使用默认值
+                    value: str = saved_setting.get(key, default_value)
+                    line_edit.setText(str(value) if value else "")
+
+                    page_layout.addRow(label, line_edit)
+                    widgets[key] = line_edit
 
             # 保存控件引用和页面索引
             self.setting_widgets[gateway_type] = widgets
@@ -1240,7 +1256,7 @@ class GatewayDialog(QtWidgets.QDialog):
         gateway_type: str = self.type_combo.currentText()
 
         # 获取当前 Gateway 的控件
-        widgets: dict[str, QtWidgets.QLineEdit] | None = self.setting_widgets.get(
+        widgets: dict[str, QtWidgets.QWidget] | None = self.setting_widgets.get(
             gateway_type
         )
         if not widgets:
@@ -1249,7 +1265,10 @@ class GatewayDialog(QtWidgets.QDialog):
         # 收集配置值
         setting: dict[str, str] = {}
         for key, widget in widgets.items():
-            setting[key] = widget.text().strip()
+            if isinstance(widget, QtWidgets.QComboBox):
+                setting[key] = widget.currentText()
+            elif isinstance(widget, QtWidgets.QLineEdit):
+                setting[key] = widget.text().strip()
 
         # 验证必填字段
         gateway_cls = get_gateway_class(gateway_type)
