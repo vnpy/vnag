@@ -4,7 +4,8 @@ from ..engine import AgentEngine
 from ..utility import WORKING_DIR
 from ..agent import Profile, TaskAgent
 from .. import __version__
-from .widget import AgentWidget, ToolDialog, ModelDialog, ProfileDialog
+from .widget import AgentWidget, ToolDialog, ModelDialog, ProfileDialog, GatewayDialog
+from .setting import get_setting
 from .qt import QtWidgets, QtGui, QtCore
 
 
@@ -22,6 +23,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_id: str = ""
 
         self.models: list[str] = self.engine.list_models()
+
+        self.first_show: bool = True
 
         self.init_ui()
         self.load_data()
@@ -119,6 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
         session_menu.addAction("删除会话", self.delete_current_widget)
 
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
+        function_menu.addAction("AI服务配置", self.show_gateway_dialog)
         function_menu.addAction("智能体配置", self.show_profile_dialog)
         function_menu.addAction("工具浏览器", self.show_tool_dialog)
         function_menu.addAction("模型浏览器", self.show_model_dialog)
@@ -173,6 +177,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self.profile_combo.setCurrentText(current_name)
         else:
             self.profile_combo.setCurrentIndex(0)
+
+    def show_gateway_dialog(self) -> None:
+        """显示 Gateway 连接配置界面"""
+        dialog: GatewayDialog = GatewayDialog(self)
+        dialog.exec()
+
+        # 如果配置被修改，提示用户重启
+        if dialog.was_modified():
+            QtWidgets.QMessageBox.information(
+                self,
+                "配置已保存",
+                "连接配置已保存，需要重启应用程序才能生效。",
+                QtWidgets.QMessageBox.StandardButton.Ok
+            )
 
     def show_profile_dialog(self) -> None:
         """显示智能体管理界面"""
@@ -370,6 +388,22 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_website(self) -> None:
         """打开官网"""
         QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://www.github.com/vnpy/vnag"))
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        """重写显示事件，首次显示时检查配置"""
+        super().showEvent(event)
+
+        if self.first_show:
+            self.first_show = False
+
+            # 延迟调用，让主界面先完成渲染
+            QtCore.QTimer.singleShot(100, self.check_gateway_setting)
+
+    def check_gateway_setting(self) -> None:
+        """检查 Gateway 配置，如果未配置则弹出配置对话框"""
+        gateway_type = get_setting("gateway_type")
+        if not gateway_type:
+            self.show_gateway_dialog()
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         """重写关闭事件，最小化到托盘而不是退出"""

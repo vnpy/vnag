@@ -9,6 +9,7 @@ from ..constant import Role
 from ..engine import AgentEngine, default_profile
 from ..object import ToolSchema
 from ..agent import Profile, TaskAgent
+from ..gateways import GATEWAY_CLASSES, get_gateway_class
 
 from .qt import (
     QtCore,
@@ -22,7 +23,13 @@ from .setting import (
     load_favorite_models,
     save_favorite_models,
     load_zoom_factor,
-    save_zoom_factor
+    save_zoom_factor,
+    load_gateway_type,
+    save_gateway_type,
+)
+from .factory import (
+    load_gateway_setting,
+    save_gateway_setting,
 )
 
 
@@ -964,7 +971,7 @@ class ModelDialog(QtWidgets.QDialog):
         """填充所有模型树"""
         models: list[str] = self._engine.list_models()
 
-        separator: str | None = self._detect_separator(models)
+        separator: str | None = self.detect_separator(models)
         vendor_models: dict[str, list[str]] = defaultdict(list)
 
         if separator:
@@ -1089,7 +1096,7 @@ class ModelDialog(QtWidgets.QDialog):
 
         menu.exec(self.favorite_list.viewport().mapToGlobal(pos))
 
-    def _detect_separator(self, models: list[str]) -> str | None:
+    def detect_separator(self, models: list[str]) -> str | None:
         """检测模型名称中的分隔符"""
         if not models:
             return None
@@ -1106,3 +1113,165 @@ class ModelDialog(QtWidgets.QDialog):
             return None
 
         return max(counts, key=lambda x: counts[x])
+
+
+class GatewayDialog(QtWidgets.QDialog):
+    """AI服务配置对话框"""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self.setting_modified: bool = False
+
+        self.setting_widgets: dict[str, dict[str, QtWidgets.QLineEdit]] = {}    # 嵌套字典: {gateway_type: {key: QLineEdit}}
+
+        self.page_indices: dict[str, int] = {}      # Gateway类型到页面索引的映射
+
+        self.init_ui()
+        self.init_gateway_pages()
+        self.load_current_setting()
+
+    def init_ui(self) -> None:
+        """初始化UI"""
+        self.setWindowTitle("AI服务配置")
+        self.setMinimumSize(600, 300)
+
+        # Gateway 类型选择
+        self.type_label: QtWidgets.QLabel = QtWidgets.QLabel("AI服务")
+
+        self.type_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
+        self.type_combo.setFixedWidth(300)
+        self.type_combo.addItems(sorted(GATEWAY_CLASSES.keys()))
+        self.type_combo.currentTextChanged.connect(self.on_type_changed)
+
+        type_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        type_hbox.addWidget(self.type_label)
+        type_hbox.addWidget(self.type_combo)
+        type_hbox.addStretch()
+
+        # 配置字段容器 - 使用 QStackedWidget 预加载所有页面
+        self.setting_label: QtWidgets.QLabel = QtWidgets.QLabel("配置参数")
+        self.stack_widget: QtWidgets.QStackedWidget = QtWidgets.QStackedWidget()
+
+        # 底部按钮
+        self.save_button: QtWidgets.QPushButton = QtWidgets.QPushButton("保存")
+        self.save_button.clicked.connect(self.save_setting)
+
+        self.cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton("取消")
+        self.cancel_button.clicked.connect(self.reject)
+
+        button_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        button_hbox.addStretch()
+        button_hbox.addWidget(self.save_button)
+        button_hbox.addWidget(self.cancel_button)
+
+        # 主布局
+        main_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        main_vbox.addLayout(type_hbox)
+        main_vbox.addWidget(QtWidgets.QLabel("   "))
+        main_vbox.addWidget(self.setting_label)
+        main_vbox.addWidget(self.stack_widget)
+        main_vbox.addLayout(button_hbox)
+        self.setLayout(main_vbox)
+
+    def init_gateway_pages(self) -> None:
+        """预先创建所有 Gateway 的配置页面"""
+        for gateway_type in sorted(GATEWAY_CLASSES.keys()):
+            gateway_cls = get_gateway_class(gateway_type)
+            if not gateway_cls:
+                continue
+
+            # 创建该 Gateway 的页面
+            page_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+            page_layout: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+            page_widget.setLayout(page_layout)
+
+            # 获取默认配置和已保存配置
+            default_setting: dict = gateway_cls.default_setting
+            saved_setting: dict = load_gateway_setting(gateway_type)
+
+            # 创建配置字段
+            widgets: dict[str, QtWidgets.QLineEdit] = {}
+            for key, default_value in default_setting.items():
+                label: str = self.get_field_label(key)
+                line_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+
+                # 使用已保存的值，否则使用默认值
+                value: str = saved_setting.get(key, default_value)
+                line_edit.setText(str(value) if value else "")
+
+                page_layout.addRow(label, line_edit)
+                widgets[key] = line_edit
+
+            # 保存控件引用和页面索引
+            self.setting_widgets[gateway_type] = widgets
+            index: int = self.stack_widget.addWidget(page_widget)
+            self.page_indices[gateway_type] = index
+
+    def load_current_setting(self) -> None:
+        """加载当前配置"""
+        gateway_type: str = load_gateway_type()
+
+        if gateway_type and gateway_type in GATEWAY_CLASSES:
+            self.type_combo.setCurrentText(gateway_type)
+        else:
+            # 默认选择第一个
+            self.type_combo.setCurrentIndex(0)
+
+        self.on_type_changed(self.type_combo.currentText())
+
+    def on_type_changed(self, gateway_type: str) -> None:
+        """Gateway 类型变更时切换显示页面"""
+        if gateway_type in self.page_indices:
+            self.stack_widget.setCurrentIndex(self.page_indices[gateway_type])
+
+    def get_field_label(self, key: str) -> str:
+        """获取字段显示标签"""
+        labels: dict[str, str] = {
+            "base_url": "API 地址",
+            "api_key": "API 密钥",
+            "reasoning_effort": "推理强度",
+        }
+        return labels.get(key, key)
+
+    def save_setting(self) -> None:
+        """保存配置"""
+        gateway_type: str = self.type_combo.currentText()
+
+        # 获取当前 Gateway 的控件
+        widgets: dict[str, QtWidgets.QLineEdit] | None = self.setting_widgets.get(
+            gateway_type
+        )
+        if not widgets:
+            return
+
+        # 收集配置值
+        setting: dict[str, str] = {}
+        for key, widget in widgets.items():
+            setting[key] = widget.text().strip()
+
+        # 验证必填字段
+        gateway_cls = get_gateway_class(gateway_type)
+        if gateway_cls:
+            default_setting: dict = gateway_cls.default_setting
+            for key in default_setting:
+                # api_key 是必填项
+                if key == "api_key" and not setting.get(key):
+                    QtWidgets.QMessageBox.warning(
+                        self,
+                        "配置错误",
+                        "API 密钥不能为空"
+                    )
+                    return
+
+        # 保存配置
+        save_gateway_type(gateway_type)
+        save_gateway_setting(gateway_type, setting)
+
+        self.setting_modified = True
+        self.accept()
+
+    def was_modified(self) -> bool:
+        """返回配置是否被修改"""
+        return self.setting_modified

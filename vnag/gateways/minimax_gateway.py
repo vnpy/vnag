@@ -80,3 +80,14 @@ class MinimaxGateway(OpenaiGateway):
         并在下一轮传回模型，以确保模型的思维链不被中断。
         """
         return {"reasoning_details": [{"text": thinking}]}
+
+
+    def list_models(self) -> list[str]:
+        """MiniMax 官方的API服务不提供模型查询功能"""
+        models: list[str] = [
+            "MiniMax-M2",
+            "MiniMax-M2-Stable",
+            "MiniMax-M2.1",
+            "MiniMax-M2.1-Lighting",
+        ]
+        return models

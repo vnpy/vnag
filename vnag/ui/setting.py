@@ -91,3 +91,13 @@ def load_font_size() -> int:
 def save_font_size(font_size: int) -> None:
     """保存字体大小"""
     set_setting("font_size", font_size)
+
+
+def load_gateway_type() -> str:
+    """加载当前选择的 gateway 类型"""
+    return cast(str, get_setting("gateway_type", "OpenAI"))
+
+
+def save_gateway_type(gateway_type: str) -> None:
+    """保存当前选择的 gateway 类型"""
+    set_setting("gateway_type", gateway_type)
