@@ -29,10 +29,11 @@ class OpenrouterGateway(OpenaiGateway):
         self.reasoning_effort: str = setting.get("reasoning_effort", "medium")
         return super().init(setting)
 
-    def _get_reasoning_data(self, obj: Any) -> list | None:
+    def _get_reasoning_data(self, obj: Any) -> list[dict[str, Any]] | None:
         """从对象中获取 reasoning_details 数据"""
         if hasattr(obj, "reasoning_details") and obj.reasoning_details:
-            return obj.reasoning_details
+            data: list[dict[str, Any]] = list(obj.reasoning_details)
+            return data
         return None
 
     def _extract_thinking(self, message: Any) -> str:
@@ -47,17 +48,17 @@ class OpenrouterGateway(OpenaiGateway):
                 thinking += detail["text"]
         return thinking
 
-    def _extract_thinking_delta(self, delta: Any) -> str:
-        """从流式 delta 对象中提取 thinking 增量"""
+    def _extract_thinking_delta(self, delta: Any) -> tuple[str, list]:
+        """从流式 delta 对象中提取 thinking 增量和原始 reasoning 数据"""
         reasoning_data = self._get_reasoning_data(delta)
         if not reasoning_data:
-            return ""
+            return "", []
 
         thinking: str = ""
         for detail in reasoning_data:
             if isinstance(detail, dict) and detail.get("text"):
                 thinking += detail["text"]
-        return thinking
+        return thinking, reasoning_data
 
     def _get_extra_body(self) -> dict[str, Any]:
         """获取请求的额外参数，启用 OpenRouter 的 reasoning 功能"""
@@ -67,8 +68,9 @@ class OpenrouterGateway(OpenaiGateway):
         """
         将内部 Message 格式转换为 OpenRouter API 格式
 
-        覆盖父类方法，为 assistant 消息使用 content 数组格式，
-        满足 Claude extended thinking 的要求。
+        同时支持：
+        - reasoning_details 格式（Gemini 需要 thought_signature）
+        - content 数组格式（Claude extended thinking）
         """
         openai_messages: list[dict[str, Any]] = []
 
@@ -85,25 +87,25 @@ class OpenrouterGateway(OpenaiGateway):
 
             message_dict: dict[str, Any] = {"role": msg.role.value}
 
-            # 对于 assistant 消息，使用 content 数组格式
+            # 对于 assistant 消息
             if msg.role == Role.ASSISTANT:
-                content_parts: list[dict[str, Any]] = []
-
-                # 添加 thinking block（Claude 要求必须以此开头）
-                if msg.thinking:
+                # 有 reasoning_details 时，使用 OpenRouter 格式
+                if msg.reasoning:
+                    if msg.content:
+                        message_dict["content"] = msg.content
+                    message_dict["reasoning_details"] = msg.reasoning
+                else:
+                    # 降级：使用 content 数组格式（Claude extended thinking）
+                    content_parts: list[dict[str, Any]] = []
                     content_parts.append({
                         "type": "thinking",
-                        "thinking": msg.thinking
+                        "thinking": msg.thinking or ""
                     })
-
-                # 添加文本内容
-                if msg.content:
-                    content_parts.append({
-                        "type": "text",
-                        "text": msg.content
-                    })
-
-                if content_parts:
+                    if msg.content:
+                        content_parts.append({
+                            "type": "text",
+                            "text": msg.content
+                        })
                     message_dict["content"] = content_parts
             elif msg.content:
                 message_dict["content"] = msg.content

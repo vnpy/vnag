@@ -123,6 +123,7 @@ class TaskAgent:
             # 重置收集的内容
             self.collected_content = ""
             self.collected_thinking = ""
+            self.collected_reasoning: list[dict[str, Any]] = []
             self.collected_tool_calls = []
 
             # 迭代次数加1
@@ -157,6 +158,10 @@ class TaskAgent:
                 if delta.thinking:
                     self.collected_thinking += delta.thinking
 
+                # 累积收到的 reasoning 数据（保留原始结构用于回传）
+                if delta.reasoning:
+                    self.collected_reasoning.extend(delta.reasoning)
+
                 # 累积收到的工具调用请求
                 if delta.calls:
                     self.collected_tool_calls.extend(delta.calls)
@@ -176,6 +181,7 @@ class TaskAgent:
                 role=Role.ASSISTANT,
                 content=self.collected_content,
                 thinking=self.collected_thinking,
+                reasoning=self.collected_reasoning,
                 tool_calls=self.collected_tool_calls
             )
 

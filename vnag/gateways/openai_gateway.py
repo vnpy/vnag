@@ -50,13 +50,14 @@ class OpenaiGateway(BaseGateway):
         """
         return ""
 
-    def _extract_thinking_delta(self, delta: Any) -> str:
+    def _extract_thinking_delta(self, delta: Any) -> tuple[str, list]:
         """
-        从流式 delta 对象中提取 thinking 增量（子类可覆盖）
+        从流式 delta 对象中提取 thinking 增量和原始 reasoning 数据（子类可覆盖）
 
-        标准 OpenAI API 不返回 thinking 内容，返回空字符串。
+        返回: (thinking_text, reasoning_data)
+        标准 OpenAI API 不返回 thinking 内容，返回空元组。
         """
-        return ""
+        return "", []
 
     def _get_extra_body(self) -> dict[str, Any] | None:
         """
@@ -242,6 +243,10 @@ class OpenaiGateway(BaseGateway):
         if request.tool_schemas:
             create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
 
+        # DEBUG: 打印发送的 messages
+        import json as _json
+        print("DEBUG messages:", _json.dumps(openai_messages, ensure_ascii=False, indent=2))
+
         stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(**create_params)
 
         response_id: str = ""
@@ -258,9 +263,12 @@ class OpenaiGateway(BaseGateway):
             choice: ChunkChoice = chuck.choices[0]
 
             # 检查 thinking 增量（通过钩子方法，子类可定制）
-            thinking_delta: str = self._extract_thinking_delta(choice.delta)
+            thinking_delta, reasoning_data = self._extract_thinking_delta(choice.delta)
             if thinking_delta:
                 delta.thinking = thinking_delta
+                should_yield = True
+            if reasoning_data:
+                delta.reasoning = reasoning_data
                 should_yield = True
 
             # 检查内容增量
