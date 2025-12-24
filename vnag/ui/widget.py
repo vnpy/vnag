@@ -412,7 +412,8 @@ class AgentWidget(QtWidgets.QWidget):
         self.send_button.setVisible(True)
         self.stop_button.setVisible(False)
 
-        QtWidgets.QMessageBox.critical(self, "错误", f"流式请求失败：\n{error_msg}")
+        dialog = ErrorDialog("流式请求失败：", error_msg, self)
+        dialog.exec()
 
     def on_title_generated(self, title: str) -> None:
         """处理标题生成完成"""
@@ -450,6 +451,53 @@ class AgentWidget(QtWidgets.QWidget):
         # 如果模型选择在刷新后发生了变化，则手动同步到Agent
         if self.model_combo.currentText() != self.agent.model:
             self.on_model_changed(self.model_combo.currentText())
+
+
+class ErrorDialog(QtWidgets.QDialog):
+    """可滚动、可复制的错误信息对话框"""
+
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        parent: QtWidgets.QWidget | None = None
+    ) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self.message: str = message
+
+        self.setWindowTitle("错误")
+        self.setMinimumSize(800, 600)
+
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # 标题标签
+        label = QtWidgets.QLabel(title)
+        layout.addWidget(label)
+
+        # 可滚动、可复制的文本框
+        text_edit = QtWidgets.QPlainTextEdit()
+        text_edit.setPlainText(message)
+        text_edit.setReadOnly(True)
+        layout.addWidget(text_edit)
+
+        # 按钮区域
+        button_layout = QtWidgets.QHBoxLayout()
+
+        copy_button = QtWidgets.QPushButton("复制")
+        copy_button.clicked.connect(self.copy_message)
+        button_layout.addWidget(copy_button)
+
+        close_button = QtWidgets.QPushButton("关闭")
+        close_button.clicked.connect(self.accept)
+        button_layout.addWidget(close_button)
+
+        layout.addLayout(button_layout)
+
+    def copy_message(self) -> None:
+        """复制错误信息到剪贴板"""
+        QtWidgets.QApplication.clipboard().setText(self.message)
 
 
 class ProfileDialog(QtWidgets.QDialog):
