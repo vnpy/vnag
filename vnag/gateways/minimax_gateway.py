@@ -20,26 +20,41 @@ class MinimaxGateway(OpenaiGateway):
         "api_key": "",
     }
 
+    def _get_reasoning_data(self, obj: Any) -> list[dict[str, Any]] | None:
+        """从对象中获取 reasoning_details 数据"""
+        if not hasattr(obj, "reasoning_details") or not obj.reasoning_details:
+            return None
+
+        data: list[dict[str, Any]] = []
+        for detail in obj.reasoning_details:
+            # 对象格式转换为字典
+            if hasattr(detail, "text"):
+                data.append({"text": detail.text})
+            # 字典格式直接使用
+            elif isinstance(detail, dict):
+                data.append(detail)
+        return data if data else None
+
     def _extract_thinking(self, message: Any) -> str:
         """
         从消息对象中提取 thinking 内容
 
         MiniMax 使用 reasoning_details 数组格式，每个元素包含 text 字段
         """
+        reasoning_data = self._get_reasoning_data(message)
+        if not reasoning_data:
+            return ""
+
         thinking: str = ""
-
-        if not hasattr(message, "reasoning_details") or not message.reasoning_details:
-            return thinking
-
-        for detail in message.reasoning_details:
-            # 对象格式（常见）
-            if hasattr(detail, "text") and detail.text:
-                thinking += detail.text
-            # 字典格式（某些情况下 API 返回 dict）
-            elif isinstance(detail, dict) and detail.get("text"):
+        for detail in reasoning_data:
+            if isinstance(detail, dict) and detail.get("text"):
                 thinking += detail["text"]
-
         return thinking
+
+    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
+        """从消息对象中提取 reasoning 数据"""
+        data: list[dict[str, Any]] | None = self._get_reasoning_data(message)
+        return data if data else []
 
     def _extract_thinking_delta(self, delta: Any) -> str:
         """
@@ -47,20 +62,20 @@ class MinimaxGateway(OpenaiGateway):
 
         处理流式响应中的 reasoning_details 增量数据
         """
+        reasoning_data = self._get_reasoning_data(delta)
+        if not reasoning_data:
+            return ""
+
         thinking: str = ""
-
-        if not hasattr(delta, "reasoning_details") or not delta.reasoning_details:
-            return thinking
-
-        for detail in delta.reasoning_details:
-            # 对象格式
-            if hasattr(detail, "text") and detail.text:
-                thinking += detail.text
-            # 字典格式
-            elif isinstance(detail, dict) and detail.get("text"):
+        for detail in reasoning_data:
+            if isinstance(detail, dict) and detail.get("text"):
                 thinking += detail["text"]
-
         return thinking
+
+    def _extract_reasoning_delta(self, delta: Any) -> list[dict[str, Any]]:
+        """从流式 delta 对象中提取 reasoning 增量数据"""
+        data: list[dict[str, Any]] | None = self._get_reasoning_data(delta)
+        return data if data else []
 
     def _get_extra_body(self) -> dict[str, Any]:
         """
