@@ -122,6 +122,7 @@ class TaskAgent:
         while iteration < self.profile.max_iterations:
             # 重置收集的内容
             self.collected_content = ""
+            self.collected_thinking = ""
             self.collected_tool_calls = []
 
             # 迭代次数加1
@@ -152,6 +153,10 @@ class TaskAgent:
                 if delta.content:
                     self.collected_content += delta.content
 
+                # 累积收到的 thinking 内容
+                if delta.thinking:
+                    self.collected_thinking += delta.thinking
+
                 # 累积收到的工具调用请求
                 if delta.calls:
                     self.collected_tool_calls.extend(delta.calls)
@@ -170,6 +175,7 @@ class TaskAgent:
             assistant_msg: Message = Message(
                 role=Role.ASSISTANT,
                 content=self.collected_content,
+                thinking=self.collected_thinking,
                 tool_calls=self.collected_tool_calls
             )
 
