@@ -114,10 +114,9 @@ class OpenaiGateway(BaseGateway):
                     ]
 
                 # 回传 thinking 内容（通过钩子方法，子类可定制）
-                if msg.thinking:
-                    thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
-                    if thinking_data:
-                        message_dict.update(thinking_data)
+                thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
+                if thinking_data:
+                    message_dict.update(thinking_data)
 
                 openai_messages.append(message_dict)
 
@@ -321,8 +320,8 @@ class OpenaiGateway(BaseGateway):
             # 检查用量信息（通常在最后一个数据块中）
             if chuck.usage:
                 delta.usage = Usage(
-                    input_tokens=chuck.usage.prompt_tokens,
-                    output_tokens=chuck.usage.completion_tokens,
+                    input_tokens=chuck.usage.prompt_tokens or 0,
+                    output_tokens=chuck.usage.completion_tokens or 0,
                 )
                 should_yield = True
 
