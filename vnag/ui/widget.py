@@ -53,7 +53,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
         # 页面加载状态和消息队列
         self.page_loaded: bool = False
-        self.message_queue: list[tuple[Role, str]] = []
+        self.message_queue: list[tuple[Role, str, str]] = []
 
         # 连接页面加载完成信号
         self.page().loadFinished.connect(self._on_load_finished)
@@ -92,8 +92,8 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # 设置页面加载完成标志，并处理消息队列
         self.page_loaded = True
 
-        for role, content in self.message_queue:
-            self.append_message(role, content)
+        for role, content, thinking in self.message_queue:
+            self.append_message(role, content, thinking)
 
         self.message_queue.clear()
 
@@ -111,11 +111,11 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         else:
             self.message_queue.clear()
 
-    def append_message(self, role: Role, content: str) -> None:
+    def append_message(self, role: Role, content: str, thinking: str = "") -> None:
         """在会话历史组件中添加消息"""
         # 如果页面未加载完成，则将消息添加到消息队列
         if not self.page_loaded:
-            self.message_queue.append((role, content))
+            self.message_queue.append((role, content, thinking))
             return
 
         # 用户消息，不需要被渲染
@@ -134,7 +134,10 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         elif role is Role.ASSISTANT:
             js_content = json.dumps(content)
             js_name: str = json.dumps(self.profile_name)
-            self.page().runJavaScript(f"appendAssistantMessage({js_content}, {js_name})")
+            js_thinking: str = json.dumps(thinking)
+            self.page().runJavaScript(
+                f"appendAssistantMessage({js_content}, {js_name}, {js_thinking})"
+            )
 
     def start_stream(self) -> None:
         """开始新的流式输出"""
@@ -261,6 +264,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.history_widget.clear()
 
         assistant_content: str = ""
+        assistant_thinking: str = ""
 
         for message in self.agent.messages:
             # 系统消息，不显示
@@ -272,8 +276,11 @@ class AgentWidget(QtWidgets.QWidget):
                 if message.content:
                     # 如果助手内容不为空，则先显示助手内容（包含之前的工具调用记录）
                     if assistant_content:
-                        self.history_widget.append_message(Role.ASSISTANT, assistant_content)
+                        self.history_widget.append_message(
+                            Role.ASSISTANT, assistant_content, assistant_thinking
+                        )
                         assistant_content = ""
+                        assistant_thinking = ""
 
                     # 显示用户内容
                     self.history_widget.append_message(Role.USER, message.content)
@@ -282,6 +289,10 @@ class AgentWidget(QtWidgets.QWidget):
                     continue
             # 助手消息
             elif message.role is Role.ASSISTANT:
+                # 累积 thinking 内容
+                if message.thinking:
+                    assistant_thinking += message.thinking
+
                 # 有内容，则添加到助手内容
                 if message.content:
                     assistant_content += message.content
@@ -293,8 +304,9 @@ class AgentWidget(QtWidgets.QWidget):
 
         # 显示消息
         if assistant_content:
-            self.history_widget.append_message(Role.ASSISTANT, assistant_content)
-            assistant_content = ""
+            self.history_widget.append_message(
+                Role.ASSISTANT, assistant_content, assistant_thinking
+            )
 
         self.update_buttons()
 
