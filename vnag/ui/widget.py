@@ -50,6 +50,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.full_content: str = ""
         self.full_thinking: str = ""
         self.msg_id: str = ""
+        self.last_type: str = ""
 
         # 页面加载状态和消息队列
         self.page_loaded: bool = False
@@ -145,6 +146,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.full_content = ""
         self.full_thinking = ""
         self.msg_id = f"msg-{uuid.uuid4().hex}"
+        self.last_type = ""
 
         # 调用前端函数，开始新的流式输出
         js_name: str = json.dumps(self.profile_name)
@@ -152,6 +154,9 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
     def update_stream(self, content_delta: str) -> None:
         """更新流式输出（content 内容）"""
+        # 记录当前类型为 content
+        self.last_type = "content"
+
         # 累积收到的内容
         self.full_content += content_delta
 
@@ -163,6 +168,13 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
 
     def update_thinking(self, thinking_delta: str) -> None:
         """更新流式输出（thinking 内容）"""
+        # 如果之前输出过其他类型的内容（如content），且已有thinking内容，则换行
+        if self.last_type and self.last_type != "thinking" and self.full_thinking:
+            self.full_thinking += "\n\n"
+
+        # 记录当前类型为 thinking
+        self.last_type = "thinking"
+
         # 累积收到的 thinking 内容
         self.full_thinking += thinking_delta
 
@@ -265,6 +277,7 @@ class AgentWidget(QtWidgets.QWidget):
 
         assistant_content: str = ""
         assistant_thinking: str = ""
+        last_type: str = ""
 
         for message in self.agent.messages:
             # 系统消息，不显示
@@ -277,10 +290,13 @@ class AgentWidget(QtWidgets.QWidget):
                     # 如果助手内容不为空，则先显示助手内容（包含之前的工具调用记录）
                     if assistant_content:
                         self.history_widget.append_message(
-                            Role.ASSISTANT, assistant_content, assistant_thinking
+                            Role.ASSISTANT,
+                            assistant_content,
+                            assistant_thinking
                         )
                         assistant_content = ""
                         assistant_thinking = ""
+                        last_type = ""
 
                     # 显示用户内容
                     self.history_widget.append_message(Role.USER, message.content)
@@ -291,22 +307,27 @@ class AgentWidget(QtWidgets.QWidget):
             elif message.role is Role.ASSISTANT:
                 # 累积 thinking 内容
                 if message.thinking:
+                    # 如果之前输出过其他类型的内容（如content），且已有thinking内容，则换行
+                    if last_type and last_type != "thinking" and assistant_thinking:
+                        assistant_thinking += "\n\n"
+
                     assistant_thinking += message.thinking
+                    last_type = "thinking"
 
                 # 有内容，则添加到助手内容
                 if message.content:
                     assistant_content += message.content
+                    last_type = "content"
 
                 # 有工具调用请求，则记录调用工具名称
                 if message.tool_calls:
                     for tool_call in message.tool_calls:
                         assistant_content += f"\n\n[执行工具: {tool_call.name}]\n\n"
+                    last_type = "tool"
 
         # 显示消息
         if assistant_content:
-            self.history_widget.append_message(
-                Role.ASSISTANT, assistant_content, assistant_thinking
-            )
+            self.history_widget.append_message(Role.ASSISTANT, assistant_content, assistant_thinking)
 
         self.update_buttons()
 
