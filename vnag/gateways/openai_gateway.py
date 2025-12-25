@@ -50,6 +50,14 @@ class OpenaiGateway(BaseGateway):
         """
         return ""
 
+    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
+        """
+        从消息对象中提取 reasoning 数据（子类可覆盖）
+
+        标准 OpenAI API 不返回 reasoning_details，返回空列表。
+        """
+        return []
+
     def _extract_thinking_delta(self, delta: Any) -> tuple[str, list]:
         """
         从流式 delta 对象中提取 thinking 增量和原始 reasoning 数据（子类可覆盖）
@@ -184,6 +192,9 @@ class OpenaiGateway(BaseGateway):
         # 提取 thinking 内容（通过钩子方法，子类可定制）
         thinking: str = self._extract_thinking(choice.message)
 
+        # 提取 reasoning 数据（通过钩子方法，子类可定制）
+        reasoning: list[dict[str, Any]] = self._extract_reasoning(choice.message)
+
         # 提取工具调用
         tool_calls: list[ToolCall] = []
         if choice.message.tool_calls:
@@ -204,6 +215,7 @@ class OpenaiGateway(BaseGateway):
             role=Role.ASSISTANT,
             content=choice.message.content or "",
             thinking=thinking,
+            reasoning=reasoning,
             tool_calls=tool_calls
         )
 

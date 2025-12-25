@@ -48,6 +48,11 @@ class OpenrouterGateway(OpenaiGateway):
                 thinking += detail["text"]
         return thinking
 
+    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
+        """从消息对象中提取 reasoning 数据"""
+        data: list[dict[str, Any]] | None = self._get_reasoning_data(message)
+        return data if data else []
+
     def _extract_thinking_delta(self, delta: Any) -> tuple[str, list]:
         """从流式 delta 对象中提取 thinking 增量和原始 reasoning 数据"""
         reasoning_data = self._get_reasoning_data(delta)
