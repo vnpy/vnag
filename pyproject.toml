@@ -50,6 +50,12 @@ rag = [
     "qdrant-client",
     "numpy",
 ]
+feedback = [
+    "fastapi",
+    "uvicorn[standard]",
+    "peewee",
+    "python-multipart",
+]
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
@@ -78,7 +84,7 @@ select = [
     "UP",  # pyupgrade
     "W",  # pycodestyle warning
 ]
-ignore = ["E501"]
+ignore = ["E501", "B008"]
 
 [tool.mypy]
 python_version = "3.10"
