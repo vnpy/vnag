@@ -469,6 +469,11 @@ class AgentWidget(QtWidgets.QWidget):
 
         self.model_combo.clear()
         favorite_models: list[str] = load_favorite_models()
+
+        # 仅显示当前网关支持的模型
+        available_models: set[str] = set(self.engine.list_models())
+        favorite_models = [m for m in favorite_models if m in available_models]
+
         self.model_combo.addItems(favorite_models)
 
         # 恢复之前的选项
