@@ -1,7 +1,7 @@
 # VNAG - Your Agent, Your Data.
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-0.5.0-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-0.6.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
     <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnag.svg?color=orange"/>
@@ -80,8 +80,9 @@ pip install -e .
 
 vnag 需要 API 密钥来与大模型服务进行通信。
 
-1.  请参考 "配置" 章节的说明，在 `.vnag` 目录下创建一个 `connect_openai.json` 文件。
-2.  打开该文件，填入您的 OpenAI API Key 和 Base URL。
+1.  请参考 "配置" 章节的说明，在 `.vnag` 目录下创建一个 `connect_xxx.json` 文件（如 `connect_openai.json`、`connect_deepseek.json` 等）。
+2.  打开该文件，填入对应服务的 API Key 和 Base URL。
+3.  您也可以通过UI界面【菜单栏-功能-AI服务配置】可视化配置API服务。
 
 **第3步：运行聊天UI**
 
@@ -169,6 +170,39 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 }
 ```
 
+**`connect_deepseek.json` 示例:**
+```json
+{
+    "api_key": "sk-YourDeepSeekKey",
+    "base_url": "https://api.deepseek.com"
+}
+```
+
+**`connect_minimax.json` 示例:**
+```json
+{
+    "api_key": "YourMinimaxKey",
+    "base_url": "https://api.minimaxi.com/v1"
+}
+```
+
+**`connect_bailian.json` 示例:**
+```json
+{
+    "api_key": "sk-YourBailianKey",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"
+}
+```
+
+**`connect_openrouter.json` 示例:**
+```json
+{
+    "api_key": "sk-YourOpenRouterKey",
+    "base_url": "https://openrouter.ai/api/v1",
+    "reasoning_effort": "medium"
+}
+```
+
 #### 2. MCP 配置
 
 用于连接 `fastmcp` 元计算平台，以调用远程工具。
@@ -210,7 +244,11 @@ vnag/
 │   ├── gateways/              # 网关实现
 │   │   ├── openai_gateway.py
 │   │   ├── anthropic_gateway.py
-│   │   └── dashscope_gateway.py
+│   │   ├── dashscope_gateway.py
+│   │   ├── deepseek_gateway.py
+│   │   ├── minimax_gateway.py
+│   │   ├── bailian_gateway.py
+│   │   └── openrouter_gateway.py
 │   ├── embedder.py            # 嵌入器基类
 │   ├── embedders/             # 嵌入器实现
 │   │   ├── openai_embedder.py
@@ -284,7 +322,7 @@ vnag/
 - **`agent.py`**: Agent 基类，定义了智能体的基本接口和行为规范。
 - **`engine.py`**: Agent 引擎，负责对话管理、工具调用编排和与大模型交互。
 - **`tracer.py`**: 执行追踪器，用于记录和调试 Agent 的执行过程。
-- **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope 等多种实现。
+- **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope、DeepSeek、MiniMax、百炼、OpenRouter 等多种实现。支持推理思考（Thinking）内容的提取和传递。
 - **`embedder.py` & `embedders/`**: 定义了文本嵌入的统一接口，并提供了 OpenAI、Dashscope、Sentence Transformers 等多种实现。
 - **`segmenter.py` & `segmenters/`**: 用于将文档（如 Markdown、Python、C++ 源码）解析为结构化数据段，是 RAG 的基础。
 - **`vector.py` & `vectors/`**: 向量数据库的统一接口和实现（支持 ChromaDB 和 Qdrant），用于存储和检索知识片段。
@@ -351,7 +389,12 @@ vnag/
     - [x] OpenAI API 兼容
     - [x] Anthropic Claude API 支持
     - [x] 阿里云 Dashscope API 支持
+    - [x] DeepSeek API 支持（含思维链推理）
+    - [x] MiniMax API 支持（含交错思维）
+    - [x] 阿里云百炼平台支持（Qwen3/QwQ深度思考）
+    - [x] OpenRouter 平台支持（多模型统一接入）
     - [x] 流式输出和非流式输出
+    - [x] 推理思考（Thinking）内容的提取和显示
     - [x] 统一的网关接口，易于扩展
 - [x] **嵌入器**：
     - [x] OpenAI Embeddings
@@ -371,6 +414,9 @@ vnag/
     - [x] Agent 实例管理（多智能体切换）
     - [x] Markdown 渲染和代码高亮
     - [x] 执行追踪日志查看
+    - [x] AI服务配置对话框（可视化配置API）
+    - [x] 历史会话思考内容显示
+    - [x] 模型下拉框智能显示（仅当前可用模型）
 - [x] **示例脚本**：覆盖所有核心功能的详细 `examples` 示例，包括网关、分段器、向量库、RAG、工具调用、Agent 和 UI。
 
 ## 常见问题 (FAQ)

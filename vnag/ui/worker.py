@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from ..agent import TaskAgent
 from ..constant import Role
@@ -42,7 +43,7 @@ class StreamWorker(QtCore.QRunnable):
         """停止流式请求"""
         self.stopped = True
 
-    def _safe_emit(self, signal: QtCore.Signal, *args) -> None:
+    def _safe_emit(self, signal: QtCore.SignalInstance, *args: Any) -> None:
         """安全地发出信号，忽略对象已删除的情况"""
         try:
             signal.emit(*args)
