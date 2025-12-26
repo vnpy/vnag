@@ -1,6 +1,9 @@
 from typing import Any
+import json
 
 from .openai_gateway import OpenaiGateway
+from vnag.object import Message
+from vnag.constant import Role
 
 
 class OpenrouterGateway(OpenaiGateway):
@@ -18,91 +21,119 @@ class OpenrouterGateway(OpenaiGateway):
     default_setting: dict = {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key": "",
-        "reasoning_effort": "medium",
+        "reasoning_effort": ["high", "medium", "low"]
     }
 
     def init(self, setting: dict[str, Any]) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
         self.reasoning_effort: str = setting.get("reasoning_effort", "medium")
-
         return super().init(setting)
 
+    def _get_reasoning_data(self, obj: Any) -> list[dict[str, Any]] | None:
+        """从对象中获取 reasoning_details 数据"""
+        if hasattr(obj, "reasoning_details") and obj.reasoning_details:
+            data: list[dict[str, Any]] = list(obj.reasoning_details)
+            return data
+        return None
+
     def _extract_thinking(self, message: Any) -> str:
-        """
-        从消息对象中提取 thinking 内容
+        """从消息对象中提取 thinking 内容"""
+        reasoning_data = self._get_reasoning_data(message)
+        if not reasoning_data:
+            return ""
 
-        OpenRouter 使用 reasoning_details 数组格式，包含：
-        - reasoning.text 类型：详细推理内容
-        - reasoning.summary 类型：推理摘要
-        """
         thinking: str = ""
-
-        if not hasattr(message, "reasoning_details") or not message.reasoning_details:
-            return thinking
-
-        for detail in message.reasoning_details:
-            # 对象格式（常见）
-            if hasattr(detail, "text") and detail.text:
-                thinking += detail.text
-            elif hasattr(detail, "summary") and detail.summary:
-                thinking += detail.summary
-            # 字典格式（某些情况下 API 返回 dict）
-            elif isinstance(detail, dict):
-                if detail.get("text"):
-                    thinking += detail["text"]
-                elif detail.get("summary"):
-                    thinking += detail["summary"]
-
+        for detail in reasoning_data:
+            if isinstance(detail, dict) and detail.get("text"):
+                thinking += detail["text"]
         return thinking
+
+    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
+        """从消息对象中提取 reasoning 数据"""
+        data: list[dict[str, Any]] | None = self._get_reasoning_data(message)
+        return data if data else []
 
     def _extract_thinking_delta(self, delta: Any) -> str:
-        """
-        从流式 delta 对象中提取 thinking 增量
+        """从流式 delta 对象中提取 thinking 增量"""
+        reasoning_data = self._get_reasoning_data(delta)
+        if not reasoning_data:
+            return ""
 
-        处理流式响应中的 reasoning_details 增量数据
-        """
         thinking: str = ""
-
-        if not hasattr(delta, "reasoning_details") or not delta.reasoning_details:
-            return thinking
-
-        for detail in delta.reasoning_details:
-            # 对象格式
-            if hasattr(detail, "text") and detail.text:
-                thinking += detail.text
-            elif hasattr(detail, "summary") and detail.summary:
-                thinking += detail.summary
-            # 字典格式
-            elif isinstance(detail, dict):
-                if detail.get("text"):
-                    thinking += detail["text"]
-                elif detail.get("summary"):
-                    thinking += detail["summary"]
-
+        for detail in reasoning_data:
+            if isinstance(detail, dict) and detail.get("text"):
+                thinking += detail["text"]
         return thinking
 
+    def _extract_reasoning_delta(self, delta: Any) -> list[dict[str, Any]]:
+        """从流式 delta 对象中提取 reasoning 增量数据"""
+        data: list[dict[str, Any]] | None = self._get_reasoning_data(delta)
+        return data if data else []
+
     def _get_extra_body(self) -> dict[str, Any]:
-        """
-        获取请求的额外参数
+        """获取请求的额外参数，启用 OpenRouter 的 reasoning 功能"""
+        return {"reasoning": {"effort": self.reasoning_effort}}
 
-        启用 OpenRouter 的 reasoning 功能
+    def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """
-        return {
-            "reasoning": {"effort": self.reasoning_effort},
-        }
+        将内部 Message 格式转换为 OpenRouter API 格式
 
-    def _convert_thinking_for_request(self, thinking: str) -> dict[str, Any]:
+        同时支持：
+        - reasoning_details 格式（Gemini 需要 thought_signature）
+        - content 数组格式（Claude extended thinking）
         """
-        将 thinking 转换为请求格式
+        openai_messages: list[dict[str, Any]] = []
 
-        使用 OpenRouter 的 reasoning_details 格式回传 thinking 内容，
-        对于 Extended Thinking 多轮对话至关重要。
-        """
-        return {
-            "reasoning_details": [
-                {
-                    "type": "reasoning.text",
-                    "text": thinking,
-                }
-            ]
-        }
+        for msg in messages:
+            # 处理工具结果：拆分为多条 tool 消息
+            if msg.tool_results:
+                for tool_result in msg.tool_results:
+                    openai_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_result.id,
+                        "content": tool_result.content
+                    })
+                continue
+
+            message_dict: dict[str, Any] = {"role": msg.role.value}
+
+            # 对于 assistant 消息
+            if msg.role == Role.ASSISTANT:
+                # 有 reasoning_details 时，使用 OpenRouter 格式
+                if msg.reasoning:
+                    if msg.content:
+                        message_dict["content"] = msg.content
+                    message_dict["reasoning_details"] = msg.reasoning
+                else:
+                    # 降级：使用 content 数组格式（Claude extended thinking）
+                    content_parts: list[dict[str, Any]] = []
+                    content_parts.append({
+                        "type": "thinking",
+                        "thinking": msg.thinking or ""
+                    })
+                    if msg.content:
+                        content_parts.append({
+                            "type": "text",
+                            "text": msg.content
+                        })
+                    message_dict["content"] = content_parts
+            elif msg.content:
+                message_dict["content"] = msg.content
+
+            # 处理 tool_calls
+            if msg.tool_calls:
+                message_dict["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.arguments)
+                        }
+                    }
+                    for tc in msg.tool_calls
+                ]
+
+            openai_messages.append(message_dict)
+
+        return openai_messages

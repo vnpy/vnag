@@ -42,7 +42,6 @@ keywords = ["ai", "agent"]
 rag = [
     # 分段器
     "markdown-it-py",
-    "pypdf",
     "libclang",
     # 嵌入模型
     "sentence-transformers",

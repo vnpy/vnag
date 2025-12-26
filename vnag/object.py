@@ -17,6 +17,7 @@ class Message(BaseModel):
     role: Role
     content: str = ""
     thinking: str = ""
+    reasoning: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list["ToolCall"] = Field(default_factory=list)
     tool_results: list["ToolResult"] = Field(default_factory=list)
 
@@ -53,6 +54,7 @@ class Delta(BaseModel):
     id: str
     content: str | None = None
     thinking: str | None = None
+    reasoning: list[dict[str, Any]] = Field(default_factory=list)
     calls: list["ToolCall"] | None = None
     finish_reason: FinishReason | None = None
     usage: Usage | None = None

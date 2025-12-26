@@ -44,6 +44,7 @@ class AgentEngine:
 
         self._profiles: dict[str, Profile] = {}
         self._agents: dict[str, TaskAgent] = {}
+        self._models: list[str] = []
 
     def init(self) -> None:
         """初始化引擎"""
@@ -208,7 +209,10 @@ class AgentEngine:
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""
-        return self.gateway.list_models()
+        if not self._models:
+            self._models = self.gateway.list_models()
+
+        return self._models
 
     def execute_tool(self, tool_call: ToolCall) -> ToolResult:
         """执行单个工具并返回结果"""

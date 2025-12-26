@@ -53,7 +53,7 @@
                 scrollToBottom();
             }
 
-            window.appendAssistantMessage = function(markdownContent, assistantName) {
+            window.appendAssistantMessage = function(markdownContent, assistantName, thinkingContent) {
                 const history = document.getElementById("history");
                 const messageDiv = document.createElement("div");
                 messageDiv.className = "message assistant";
@@ -61,14 +61,51 @@
                 const htmlContent = md.render(markdownContent);
                 const roleName = assistantName || 'Assistant';
 
+                // 构建 thinking 部分的 HTML
+                let thinkingHtml = '';
+                if (thinkingContent && thinkingContent.trim()) {
+                    const thinkingRendered = md.render(thinkingContent);
+                    thinkingHtml = `
+                        <div class="thinking-container">
+                            <div class="thinking-header">
+                                <span class="thinking-icon">💡</span>
+                                <span class="thinking-label">思考过程</span>
+                                <span class="thinking-toggle">▼</span>
+                            </div>
+                            <div class="thinking-content">${thinkingRendered}</div>
+                        </div>
+                    `;
+                }
+
                 messageDiv.innerHTML = `
                     <div class="message-header">
                         <div class="icon">🤖</div>
                         <div class="role">${roleName}</div>
                         <div class="timestamp">${getCurrentTime()}</div>
                     </div>
+                    ${thinkingHtml}
                     <div class="message-content">${htmlContent}</div>
                 `;
+
+                // 添加折叠/展开功能（如果有 thinking）
+                if (thinkingContent && thinkingContent.trim()) {
+                    const thinkingHeader = messageDiv.querySelector('.thinking-header');
+                    thinkingHeader.addEventListener('click', function() {
+                        const container = this.parentElement;
+                        const content = container.querySelector('.thinking-content');
+                        const toggle = container.querySelector('.thinking-toggle');
+                        
+                        if (container.classList.contains('collapsed')) {
+                            container.classList.remove('collapsed');
+                            content.style.display = 'block';
+                            toggle.textContent = '▼';
+                        } else {
+                            container.classList.add('collapsed');
+                            content.style.display = 'none';
+                            toggle.textContent = '▶';
+                        }
+                    });
+                }
 
                 addCopyButtons(messageDiv);
                 history.appendChild(messageDiv);

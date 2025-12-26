@@ -1,4 +1,5 @@
 import traceback
+from typing import Any
 
 from ..agent import TaskAgent
 from ..constant import Role
@@ -42,6 +43,14 @@ class StreamWorker(QtCore.QRunnable):
         """停止流式请求"""
         self.stopped = True
 
+    def _safe_emit(self, signal: QtCore.SignalInstance, *args: Any) -> None:
+        """安全地发出信号，忽略对象已删除的情况"""
+        try:
+            signal.emit(*args)
+        except RuntimeError:
+            # 信号对象已被删除（窗口已关闭），忽略
+            pass
+
     def run(self) -> None:
         """处理数据流"""
         try:
@@ -53,29 +62,29 @@ class StreamWorker(QtCore.QRunnable):
                     break
                 # 收到 thinking 数据块
                 if delta.thinking:
-                    self.signals.thinking.emit(delta.thinking)
+                    self._safe_emit(self.signals.thinking, delta.thinking)
                 # 收到 content 数据块
                 if delta.content:
-                    self.signals.delta.emit(delta.content)
+                    self._safe_emit(self.signals.delta, delta.content)
 
         except Exception:
             # 中止流式生成，保存已生成的部分内容
             self.agent.abort_stream()
 
             error_msg: str = traceback.format_exc()
-            self.signals.error.emit(error_msg)
+            self._safe_emit(self.signals.error, error_msg)
         finally:
-            self.signals.finished.emit()
+            self._safe_emit(self.signals.finished)
 
         # 流式响应完成后，检查是否需要自动生成标题
         if not self.stopped and self._should_generate_title():
             try:
                 title: str = self.agent.generate_title(max_length=10)
                 if title:
-                    self.signals.title.emit(title)
+                    self._safe_emit(self.signals.title, title)
             except Exception:
                 error_msg = traceback.format_exc()
-                self.signals.error.emit(error_msg)
+                self._safe_emit(self.signals.error, error_msg)
 
     def _should_generate_title(self) -> bool:
         """判断是否需要自动生成标题"""

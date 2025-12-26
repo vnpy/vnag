@@ -122,6 +122,8 @@ class TaskAgent:
         while iteration < self.profile.max_iterations:
             # 重置收集的内容
             self.collected_content = ""
+            self.collected_thinking = ""
+            self.collected_reasoning: list[dict[str, Any]] = []
             self.collected_tool_calls = []
 
             # 迭代次数加1
@@ -152,6 +154,37 @@ class TaskAgent:
                 if delta.content:
                     self.collected_content += delta.content
 
+                # 累积收到的 thinking 内容
+                if delta.thinking:
+                    self.collected_thinking += delta.thinking
+
+                # 累积收到的 reasoning 数据（保留原始结构用于回传）
+                if delta.reasoning:
+                    for new_item in delta.reasoning:
+                        # 如果没有 index，直接追加
+                        if "index" not in new_item:
+                            self.collected_reasoning.append(new_item)
+                            continue
+
+                        # 查找是否存在相同 index 的项
+                        existing_item = next(
+                            (item for item in self.collected_reasoning if item.get("index") == new_item["index"]),
+                            None
+                        )
+
+                        if existing_item:
+                            # 合并字段
+                            for key, value in new_item.items():
+                                # 字符串类型的字段进行拼接 (signature 不拼接)
+                                if key in ["text", "data", "summary"] and isinstance(value, str):
+                                    existing_item[key] = existing_item.get(key, "") + value
+                                # 其他字段直接覆盖（如 type, format, id, signature 等）
+                                else:
+                                    existing_item[key] = value
+                        else:
+                            # 不存在则追加
+                            self.collected_reasoning.append(new_item)
+
                 # 累积收到的工具调用请求
                 if delta.calls:
                     self.collected_tool_calls.extend(delta.calls)
@@ -170,6 +203,8 @@ class TaskAgent:
             assistant_msg: Message = Message(
                 role=Role.ASSISTANT,
                 content=self.collected_content,
+                thinking=self.collected_thinking,
+                reasoning=self.collected_reasoning,
                 tool_calls=self.collected_tool_calls
             )
 

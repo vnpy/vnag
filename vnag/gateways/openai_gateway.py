@@ -50,6 +50,14 @@ class OpenaiGateway(BaseGateway):
         """
         return ""
 
+    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
+        """
+        从消息对象中提取 reasoning 数据（子类可覆盖）
+
+        标准 OpenAI API 不返回 reasoning_details，返回空列表。
+        """
+        return []
+
     def _extract_thinking_delta(self, delta: Any) -> str:
         """
         从流式 delta 对象中提取 thinking 增量（子类可覆盖）
@@ -57,6 +65,14 @@ class OpenaiGateway(BaseGateway):
         标准 OpenAI API 不返回 thinking 内容，返回空字符串。
         """
         return ""
+
+    def _extract_reasoning_delta(self, delta: Any) -> list[dict[str, Any]]:
+        """
+        从流式 delta 对象中提取 reasoning 增量数据（子类可覆盖）
+
+        标准 OpenAI API 不返回 reasoning 内容，返回空列表。
+        """
+        return []
 
     def _get_extra_body(self) -> dict[str, Any] | None:
         """
@@ -114,10 +130,9 @@ class OpenaiGateway(BaseGateway):
                     ]
 
                 # 回传 thinking 内容（通过钩子方法，子类可定制）
-                if msg.thinking:
-                    thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
-                    if thinking_data:
-                        message_dict.update(thinking_data)
+                thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
+                if thinking_data:
+                    message_dict.update(thinking_data)
 
                 openai_messages.append(message_dict)
 
@@ -184,6 +199,9 @@ class OpenaiGateway(BaseGateway):
         # 提取 thinking 内容（通过钩子方法，子类可定制）
         thinking: str = self._extract_thinking(choice.message)
 
+        # 提取 reasoning 数据（通过钩子方法，子类可定制）
+        reasoning: list[dict[str, Any]] = self._extract_reasoning(choice.message)
+
         # 提取工具调用
         tool_calls: list[ToolCall] = []
         if choice.message.tool_calls:
@@ -204,6 +222,7 @@ class OpenaiGateway(BaseGateway):
             role=Role.ASSISTANT,
             content=choice.message.content or "",
             thinking=thinking,
+            reasoning=reasoning,
             tool_calls=tool_calls
         )
 
@@ -264,6 +283,12 @@ class OpenaiGateway(BaseGateway):
                 delta.thinking = thinking_delta
                 should_yield = True
 
+            # 检查 reasoning 增量（通过钩子方法，子类可定制）
+            reasoning_data: list[dict[str, Any]] = self._extract_reasoning_delta(choice.delta)
+            if reasoning_data:
+                delta.reasoning = reasoning_data
+                should_yield = True
+
             # 检查内容增量
             delta_content: str | None = choice.delta.content
             if delta_content:
@@ -321,8 +346,8 @@ class OpenaiGateway(BaseGateway):
             # 检查用量信息（通常在最后一个数据块中）
             if chuck.usage:
                 delta.usage = Usage(
-                    input_tokens=chuck.usage.prompt_tokens,
-                    output_tokens=chuck.usage.completion_tokens,
+                    input_tokens=chuck.usage.prompt_tokens or 0,
+                    output_tokens=chuck.usage.completion_tokens or 0,
                 )
                 should_yield = True
 
