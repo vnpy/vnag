@@ -170,6 +170,21 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 }
 ```
 
+**`connect_anthropic.json` 示例:**
+```json
+{
+    "api_key": "sk-ant-YourAnthropicKey",
+    "base_url": "https://api.anthropic.com"
+}
+```
+
+**`connect_dashscope.json` 示例:**
+```json
+{
+    "api_key": "sk-YourDashscopeKey"
+}
+```
+
 **`connect_deepseek.json` 示例:**
 ```json
 {
@@ -357,7 +372,7 @@ vnag/
 
 #### 网络工具 (`network_tools.py`)
 
-- **ping**: 通过执行 ping 命令检查与主机的网络连通性。
+- **ping**: 通过执行 ping 命令检查与主机的网络连通性（当前实现偏向 Windows 环境）。
 - **telnet**: 通过尝试建立套接字连接来测试目标主机的端口是否开放。
 - **get_local_ip**: 获取本机的局域网 IP 地址。
 - **get_public_ip**: 通过请求外部服务获取本机的公网 IP 地址。
@@ -413,7 +428,7 @@ vnag/
     - [x] Profile 配置管理（创建、编辑、删除）
     - [x] Agent 实例管理（多智能体切换）
     - [x] Markdown 渲染和代码高亮
-    - [x] 执行追踪日志查看
+    - [x] 执行追踪日志记录（文件：`.vnag/log/{session_id}.log`）
     - [x] AI服务配置对话框（可视化配置API）
     - [x] 历史会话思考内容显示
     - [x] 模型下拉框智能显示（仅当前可用模型）
