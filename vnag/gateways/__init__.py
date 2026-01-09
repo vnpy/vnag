@@ -12,6 +12,7 @@ from .deepseek_gateway import DeepseekGateway
 from .minimax_gateway import MinimaxGateway
 from .bailian_gateway import BailianGateway
 from .openrouter_gateway import OpenrouterGateway
+from .litellm_gateway import LitellmGateway
 
 
 # Gateway 类型名称到类的映射
@@ -23,6 +24,7 @@ GATEWAY_CLASSES: dict[str, type["BaseGateway"]] = {
     MinimaxGateway.default_name: MinimaxGateway,
     BailianGateway.default_name: BailianGateway,
     OpenrouterGateway.default_name: OpenrouterGateway,
+    LitellmGateway.default_name: LitellmGateway,
 }
 
 
