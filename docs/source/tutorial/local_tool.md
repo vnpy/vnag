@@ -58,7 +58,25 @@ VNAG 提供了多类内置工具：
 |----------|------|
 | `web-tools_fetch-html` | 获取网页 HTML 内容 |
 | `web-tools_fetch-json` | 获取并解析 JSON 数据 |
+| `web-tools_fetch-markdown` | 获取网页 Markdown 内容（推荐优先使用） |
 | `web-tools_check-link` | 检查链接状态 |
+
+:::{tip}
+`fetch-markdown` 使用 jina.ai Reader API 将网页转换为 Markdown 格式，更适合大模型阅读和理解，能有效减少 token 消耗。
+:::
+
+### 联网搜索工具 (search_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `search-tools_bocha-search` | 博查 Web Search API 搜索 |
+| `search-tools_tavily-search` | Tavily Search API 搜索 |
+| `search-tools_serper-search` | Serper Google 搜索 |
+| `search-tools_jina-search` | Jina Search API 搜索 |
+
+:::{note}
+联网搜索工具需要在 `.vnag/tool_search.json` 中配置 API 密钥。Jina Search 可以不配置密钥直接使用，但可能有请求限制。
+:::
 
 ## 使用内置工具
 

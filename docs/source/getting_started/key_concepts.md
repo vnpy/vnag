@@ -139,6 +139,7 @@ Gateway 是与大模型 API 通信的抽象层，提供统一的接口。
 | `MinimaxGateway` | MiniMax API |
 | `BailianGateway` | 阿里云百炼平台 |
 | `OpenrouterGateway` | OpenRouter 多模型平台 |
+| `LitellmGateway` | LiteLLM 网关代理服务 |
 
 ### 使用示例
 

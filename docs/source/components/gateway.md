@@ -176,6 +176,36 @@ gateway.init({
 
 **配置文件**：`.vnag/connect_openrouter.json`
 
+### LitellmGateway
+
+LiteLLM 网关代理服务，支持统一接入多种模型。
+
+```python
+from vnag.gateways.litellm_gateway import LitellmGateway
+
+gateway = LitellmGateway()
+gateway.init({
+    "api_key": "sk-xxx",
+    "base_url": "http://localhost:4000/",
+    "reasoning_effort": "medium"  # 可选
+})
+```
+
+**特点**：
+- 支持 reasoning_content 格式的 thinking 提取（所有模型）
+- 支持 thinking_blocks 格式的 thinking 提取（Anthropic 模型）
+- 支持回传 thinking_blocks 内容到后续请求（Interleaved Thinking）
+
+**配置说明**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `api_key` | str | LiteLLM API 密钥 |
+| `base_url` | str | LiteLLM 服务地址 |
+| `reasoning_effort` | str | 推理强度（low/medium/high） |
+
+**配置文件**：`.vnag/connect_litellm.json`
+
 ## 使用网关
 
 ### 基本使用
@@ -309,6 +339,7 @@ for delta in gateway.stream(request):
 - `MinimaxGateway`
 - `BailianGateway`
 - `OpenrouterGateway`（取决于模型）
+- `LitellmGateway`（取决于模型）
 
 ## 自定义网关
 

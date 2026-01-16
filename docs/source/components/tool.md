@@ -266,9 +266,21 @@ VNAG 提供了多类内置工具：
 ### web_tools
 
 ```python
-"web-tools_fetch-html"   # 获取网页 HTML
-"web-tools_fetch-json"   # 获取 JSON 数据
-"web-tools_check-link"   # 检查链接状态
+"web-tools_fetch-html"      # 获取网页 HTML
+"web-tools_fetch-json"      # 获取 JSON 数据
+"web-tools_fetch-markdown"  # 获取网页 Markdown（推荐优先使用）
+"web-tools_check-link"      # 检查链接状态
+```
+
+### search_tools
+
+联网搜索工具，需要在 `.vnag/tool_search.json` 中配置 API 密钥。
+
+```python
+"search-tools_bocha-search"   # 博查 Web Search API
+"search-tools_tavily-search"  # Tavily Search API
+"search-tools_serper-search"  # Serper Google 搜索 API
+"search-tools_jina-search"    # Jina Search API
 ```
 
 ## 工具权限配置

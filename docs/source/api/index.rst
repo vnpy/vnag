@@ -122,6 +122,13 @@ vnag.gateways.deepseek_gateway
    :members:
    :show-inheritance:
 
+vnag.gateways.litellm_gateway
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: vnag.gateways.litellm_gateway
+   :members:
+   :show-inheritance:
+
 嵌入器实现
 ----------
 

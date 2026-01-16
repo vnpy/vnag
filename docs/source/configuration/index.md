@@ -24,8 +24,10 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 ├── connect_minimax.json     # MiniMax 网关配置
 ├── connect_bailian.json     # 百炼网关配置
 ├── connect_openrouter.json  # OpenRouter 网关配置
+├── connect_litellm.json     # LiteLLM 网关配置
 ├── mcp_config.json          # MCP 工具配置
-├── tool_filesystem.json    # 文件系统工具权限
+├── tool_filesystem.json     # 文件系统工具权限
+├── tool_search.json         # 联网搜索工具配置
 ├── profile/                 # Profile 配置目录
 │   ├── 助手.json
 │   └── 代码专家.json
@@ -125,6 +127,26 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 |------|------|
 | `reasoning_effort` | 推理强度：`low`、`medium`、`high` |
 
+### LiteLLM
+
+**文件**：`.vnag/connect_litellm.json`
+
+```json
+{
+    "api_key": "sk-YourLiteLLMKey",
+    "base_url": "http://localhost:4000/",
+    "reasoning_effort": "medium"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `api_key` | LiteLLM 服务的 API 密钥 |
+| `base_url` | LiteLLM 服务地址 |
+| `reasoning_effort` | 推理强度：`low`、`medium`、`high` |
+
+LiteLLM 是一个 AI 网关代理服务，可以统一接入多种大模型，支持 OpenAI、Anthropic、Azure、AWS Bedrock 等多种后端。
+
 ## MCP 配置
 
 **文件**：`.vnag/mcp_config.json`
@@ -195,6 +217,30 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 
 :::{warning}
 出于安全考虑，文件系统工具只能访问配置中明确允许的路径。
+:::
+
+## 联网搜索工具配置
+
+**文件**：`.vnag/tool_search.json`
+
+```json
+{
+    "bocha_key": "",
+    "tavily_key": "",
+    "serper_key": "",
+    "jina_key": ""
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `bocha_key` | 博查 Web Search API 密钥 |
+| `tavily_key` | Tavily Search API 密钥 |
+| `serper_key` | Serper Google 搜索 API 密钥 |
+| `jina_key` | Jina Search API 密钥（可选，不配置也能使用） |
+
+:::{note}
+联网搜索工具需要至少配置一个搜索服务的 API 密钥才能正常使用。Jina Search 可以不配置密钥直接使用，但可能有请求限制。
 :::
 
 ## Profile 配置
