@@ -133,7 +133,7 @@ npx --version
 
 **解决方案**：
 
-在 `.vnag/file_system_tool.json` 中配置允许访问的路径：
+在 `.vnag/tool_filesystem.json` 中配置允许访问的路径：
 
 ```json
 {

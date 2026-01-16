@@ -1,0 +1,9 @@
+{
+    "bocha": {
+        "api_key": "your-bocha-api-key"
+    },
+    "cloudsway": {
+        "access_key": "your-cloudsway-access-key",
+        "endpoint_path": "your-endpoint-path"
+    }
+}

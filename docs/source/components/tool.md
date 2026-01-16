@@ -275,7 +275,7 @@ VNAG 提供了多类内置工具：
 
 文件系统工具需要权限配置：
 
-**文件**：`.vnag/file_system_tool.json`
+**文件**：`.vnag/tool_filesystem.json`
 
 ```json
 {

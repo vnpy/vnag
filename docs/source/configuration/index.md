@@ -25,7 +25,7 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 ├── connect_bailian.json     # 百炼网关配置
 ├── connect_openrouter.json  # OpenRouter 网关配置
 ├── mcp_config.json          # MCP 工具配置
-├── file_system_tool.json    # 文件系统工具权限
+├── tool_filesystem.json    # 文件系统工具权限
 ├── profile/                 # Profile 配置目录
 │   ├── 助手.json
 │   └── 代码专家.json
@@ -172,7 +172,7 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 
 ## 文件系统工具权限
 
-**文件**：`.vnag/file_system_tool.json`
+**文件**：`.vnag/tool_filesystem.json`
 
 ```json
 {
@@ -329,7 +329,7 @@ mkdir .vnag
 .vnag.template/
 ├── connect_openai.json.example
 ├── mcp_config.json.example
-└── file_system_tool.json.example
+└── tool_filesystem.json.example
 ```
 
 ## 下一步

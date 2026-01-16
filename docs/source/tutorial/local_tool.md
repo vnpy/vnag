@@ -28,7 +28,7 @@ VNAG 提供了多类内置工具：
 | `file-tools_replace-content` | 替换文件内容 |
 
 :::{warning}
-文件系统工具需要配置权限。请在 `.vnag/file_system_tool.json` 中设置允许访问的路径。
+文件系统工具需要配置权限。请在 `.vnag/tool_filesystem.json` 中设置允许访问的路径。
 :::
 
 ### 网络工具 (network_tools)
@@ -235,7 +235,7 @@ Agent: "今天是星期三。"
 
 为了安全，文件系统工具需要配置允许访问的路径。
 
-**文件：`.vnag/file_system_tool.json`**
+**文件：`.vnag/tool_filesystem.json`**
 
 ```json
 {
