@@ -191,6 +191,7 @@ tr:nth-child(2n) {
 /* Message footer */
 .message-footer {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     margin-top: 12px;
     padding-top: 8px;
@@ -212,4 +213,12 @@ tr:nth-child(2n) {
 .copy-all-button:hover {
     background-color: #3d4450;
     color: #abb2bf;
+}
+
+/* Token usage display */
+.token-usage {
+    color: #6c757d;
+    font-size: 12px;
+    margin-right: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }

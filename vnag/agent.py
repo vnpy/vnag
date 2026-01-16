@@ -125,6 +125,7 @@ class TaskAgent:
             self.collected_thinking = ""
             self.collected_reasoning: list[dict[str, Any]] = []
             self.collected_tool_calls = []
+            self.collected_usage: Usage = Usage()
 
             # 迭代次数加1
             iteration += 1
@@ -189,6 +190,11 @@ class TaskAgent:
                 if delta.calls:
                     self.collected_tool_calls.extend(delta.calls)
 
+                # 累积收到的 usage 信息
+                if delta.usage:
+                    self.collected_usage.input_tokens += delta.usage.input_tokens
+                    self.collected_usage.output_tokens += delta.usage.output_tokens
+
                 # 记录结束原因
                 if delta.finish_reason:
                     finish_reason = delta.finish_reason
@@ -205,7 +211,8 @@ class TaskAgent:
                 content=self.collected_content,
                 thinking=self.collected_thinking,
                 reasoning=self.collected_reasoning,
-                tool_calls=self.collected_tool_calls
+                tool_calls=self.collected_tool_calls,
+                usage=self.collected_usage
             )
 
             self.session.messages.append(assistant_msg)
