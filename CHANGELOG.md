@@ -1,3 +1,18 @@
+# 0.7.0
+
+## Add
+
+1. 新增LitellmGateway，支持LiteLLM AI网关代理服务
+2. 添加联网搜索工具集（博查、Tavily、Serper、Jina四种搜索API）
+3. 新增基于jina.ai的fetch_markdown工具，用于获取网页Markdown内容
+4. 增加token使用量的跟踪和显示
+5. 增加回答一键复制按钮
+
+## Mod
+
+1. AgentEngine.list_models增加异常处理，避免UI初始化显示失败
+2. 添加项目Sphinx文档
+
 # 0.6.0
 
 ## Add
