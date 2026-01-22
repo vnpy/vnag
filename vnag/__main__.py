@@ -1,7 +1,7 @@
 from vnag.gateway import BaseGateway
 from vnag.engine import AgentEngine
 from vnag.ui.window import MainWindow
-from vnag.ui.factory import create_gateway
+from vnag.factory import create_gateway
 from vnag.ui.qt import create_qapp, QtWidgets
 
 

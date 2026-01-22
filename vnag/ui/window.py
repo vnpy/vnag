@@ -4,7 +4,15 @@ from ..engine import AgentEngine
 from ..utility import WORKING_DIR
 from ..agent import Profile, TaskAgent
 from .. import __version__
-from .widget import AgentWidget, ToolDialog, ModelDialog, ProfileDialog, GatewayDialog
+from .widget import (
+    AgentWidget,
+    ToolDialog,
+    ModelDialog,
+    ProfileDialog,
+    GatewayDialog,
+    EmbedderDialog,
+    KnowledgeManagerDialog,
+)
 from .setting import get_setting
 from .qt import QtWidgets, QtGui, QtCore
 
@@ -123,6 +131,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
         function_menu.addAction("AI服务配置", self.show_gateway_dialog)
+        function_menu.addAction("嵌入模型配置", self.show_embedder_dialog)
+        function_menu.addSeparator()
+        function_menu.addAction("知识库管理", self.show_knowledge_dialog)
+        function_menu.addSeparator()
         function_menu.addAction("智能体配置", self.show_profile_dialog)
         function_menu.addAction("工具浏览器", self.show_tool_dialog)
         function_menu.addAction("模型浏览器", self.show_model_dialog)
@@ -191,6 +203,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 "AI服务配置已保存，需要重启应用程序才能生效。",
                 QtWidgets.QMessageBox.StandardButton.Ok
             )
+
+    def show_embedder_dialog(self) -> None:
+        """显示嵌入模型配置界面"""
+        dialog: EmbedderDialog = EmbedderDialog(self)
+        dialog.exec()
+
+    def show_knowledge_dialog(self) -> None:
+        """显示知识库管理界面"""
+        dialog: KnowledgeManagerDialog = KnowledgeManagerDialog(self)
+        dialog.exec()
 
     def show_profile_dialog(self) -> None:
         """显示智能体管理界面"""
