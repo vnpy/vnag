@@ -26,8 +26,6 @@ from .setting import (
     save_zoom_factor,
     load_gateway_type,
     save_gateway_type,
-    load_embedder_type,
-    save_embedder_type,
     get_setting
 )
 from ..factory import (
@@ -35,9 +33,14 @@ from ..factory import (
     save_gateway_setting,
     load_embedder_setting,
     save_embedder_setting,
-    clear_embedder_cache,
     EMBEDDER_TYPES,
     EMBEDDER_DEFAULTS,
+    load_knowledge_metadata,
+    save_knowledge_metadata,
+    delete_knowledge_metadata,
+    list_knowledge_bases,
+    create_knowledge_base,
+    get_embedder_for_knowledge,
 )
 
 
@@ -1466,164 +1469,230 @@ class GatewayDialog(QtWidgets.QDialog):
         return self.setting_modified
 
 
-class EmbedderDialog(QtWidgets.QDialog):
-    """嵌入模型配置对话框"""
+class CreateKnowledgeDialog(QtWidgets.QDialog):
+    """新建知识库对话框"""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数"""
         super().__init__(parent)
 
-        self.setting_modified: bool = False
-
-        # 嵌套字典: {embedder_type: {key: QLineEdit}}
-        self.setting_widgets: dict[str, dict[str, QtWidgets.QLineEdit]] = {}
+        self.created_kb_name: str = ""
 
         # Embedder 类型到页面索引的映射
         self.page_indices: dict[str, int] = {}
 
         self.init_ui()
-        self.init_embedder_pages()
-        self.load_current_setting()
+        self.load_existing_kbs()
 
     def init_ui(self) -> None:
         """初始化UI"""
-        self.setWindowTitle("嵌入模型配置")
-        self.setMinimumSize(600, 280)
+        self.setWindowTitle("新建知识库")
+        self.setMinimumSize(550, 400)
 
-        # Embedder 类型选择
-        self.type_label: QtWidgets.QLabel = QtWidgets.QLabel("模型服务")
+        # 知识库名称
+        self.name_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.name_line.setPlaceholderText("请输入知识库名称（英文、数字、下划线）")
 
+        # 从已有知识库复制配置
+        self.copy_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
+        self.copy_combo.addItem("（不复制，使用默认配置）")
+        self.copy_combo.currentIndexChanged.connect(self.on_copy_changed)
+
+        # 嵌入模型配置
         self.type_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.type_combo.setFixedWidth(300)
         self.type_combo.addItems(EMBEDDER_TYPES)
         self.type_combo.currentTextChanged.connect(self.on_type_changed)
 
-        type_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
-        type_hbox.addWidget(self.type_label)
-        type_hbox.addWidget(self.type_combo)
-        type_hbox.addStretch()
-
-        # 配置字段容器 - 使用 QStackedWidget 预加载所有页面
-        self.setting_label: QtWidgets.QLabel = QtWidgets.QLabel("配置参数")
+        # 配置字段容器
         self.stack_widget: QtWidgets.QStackedWidget = QtWidgets.QStackedWidget()
+        self._init_embedder_pages()
 
         # 底部按钮
-        self.save_button: QtWidgets.QPushButton = QtWidgets.QPushButton("保存")
-        self.save_button.clicked.connect(self.save_setting)
+        self.create_button: QtWidgets.QPushButton = QtWidgets.QPushButton("创建")
+        self.create_button.clicked.connect(self.create_knowledge_base)
 
         self.cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton("取消")
         self.cancel_button.clicked.connect(self.reject)
 
         button_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         button_hbox.addStretch()
-        button_hbox.addWidget(self.save_button)
+        button_hbox.addWidget(self.create_button)
         button_hbox.addWidget(self.cancel_button)
 
         # 主布局
+        form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+        form.addRow("知识库名称", self.name_line)
+        form.addRow("复制配置自", self.copy_combo)
+        form.addRow("", QtWidgets.QLabel(""))  # 分隔行
+        form.addRow("─── 嵌入模型配置（创建后不可修改）───", QtWidgets.QLabel(""))
+        form.addRow("模型服务", self.type_combo)
+
         main_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
-        main_vbox.addLayout(type_hbox)
-        main_vbox.addWidget(QtWidgets.QLabel("   "))
-        main_vbox.addWidget(self.setting_label)
+        main_vbox.addLayout(form)
         main_vbox.addWidget(self.stack_widget)
         main_vbox.addStretch()
         main_vbox.addLayout(button_hbox)
         self.setLayout(main_vbox)
 
-    def init_embedder_pages(self) -> None:
-        """预先创建所有 Embedder 的配置页面"""
-        for embedder_type in EMBEDDER_TYPES:
-            # 创建该 Embedder 的页面
-            page_widget: QtWidgets.QWidget = QtWidgets.QWidget()
-            page_layout: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
-            page_widget.setLayout(page_layout)
+    def _init_embedder_pages(self) -> None:
+        """初始化 Embedder 配置页面"""
+        # OpenAI 页面
+        openai_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        openai_layout: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
 
-            # 获取默认配置和已保存配置
-            default_setting: dict[str, str] = EMBEDDER_DEFAULTS.get(embedder_type, {})
-            saved_setting: dict[str, str] = load_embedder_setting(embedder_type)
+        self.openai_base_url: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        defaults = EMBEDDER_DEFAULTS.get("OpenAI", {})
+        self.openai_base_url.setText(defaults.get("base_url", "https://api.openai.com/v1"))
 
-            # 创建配置字段
-            widgets: dict[str, QtWidgets.QLineEdit] = {}
-            for key, default_value in default_setting.items():
-                label: str = self.get_field_label(key)
+        self.openai_model: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.openai_model.setText(defaults.get("model_name", "text-embedding-3-small"))
 
-                line_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        openai_layout.addRow("API 地址", self.openai_base_url)
+        openai_layout.addRow("模型名称", self.openai_model)
+        openai_widget.setLayout(openai_layout)
 
-                # 使用已保存的值，否则使用默认值
-                value: str = saved_setting.get(key, default_value)
-                line_edit.setText(str(value) if value else "")
+        # DashScope 页面
+        dashscope_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        dashscope_layout: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
 
-                page_layout.addRow(label, line_edit)
-                widgets[key] = line_edit
+        self.dashscope_model: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        defaults = EMBEDDER_DEFAULTS.get("DashScope", {})
+        self.dashscope_model.setText(defaults.get("model_name", "text-embedding-v3"))
 
-            # 保存控件引用和页面索引
-            self.setting_widgets[embedder_type] = widgets
-            index: int = self.stack_widget.addWidget(page_widget)
-            self.page_indices[embedder_type] = index
+        dashscope_layout.addRow("模型名称", self.dashscope_model)
+        dashscope_widget.setLayout(dashscope_layout)
 
-    def load_current_setting(self) -> None:
-        """加载当前配置"""
-        embedder_type: str = load_embedder_type()
+        # 添加到 StackedWidget
+        self.page_indices["OpenAI"] = self.stack_widget.addWidget(openai_widget)
+        self.page_indices["DashScope"] = self.stack_widget.addWidget(dashscope_widget)
 
-        if embedder_type and embedder_type in EMBEDDER_TYPES:
-            self.type_combo.setCurrentText(embedder_type)
-        else:
-            # 默认选择第一个
+    def load_existing_kbs(self) -> None:
+        """加载已有知识库列表"""
+        kb_names: list[str] = list_knowledge_bases()
+        for name in kb_names:
+            metadata = load_knowledge_metadata(name)
+            if metadata:
+                self.copy_combo.addItem(name)
+
+    def on_copy_changed(self, index: int) -> None:
+        """复制配置下拉框变化"""
+        if index == 0:
+            # 恢复默认配置
+            defaults = EMBEDDER_DEFAULTS.get("OpenAI", {})
+            self.openai_base_url.setText(defaults.get("base_url", "https://api.openai.com/v1"))
+            self.openai_model.setText(defaults.get("model_name", "text-embedding-3-small"))
+
+            defaults = EMBEDDER_DEFAULTS.get("DashScope", {})
+            self.dashscope_model.setText(defaults.get("model_name", "text-embedding-v3"))
+
             self.type_combo.setCurrentIndex(0)
+            return
 
-        self.on_type_changed(self.type_combo.currentText())
+        # 复制选中知识库的配置
+        kb_name: str = self.copy_combo.currentText()
+        metadata = load_knowledge_metadata(kb_name)
+        if not metadata:
+            return
+
+        embedder_type: str = metadata.get("embedder_type", "OpenAI")
+        self.type_combo.setCurrentText(embedder_type)
+
+        if embedder_type == "OpenAI":
+            self.openai_base_url.setText(metadata.get("base_url", ""))
+            self.openai_model.setText(metadata.get("model_name", ""))
+        elif embedder_type == "DashScope":
+            self.dashscope_model.setText(metadata.get("model_name", ""))
 
     def on_type_changed(self, embedder_type: str) -> None:
         """Embedder 类型变更时切换显示页面"""
         if embedder_type in self.page_indices:
             self.stack_widget.setCurrentIndex(self.page_indices[embedder_type])
 
-    def get_field_label(self, key: str) -> str:
-        """获取字段显示标签"""
-        labels: dict[str, str] = {
-            "base_url": "API 地址",
-            "api_key": "API 密钥",
-            "model_name": "模型名称",
-        }
-        return labels.get(key, key)
+    def create_knowledge_base(self) -> None:
+        """创建知识库"""
+        import re
 
-    def save_setting(self) -> None:
-        """保存配置"""
-        embedder_type: str = self.type_combo.currentText()
-
-        # 获取当前 Embedder 的控件
-        widgets: dict[str, QtWidgets.QLineEdit] | None = self.setting_widgets.get(
-            embedder_type
-        )
-        if not widgets:
+        # 验证名称
+        kb_name: str = self.name_line.text().strip()
+        if not kb_name:
+            QtWidgets.QMessageBox.warning(self, "错误", "请输入知识库名称")
             return
 
-        # 收集配置值
-        setting: dict[str, str] = {}
-        for key, widget in widgets.items():
-            setting[key] = widget.text().strip()
-
-        # 验证必填字段
-        if not setting.get("api_key"):
+        if not re.match(r'^[a-zA-Z0-9_]+$', kb_name):
             QtWidgets.QMessageBox.warning(
-                self,
-                "配置错误",
-                "API 密钥不能为空"
+                self, "错误", "知识库名称只能包含英文字母、数字和下划线"
             )
             return
 
-        # 保存配置
-        save_embedder_type(embedder_type)
-        save_embedder_setting(embedder_type, setting)
+        # 检查是否已存在
+        if kb_name in list_knowledge_bases():
+            QtWidgets.QMessageBox.warning(self, "错误", f"知识库 '{kb_name}' 已存在")
+            return
 
-        # 清除缓存
-        clear_embedder_cache()
+        # 获取配置
+        embedder_type: str = self.type_combo.currentText()
+        base_url: str = ""
+        model_name: str = ""
 
-        self.setting_modified = True
+        if embedder_type == "OpenAI":
+            base_url = self.openai_base_url.text().strip()
+            model_name = self.openai_model.text().strip()
+        elif embedder_type == "DashScope":
+            model_name = self.dashscope_model.text().strip()
+
+        if not model_name:
+            QtWidgets.QMessageBox.warning(self, "错误", "请输入模型名称")
+            return
+
+        # 检查 API 密钥是否已配置
+        embedder_setting = load_embedder_setting(embedder_type)
+        if not embedder_setting.get("api_key"):
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "API 密钥未配置",
+                f"{embedder_type} 的 API 密钥尚未配置。\n\n"
+                "是否现在配置？（配置后才能正常使用知识库）",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            )
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                self._configure_api_key(embedder_type)
+                return
+            # 用户选择稍后配置，继续创建
+
+        # 创建知识库
+        create_knowledge_base(
+            kb_name=kb_name,
+            embedder_type=embedder_type,
+            base_url=base_url,
+            model_name=model_name
+        )
+
+        self.created_kb_name = kb_name
+        QtWidgets.QMessageBox.information(
+            self, "创建成功", f"知识库 '{kb_name}' 创建成功"
+        )
         self.accept()
 
-    def was_modified(self) -> bool:
-        """返回配置是否被修改"""
-        return self.setting_modified
+    def _configure_api_key(self, embedder_type: str) -> None:
+        """配置 API 密钥"""
+        api_key, ok = QtWidgets.QInputDialog.getText(
+            self,
+            f"配置 {embedder_type} API 密钥",
+            "请输入 API 密钥：",
+            QtWidgets.QLineEdit.EchoMode.Password
+        )
+
+        if ok and api_key:
+            setting = load_embedder_setting(embedder_type)
+            setting["api_key"] = api_key
+            save_embedder_setting(embedder_type, setting)
+            QtWidgets.QMessageBox.information(
+                self, "保存成功", "API 密钥已保存，请继续创建知识库"
+            )
+
+    def get_created_kb_name(self) -> str:
+        """获取创建的知识库名称"""
+        return self.created_kb_name
 
 
 class ImportWorkerSignals(QtCore.QObject):
@@ -1655,7 +1724,7 @@ class ImportWorker(QtCore.QRunnable):
 
         from ..utility import read_text_file
         from ..segmenters.markdown_segmenter import MarkdownSegmenter
-        from ..factory import get_embedder
+        from ..factory import get_embedder_for_knowledge
         from ..vectors.duckdb_vector import DuckVector
         from ..object import Segment
 
@@ -1685,7 +1754,7 @@ class ImportWorker(QtCore.QRunnable):
             # 向量化并存储
             self.signals.progress.emit(40, f"正在向量化 {len(segments)} 个片段...")
 
-            embedder = get_embedder()
+            embedder = get_embedder_for_knowledge(self.db_name)
             vector = DuckVector(name=self.db_name, embedder=embedder)
 
             # 分批添加并更新进度
@@ -1709,28 +1778,24 @@ class ImportWorker(QtCore.QRunnable):
 class DocumentImportDialog(QtWidgets.QDialog):
     """文档导入对话框"""
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None, preset_db: str = "") -> None:
+    def __init__(self, kb_name: str, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数
 
         Args:
+            kb_name: 目标知识库名称
             parent: 父窗口
-            preset_db: 预设的知识库名称
         """
         super().__init__(parent)
 
-        self.preset_db: str = preset_db
+        self.kb_name: str = kb_name
         self.worker: ImportWorker | None = None
 
         self.init_ui()
-        self.load_databases()
-
-        if preset_db:
-            self.db_combo.setCurrentText(preset_db)
 
     def init_ui(self) -> None:
         """初始化UI"""
-        self.setWindowTitle("文档导入")
-        self.setMinimumSize(550, 350)
+        self.setWindowTitle(f"导入文档到知识库: {self.kb_name}")
+        self.setMinimumSize(550, 300)
 
         # 文件选择
         self.file_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
@@ -1760,11 +1825,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
         chunk_hbox.addWidget(self.chunk_size_spin)
         chunk_hbox.addStretch()
 
-        # 目标知识库
-        self.db_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.db_combo.setEditable(True)
-        self.db_combo.setPlaceholderText("选择已有或输入新名称")
-
         # 进度显示
         self.status_label: QtWidgets.QLabel = QtWidgets.QLabel("就绪")
         self.progress_bar: QtWidgets.QProgressBar = QtWidgets.QProgressBar()
@@ -1788,7 +1848,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
         form.addRow("文件路径", file_hbox)
         form.addRow("", self.full_import_check)
         form.addRow("", chunk_hbox)
-        form.addRow("目标知识库", self.db_combo)
 
         main_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
         main_vbox.addLayout(form)
@@ -1799,18 +1858,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
         main_vbox.addLayout(button_hbox)
 
         self.setLayout(main_vbox)
-
-    def load_databases(self) -> None:
-        """加载现有知识库列表"""
-        from pathlib import Path
-        from ..utility import get_folder_path
-
-        db_folder: Path = get_folder_path("duckdb_vector")
-        db_files: list[Path] = list(db_folder.glob("*.duckdb"))
-
-        self.db_combo.clear()
-        for f in db_files:
-            self.db_combo.addItem(f.stem)
 
     def select_file(self) -> None:
         """选择文件"""
@@ -1842,11 +1889,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, "错误", "所选文件不存在")
             return
 
-        db_name: str = self.db_combo.currentText().strip()
-        if not db_name:
-            QtWidgets.QMessageBox.warning(self, "错误", "请输入知识库名称")
-            return
-
         # 获取切片参数
         chunk_size: int | None = None
         if not self.full_import_check.isChecked():
@@ -1856,7 +1898,7 @@ class DocumentImportDialog(QtWidgets.QDialog):
         self.set_controls_enabled(False)
 
         # 启动后台任务
-        self.worker = ImportWorker(filepath, db_name, chunk_size)
+        self.worker = ImportWorker(filepath, self.kb_name, chunk_size)
         self.worker.signals.progress.connect(self.on_progress)
         self.worker.signals.finished.connect(self.on_finished)
 
@@ -1867,7 +1909,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
         self.file_button.setEnabled(enabled)
         self.full_import_check.setEnabled(enabled)
         self.chunk_size_spin.setEnabled(enabled and not self.full_import_check.isChecked())
-        self.db_combo.setEnabled(enabled)
         self.import_button.setEnabled(enabled)
 
     def on_progress(self, progress: int, status: str) -> None:
@@ -1881,8 +1922,6 @@ class DocumentImportDialog(QtWidgets.QDialog):
 
         if success:
             QtWidgets.QMessageBox.information(self, "导入成功", message)
-            # 刷新知识库列表
-            self.load_databases()
         else:
             QtWidgets.QMessageBox.warning(self, "导入失败", message)
 
@@ -1922,14 +1961,24 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         self.name_label: QtWidgets.QLabel = QtWidgets.QLabel("名称: -")
         self.count_label: QtWidgets.QLabel = QtWidgets.QLabel("片段数量: -")
         self.size_label: QtWidgets.QLabel = QtWidgets.QLabel("文件大小: -")
-        self.path_label: QtWidgets.QLabel = QtWidgets.QLabel("存储路径: -")
-        self.path_label.setWordWrap(True)
+        self.created_label: QtWidgets.QLabel = QtWidgets.QLabel("创建时间: -")
+
+        # 嵌入模型信息
+        self.embedder_type_label: QtWidgets.QLabel = QtWidgets.QLabel("模型服务: -")
+        self.embedder_url_label: QtWidgets.QLabel = QtWidgets.QLabel("API 地址: -")
+        self.embedder_url_label.setWordWrap(True)
+        self.embedder_model_label: QtWidgets.QLabel = QtWidgets.QLabel("模型名称: -")
 
         info_form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
         info_form.addRow(self.name_label)
         info_form.addRow(self.count_label)
         info_form.addRow(self.size_label)
-        info_form.addRow(self.path_label)
+        info_form.addRow(self.created_label)
+        info_form.addRow(QtWidgets.QLabel(""))  # 分隔行
+        info_form.addRow(QtWidgets.QLabel("─── 嵌入模型（不可修改）───"))
+        info_form.addRow(self.embedder_type_label)
+        info_form.addRow(self.embedder_url_label)
+        info_form.addRow(self.embedder_model_label)
 
         # 片段预览
         preview_label: QtWidgets.QLabel = QtWidgets.QLabel("片段预览")
@@ -1952,8 +2001,12 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         splitter.setSizes([250, 650])
 
         # 底部按钮
+        self.create_button: QtWidgets.QPushButton = QtWidgets.QPushButton("新建知识库")
+        self.create_button.clicked.connect(self.show_create_dialog)
+
         self.import_button: QtWidgets.QPushButton = QtWidgets.QPushButton("导入文档")
         self.import_button.clicked.connect(self.show_import_dialog)
+        self.import_button.setEnabled(False)
 
         self.delete_button: QtWidgets.QPushButton = QtWidgets.QPushButton("删除知识库")
         self.delete_button.clicked.connect(self.delete_database)
@@ -1963,6 +2016,7 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         self.close_button.clicked.connect(self.close)
 
         button_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        button_hbox.addWidget(self.create_button)
         button_hbox.addWidget(self.import_button)
         button_hbox.addWidget(self.delete_button)
         button_hbox.addStretch()
@@ -1976,18 +2030,14 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
 
     def load_databases(self) -> None:
         """加载知识库列表"""
-        from pathlib import Path
-        from ..utility import get_folder_path
-
-        db_folder: Path = get_folder_path("duckdb_vector")
-        db_files: list[Path] = sorted(db_folder.glob("*.duckdb"))
+        kb_names: list[str] = list_knowledge_bases()
 
         self.db_list.clear()
-        for f in db_files:
-            self.db_list.addItem(f.stem)
+        for name in sorted(kb_names):
+            self.db_list.addItem(name)
 
         # 清空详情
-        if not db_files:
+        if not kb_names:
             self.clear_details()
 
     def clear_details(self) -> None:
@@ -1996,15 +2046,18 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         self.name_label.setText("名称: -")
         self.count_label.setText("片段数量: -")
         self.size_label.setText("文件大小: -")
-        self.path_label.setText("存储路径: -")
+        self.created_label.setText("创建时间: -")
+        self.embedder_type_label.setText("模型服务: -")
+        self.embedder_url_label.setText("API 地址: -")
+        self.embedder_model_label.setText("模型名称: -")
         self.preview_list.clear()
+        self.import_button.setEnabled(False)
         self.delete_button.setEnabled(False)
 
     def on_db_selected(self, item: QtWidgets.QListWidgetItem) -> None:
         """选中知识库时显示详情"""
         from pathlib import Path
         from ..utility import get_folder_path
-        from ..factory import get_embedder
         from ..vectors.duckdb_vector import DuckVector
 
         db_name: str = item.text()
@@ -2015,7 +2068,6 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
 
         # 基本信息
         self.name_label.setText(f"名称: {db_name}")
-        self.path_label.setText(f"存储路径: {db_path}")
 
         # 文件大小
         if db_path.exists():
@@ -2030,9 +2082,26 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         else:
             self.size_label.setText("文件大小: -")
 
+        # 加载元数据
+        metadata = load_knowledge_metadata(db_name)
+        if metadata:
+            created_at: str = metadata.get("created_at", "-")
+            if "T" in created_at:
+                created_at = created_at.replace("T", " ").split(".")[0]
+            self.created_label.setText(f"创建时间: {created_at}")
+
+            self.embedder_type_label.setText(f"模型服务: {metadata.get('embedder_type', '-')}")
+            self.embedder_url_label.setText(f"API 地址: {metadata.get('base_url', '（默认）')}")
+            self.embedder_model_label.setText(f"模型名称: {metadata.get('model_name', '-')}")
+        else:
+            self.created_label.setText("创建时间: -（旧版知识库）")
+            self.embedder_type_label.setText("模型服务: -（未配置）")
+            self.embedder_url_label.setText("API 地址: -")
+            self.embedder_model_label.setText("模型名称: -")
+
         # 片段数量和预览
         try:
-            embedder = get_embedder()
+            embedder = get_embedder_for_knowledge(db_name)
             vector = DuckVector(name=db_name, embedder=embedder)
 
             count: int = vector.count
@@ -2043,7 +2112,7 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
             if count > 0:
                 # 使用一个简单查询获取一些片段
                 segments = vector.retrieve("", k=min(10, count))
-                for i, seg in enumerate(segments):
+                for seg in segments:
                     source: str = seg.metadata.get("source", "未知")
                     preview_text: str = seg.text[:100].replace("\n", " ")
                     if len(seg.text) > 100:
@@ -2052,18 +2121,40 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
                     self.preview_list.addItem(item_text)
 
         except Exception as e:
-            self.count_label.setText(f"片段数量: 读取失败")
+            self.count_label.setText("片段数量: 读取失败")
             self.preview_list.clear()
             self.preview_list.addItem(f"错误: {str(e)}")
 
+        self.import_button.setEnabled(True)
         self.delete_button.setEnabled(True)
+
+    def show_create_dialog(self) -> None:
+        """显示新建知识库对话框"""
+        dialog = CreateKnowledgeDialog(self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            # 刷新列表
+            self.load_databases()
+            # 选中新创建的知识库
+            kb_name: str = dialog.get_created_kb_name()
+            if kb_name:
+                items = self.db_list.findItems(kb_name, QtCore.Qt.MatchFlag.MatchExactly)
+                if items:
+                    self.db_list.setCurrentItem(items[0])
+                    self.on_db_selected(items[0])
 
     def show_import_dialog(self) -> None:
         """显示导入对话框"""
-        dialog = DocumentImportDialog(self, preset_db=self.current_db)
+        if not self.current_db:
+            QtWidgets.QMessageBox.warning(self, "提示", "请先选择一个知识库")
+            return
+
+        dialog = DocumentImportDialog(self.current_db, self)
         dialog.exec()
-        # 刷新列表
-        self.load_databases()
+        # 刷新当前知识库详情
+        if self.current_db:
+            items = self.db_list.findItems(self.current_db, QtCore.Qt.MatchFlag.MatchExactly)
+            if items:
+                self.on_db_selected(items[0])
 
     def delete_database(self) -> None:
         """删除知识库"""
@@ -2093,6 +2184,9 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
                 wal_path: Path = db_folder.joinpath(f"{self.current_db}.duckdb.wal")
                 if wal_path.exists():
                     wal_path.unlink()
+
+                # 删除元数据文件
+                delete_knowledge_metadata(self.current_db)
 
                 QtWidgets.QMessageBox.information(
                     self,

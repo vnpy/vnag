@@ -1,13 +1,15 @@
 from typing import Any, TYPE_CHECKING
+from pathlib import Path
+from datetime import datetime
 
 if TYPE_CHECKING:
     from .gateway import BaseGateway
     from .embedder import BaseEmbedder
 
-from .utility import load_json, save_json
+from .utility import load_json, save_json, get_folder_path
 from .gateways import get_gateway_class
 from .gateway import BaseGateway
-from .ui.setting import load_gateway_type, load_embedder_type
+from .ui.setting import load_gateway_type
 
 
 # ============================================================
@@ -49,25 +51,20 @@ def create_gateway() -> BaseGateway:
 # Embedder 类型列表
 EMBEDDER_TYPES: list[str] = ["OpenAI", "DashScope"]
 
-# Embedder 默认配置
+# Embedder 默认配置（不含 API 密钥）
 EMBEDDER_DEFAULTS: dict[str, dict[str, str]] = {
     "OpenAI": {
         "base_url": "https://api.openai.com/v1",
-        "api_key": "",
         "model_name": "text-embedding-3-small"
     },
     "DashScope": {
-        "api_key": "",
         "model_name": "text-embedding-v3"
     }
 }
 
-# 模块级缓存: (embedder_type, setting_hash, embedder_instance)
-_embedder_cache: tuple[str, str, "BaseEmbedder"] | None = None
-
 
 def load_embedder_setting(embedder_type: str) -> dict[str, Any]:
-    """加载指定 embedder 的配置"""
+    """加载指定 embedder 类型的统一配置（主要是 API 密钥）"""
     filename: str = f"embedder_{embedder_type.lower()}.json"
     saved: dict[str, Any] = load_json(filename)
 
@@ -79,24 +76,20 @@ def load_embedder_setting(embedder_type: str) -> dict[str, Any]:
 
 
 def save_embedder_setting(embedder_type: str, setting: dict[str, Any]) -> None:
-    """保存指定 embedder 的配置"""
+    """保存指定 embedder 类型的统一配置"""
     filename: str = f"embedder_{embedder_type.lower()}.json"
     save_json(filename, setting)
 
 
-def _compute_setting_hash(embedder_type: str, setting: dict[str, Any]) -> str:
-    """计算配置的哈希值，用于缓存判断"""
-    import hashlib
-    import json
-    content: str = f"{embedder_type}:{json.dumps(setting, sort_keys=True)}"
-    return hashlib.md5(content.encode()).hexdigest()
-
-
-def create_embedder(embedder_type: str | None = None) -> "BaseEmbedder":
-    """根据配置创建 embedder 实例
+def create_embedder_from_config(
+    embedder_type: str,
+    config: dict[str, Any]
+) -> "BaseEmbedder":
+    """根据完整配置创建 embedder 实例
 
     Args:
-        embedder_type: embedder 类型，为 None 时使用当前配置的类型
+        embedder_type: embedder 类型 (OpenAI / DashScope)
+        config: 完整配置，包含 api_key, base_url(可选), model_name
 
     Returns:
         BaseEmbedder 实例
@@ -105,25 +98,17 @@ def create_embedder(embedder_type: str | None = None) -> "BaseEmbedder":
     from .embedders.openai_embedder import OpenaiEmbedder
     from .embedders.dashscope_embedder import DashscopeEmbedder
 
-    # 获取类型
-    if embedder_type is None:
-        embedder_type = load_embedder_type()
-
-    # 加载配置
-    setting: dict[str, Any] = load_embedder_setting(embedder_type)
-
-    # 创建实例
     embedder: BaseEmbedder
     if embedder_type == "OpenAI":
         embedder = OpenaiEmbedder(
-            api_key=setting["api_key"],
-            base_url=setting["base_url"],
-            model_name=setting["model_name"]
+            api_key=config["api_key"],
+            base_url=config.get("base_url", "https://api.openai.com/v1"),
+            model_name=config["model_name"]
         )
     elif embedder_type == "DashScope":
         embedder = DashscopeEmbedder(
-            api_key=setting["api_key"],
-            model_name=setting["model_name"]
+            api_key=config["api_key"],
+            model_name=config["model_name"]
         )
     else:
         raise ValueError(f"不支持的 embedder 类型: {embedder_type}")
@@ -131,36 +116,134 @@ def create_embedder(embedder_type: str | None = None) -> "BaseEmbedder":
     return embedder
 
 
-def get_embedder() -> "BaseEmbedder":
-    """获取 embedder 实例（带缓存）
+# ============================================================
+# 知识库元数据管理
+# ============================================================
 
-    如果配置未改变，返回缓存实例；否则创建新实例。
+def get_knowledge_metadata_path(kb_name: str) -> Path:
+    """获取知识库元数据文件路径"""
+    db_folder: Path = get_folder_path("duckdb_vector")
+    return db_folder.joinpath(f"{kb_name}.json")
+
+
+def load_knowledge_metadata(kb_name: str) -> dict[str, Any] | None:
+    """加载知识库元数据
+
+    Args:
+        kb_name: 知识库名称
+
+    Returns:
+        元数据字典，不存在则返回 None
+    """
+    import json
+    meta_path: Path = get_knowledge_metadata_path(kb_name)
+
+    if not meta_path.exists():
+        return None
+
+    try:
+        with open(meta_path, encoding="utf-8") as f:
+            return dict(json.load(f))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def save_knowledge_metadata(kb_name: str, metadata: dict[str, Any]) -> None:
+    """保存知识库元数据
+
+    Args:
+        kb_name: 知识库名称
+        metadata: 元数据字典
+    """
+    import json
+    meta_path: Path = get_knowledge_metadata_path(kb_name)
+
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=4, ensure_ascii=False)
+
+
+def delete_knowledge_metadata(kb_name: str) -> None:
+    """删除知识库元数据"""
+    meta_path: Path = get_knowledge_metadata_path(kb_name)
+    if meta_path.exists():
+        meta_path.unlink()
+
+
+def list_knowledge_bases() -> list[str]:
+    """列出所有知识库名称"""
+    db_folder: Path = get_folder_path("duckdb_vector")
+    db_files: list[Path] = list(db_folder.glob("*.duckdb"))
+    return [f.stem for f in db_files]
+
+
+def create_knowledge_base(
+    kb_name: str,
+    embedder_type: str,
+    base_url: str,
+    model_name: str,
+    description: str = ""
+) -> dict[str, Any]:
+    """创建新知识库（保存元数据）
+
+    Args:
+        kb_name: 知识库名称
+        embedder_type: Embedder 类型
+        base_url: API 地址（OpenAI 类型时使用）
+        model_name: 模型名称
+        description: 描述
+
+    Returns:
+        创建的元数据字典
+    """
+    metadata: dict[str, Any] = {
+        "name": kb_name,
+        "embedder_type": embedder_type,
+        "model_name": model_name,
+        "description": description,
+        "created_at": datetime.now().isoformat()
+    }
+
+    # OpenAI 类型需要保存 base_url
+    if embedder_type == "OpenAI":
+        metadata["base_url"] = base_url
+
+    save_knowledge_metadata(kb_name, metadata)
+    return metadata
+
+
+def get_embedder_for_knowledge(kb_name: str) -> "BaseEmbedder":
+    """根据知识库配置获取对应的 Embedder 实例
+
+    Args:
+        kb_name: 知识库名称
 
     Returns:
         BaseEmbedder 实例
+
+    Raises:
+        ValueError: 知识库不存在或配置无效
     """
-    global _embedder_cache
+    # 加载知识库元数据
+    metadata: dict[str, Any] | None = load_knowledge_metadata(kb_name)
+    if metadata is None:
+        raise ValueError(f"知识库 '{kb_name}' 不存在或配置丢失")
 
-    # 获取当前配置
-    embedder_type: str = load_embedder_type()
-    setting: dict[str, Any] = load_embedder_setting(embedder_type)
-    current_hash: str = _compute_setting_hash(embedder_type, setting)
+    embedder_type: str = metadata["embedder_type"]
 
-    # 检查缓存是否有效
-    if _embedder_cache is not None:
-        cached_type, cached_hash, cached_embedder = _embedder_cache
-        if cached_type == embedder_type and cached_hash == current_hash:
-            return cached_embedder
+    # 加载统一的 API 密钥配置
+    embedder_setting: dict[str, Any] = load_embedder_setting(embedder_type)
 
-    # 创建新实例并缓存
-    from .embedder import BaseEmbedder
-    embedder: BaseEmbedder = create_embedder(embedder_type)
-    _embedder_cache = (embedder_type, current_hash, embedder)
+    # 合并配置：知识库特定配置 + 统一密钥
+    config: dict[str, Any] = {
+        "api_key": embedder_setting.get("api_key", ""),
+        "model_name": metadata["model_name"]
+    }
 
-    return embedder
+    # OpenAI 类型使用知识库指定的 base_url
+    if embedder_type == "OpenAI":
+        config["base_url"] = metadata.get(
+            "base_url",
+            embedder_setting.get("base_url", "https://api.openai.com/v1")
+        )
 
-
-def clear_embedder_cache() -> None:
-    """清除 embedder 缓存"""
-    global _embedder_cache
-    _embedder_cache = None
+    return create_embedder_from_config(embedder_type, config)

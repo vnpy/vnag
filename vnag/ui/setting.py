@@ -101,13 +101,3 @@ def load_gateway_type() -> str:
 def save_gateway_type(gateway_type: str) -> None:
     """保存当前选择的 gateway 类型"""
     set_setting("gateway_type", gateway_type)
-
-
-def load_embedder_type() -> str:
-    """加载当前选择的 embedder 类型"""
-    return cast(str, get_setting("embedder_type", "OpenAI"))
-
-
-def save_embedder_type(embedder_type: str) -> None:
-    """保存当前选择的 embedder 类型"""
-    set_setting("embedder_type", embedder_type)

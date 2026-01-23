@@ -3,7 +3,7 @@ from pathlib import Path
 
 from vnag.local import LocalTool
 from vnag.utility import get_folder_path
-from vnag.factory import get_embedder
+from vnag.factory import get_embedder_for_knowledge, list_knowledge_bases as _list_kb
 from vnag.vectors.duckdb_vector import DuckVector
 
 
@@ -14,9 +14,7 @@ def list_knowledge_bases() -> list[str]:
     Returns:
         知识库名称列表，如 ["ctp_api", "vnpy_docs"]
     """
-    db_folder: Path = get_folder_path("duckdb_vector")
-    db_files: list[Path] = list(db_folder.glob("*.duckdb"))
-    return [f.stem for f in db_files]
+    return _list_kb()
 
 
 def query_knowledge(
@@ -45,23 +43,29 @@ def query_knowledge(
     if not db_path.exists():
         return [{"error": f"知识库 '{db_name}' 不存在"}]
 
-    # 获取 embedder 并创建向量存储
-    embedder = get_embedder()
-    vector = DuckVector(name=db_name, embedder=embedder)
+    try:
+        # 根据知识库配置获取对应的 embedder
+        embedder = get_embedder_for_knowledge(db_name)
+        vector = DuckVector(name=db_name, embedder=embedder)
 
-    # 查询
-    segments = vector.retrieve(query, k=k)
+        # 查询
+        segments = vector.retrieve(query, k=k)
 
-    # 转换为字典列表
-    results: list[dict[str, Any]] = []
-    for seg in segments:
-        results.append({
-            "text": seg.text,
-            "metadata": seg.metadata,
-            "score": seg.score
-        })
+        # 转换为字典列表
+        results: list[dict[str, Any]] = []
+        for seg in segments:
+            results.append({
+                "text": seg.text,
+                "metadata": seg.metadata,
+                "score": seg.score
+            })
 
-    return results
+        return results
+
+    except ValueError as e:
+        return [{"error": str(e)}]
+    except Exception as e:
+        return [{"error": f"查询失败: {str(e)}"}]
 
 
 # 注册工具

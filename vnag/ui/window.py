@@ -10,7 +10,6 @@ from .widget import (
     ModelDialog,
     ProfileDialog,
     GatewayDialog,
-    EmbedderDialog,
     KnowledgeManagerDialog,
 )
 from .setting import get_setting
@@ -131,8 +130,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
         function_menu.addAction("AI服务配置", self.show_gateway_dialog)
-        function_menu.addAction("嵌入模型配置", self.show_embedder_dialog)
-        function_menu.addSeparator()
         function_menu.addAction("知识库管理", self.show_knowledge_dialog)
         function_menu.addSeparator()
         function_menu.addAction("智能体配置", self.show_profile_dialog)
@@ -203,11 +200,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 "AI服务配置已保存，需要重启应用程序才能生效。",
                 QtWidgets.QMessageBox.StandardButton.Ok
             )
-
-    def show_embedder_dialog(self) -> None:
-        """显示嵌入模型配置界面"""
-        dialog: EmbedderDialog = EmbedderDialog(self)
-        dialog.exec()
 
     def show_knowledge_dialog(self) -> None:
         """显示知识库管理界面"""
