@@ -2012,6 +2012,9 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         self.delete_button.clicked.connect(self.delete_database)
         self.delete_button.setEnabled(False)
 
+        self.apikey_button: QtWidgets.QPushButton = QtWidgets.QPushButton("API密钥设置")
+        self.apikey_button.clicked.connect(self.show_apikey_dialog)
+
         self.close_button: QtWidgets.QPushButton = QtWidgets.QPushButton("关闭")
         self.close_button.clicked.connect(self.close)
 
@@ -2020,6 +2023,7 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
         button_hbox.addWidget(self.import_button)
         button_hbox.addWidget(self.delete_button)
         button_hbox.addStretch()
+        button_hbox.addWidget(self.apikey_button)
         button_hbox.addWidget(self.close_button)
 
         # 主布局
@@ -2100,30 +2104,35 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
             self.embedder_model_label.setText("模型名称: -")
 
         # 片段数量和预览
-        try:
-            embedder = get_embedder_for_knowledge(db_name)
-            vector = DuckVector(name=db_name, embedder=embedder)
+        self.preview_list.clear()
 
-            count: int = vector.count
-            self.count_label.setText(f"片段数量: {count}")
+        # 检查数据库文件是否存在（新建的知识库可能还没有数据）
+        if not db_path.exists():
+            self.count_label.setText("片段数量: 0（空知识库）")
+            self.preview_list.addItem("（知识库为空，请导入文档）")
+        else:
+            try:
+                embedder = get_embedder_for_knowledge(db_name)
+                vector = DuckVector(name=db_name, embedder=embedder)
 
-            # 预览前几条
-            self.preview_list.clear()
-            if count > 0:
-                # 使用一个简单查询获取一些片段
-                segments = vector.retrieve("", k=min(10, count))
-                for seg in segments:
-                    source: str = seg.metadata.get("source", "未知")
-                    preview_text: str = seg.text[:100].replace("\n", " ")
-                    if len(seg.text) > 100:
-                        preview_text += "..."
-                    item_text: str = f"[{source}] {preview_text}"
-                    self.preview_list.addItem(item_text)
+                count: int = vector.count
+                self.count_label.setText(f"片段数量: {count}")
 
-        except Exception as e:
-            self.count_label.setText("片段数量: 读取失败")
-            self.preview_list.clear()
-            self.preview_list.addItem(f"错误: {str(e)}")
+                # 预览前几条
+                if count > 0:
+                    # 使用一个简单查询获取一些片段
+                    segments = vector.retrieve("", k=min(10, count))
+                    for seg in segments:
+                        source: str = seg.metadata.get("source", "未知")
+                        preview_text: str = seg.text[:100].replace("\n", " ")
+                        if len(seg.text) > 100:
+                            preview_text += "..."
+                        item_text: str = f"[{source}] {preview_text}"
+                        self.preview_list.addItem(item_text)
+
+            except Exception as e:
+                self.count_label.setText("片段数量: 读取失败")
+                self.preview_list.addItem(f"错误: {str(e)}")
 
         self.import_button.setEnabled(True)
         self.delete_button.setEnabled(True)
@@ -2204,3 +2213,101 @@ class KnowledgeManagerDialog(QtWidgets.QDialog):
                     "删除失败",
                     f"删除失败: {str(e)}"
                 )
+
+    def show_apikey_dialog(self) -> None:
+        """显示 API 密钥配置对话框"""
+        dialog = EmbedderApiKeyDialog(self)
+        dialog.exec()
+
+
+class EmbedderApiKeyDialog(QtWidgets.QDialog):
+    """Embedder API 密钥配置对话框"""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self.init_ui()
+        self.load_settings()
+
+    def init_ui(self) -> None:
+        """初始化UI"""
+        self.setWindowTitle("Embedder API 密钥配置")
+        self.setMinimumSize(500, 250)
+
+        # OpenAI API 密钥
+        self.openai_key_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.openai_key_line.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.openai_key_line.setPlaceholderText("请输入 OpenAI API 密钥")
+
+        # DashScope API 密钥
+        self.dashscope_key_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.dashscope_key_line.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+        self.dashscope_key_line.setPlaceholderText("请输入 DashScope API 密钥")
+
+        # 表单布局
+        form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
+        form.addRow("OpenAI API 密钥", self.openai_key_line)
+        form.addRow("DashScope API 密钥", self.dashscope_key_line)
+
+        # 说明标签
+        note_label: QtWidgets.QLabel = QtWidgets.QLabel(
+            "注：API 密钥用于知识库的向量嵌入，与 AI 服务配置中的密钥独立存储。"
+        )
+        note_label.setWordWrap(True)
+        note_label.setStyleSheet("color: gray; font-size: 12px;")
+
+        # 底部按钮
+        self.save_button: QtWidgets.QPushButton = QtWidgets.QPushButton("保存")
+        self.save_button.clicked.connect(self.save_settings)
+
+        self.cancel_button: QtWidgets.QPushButton = QtWidgets.QPushButton("取消")
+        self.cancel_button.clicked.connect(self.reject)
+
+        button_hbox: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        button_hbox.addStretch()
+        button_hbox.addWidget(self.save_button)
+        button_hbox.addWidget(self.cancel_button)
+
+        # 主布局
+        main_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout()
+        main_vbox.addLayout(form)
+        main_vbox.addSpacing(10)
+        main_vbox.addWidget(note_label)
+        main_vbox.addStretch()
+        main_vbox.addLayout(button_hbox)
+        self.setLayout(main_vbox)
+
+    def load_settings(self) -> None:
+        """加载已保存的设置"""
+        openai_setting = load_embedder_setting("OpenAI")
+        dashscope_setting = load_embedder_setting("DashScope")
+
+        if openai_setting.get("api_key"):
+            self.openai_key_line.setText(openai_setting["api_key"])
+
+        if dashscope_setting.get("api_key"):
+            self.dashscope_key_line.setText(dashscope_setting["api_key"])
+
+    def save_settings(self) -> None:
+        """保存设置"""
+        # 保存 OpenAI 设置
+        openai_key: str = self.openai_key_line.text().strip()
+        if openai_key:
+            openai_setting = load_embedder_setting("OpenAI")
+            openai_setting["api_key"] = openai_key
+            save_embedder_setting("OpenAI", openai_setting)
+
+        # 保存 DashScope 设置
+        dashscope_key: str = self.dashscope_key_line.text().strip()
+        if dashscope_key:
+            dashscope_setting = load_embedder_setting("DashScope")
+            dashscope_setting["api_key"] = dashscope_key
+            save_embedder_setting("DashScope", dashscope_setting)
+
+        QtWidgets.QMessageBox.information(
+            self,
+            "保存成功",
+            "API 密钥配置已保存"
+        )
+        self.accept()

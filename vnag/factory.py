@@ -170,10 +170,14 @@ def delete_knowledge_metadata(kb_name: str) -> None:
 
 
 def list_knowledge_bases() -> list[str]:
-    """列出所有知识库名称"""
+    """列出所有知识库名称
+
+    基于元数据文件（.json）列出知识库，而不是数据库文件（.duckdb），
+    因为知识库创建时只生成元数据，数据库文件在导入文档时才创建。
+    """
     db_folder: Path = get_folder_path("duckdb_vector")
-    db_files: list[Path] = list(db_folder.glob("*.duckdb"))
-    return [f.stem for f in db_files]
+    meta_files: list[Path] = list(db_folder.glob("*.json"))
+    return [f.stem for f in meta_files]
 
 
 def create_knowledge_base(
