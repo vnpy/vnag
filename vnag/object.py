@@ -20,6 +20,7 @@ class Message(BaseModel):
     reasoning: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list["ToolCall"] = Field(default_factory=list)
     tool_results: list["ToolResult"] = Field(default_factory=list)
+    usage: "Usage" = Field(default_factory=lambda: Usage())
 
 
 class Usage(BaseModel):

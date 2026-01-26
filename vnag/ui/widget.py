@@ -3,7 +3,7 @@ import os
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
-from typing import cast
+from typing import cast, NamedTuple
 
 from ..constant import Role
 from ..engine import AgentEngine, default_profile
@@ -34,6 +34,15 @@ from .factory import (
 )
 
 
+class QueuedMessage(NamedTuple):
+    """消息队列中的消息结构"""
+    role: Role
+    content: str
+    thinking: str
+    input_tokens: int
+    output_tokens: int
+
+
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
     """会话历史控件"""
 
@@ -52,9 +61,13 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.msg_id: str = ""
         self.last_type: str = ""
 
+        # 流式请求的 Token 使用量
+        self.stream_input_tokens: int = 0
+        self.stream_output_tokens: int = 0
+
         # 页面加载状态和消息队列
         self.page_loaded: bool = False
-        self.message_queue: list[tuple[Role, str, str]] = []
+        self.message_queue: list[QueuedMessage] = []
 
         # 连接页面加载完成信号
         self.page().loadFinished.connect(self._on_load_finished)
@@ -93,8 +106,14 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # 设置页面加载完成标志，并处理消息队列
         self.page_loaded = True
 
-        for role, content, thinking in self.message_queue:
-            self.append_message(role, content, thinking)
+        for msg in self.message_queue:
+            self.append_message(
+                msg.role,
+                msg.content,
+                msg.thinking,
+                msg.input_tokens,
+                msg.output_tokens
+            )
 
         self.message_queue.clear()
 
@@ -112,11 +131,24 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         else:
             self.message_queue.clear()
 
-    def append_message(self, role: Role, content: str, thinking: str = "") -> None:
+    def append_message(
+        self,
+        role: Role,
+        content: str,
+        thinking: str = "",
+        input_tokens: int = 0,
+        output_tokens: int = 0
+    ) -> None:
         """在会话历史组件中添加消息"""
         # 如果页面未加载完成，则将消息添加到消息队列
         if not self.page_loaded:
-            self.message_queue.append((role, content, thinking))
+            self.message_queue.append(QueuedMessage(
+                role=role,
+                content=content,
+                thinking=thinking,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens
+            ))
             return
 
         # 用户消息，不需要被渲染
@@ -137,7 +169,8 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
             js_name: str = json.dumps(self.profile_name)
             js_thinking: str = json.dumps(thinking)
             self.page().runJavaScript(
-                f"appendAssistantMessage({js_content}, {js_name}, {js_thinking})"
+                f"appendAssistantMessage({js_content}, {js_name}, {js_thinking}, "
+                f"{input_tokens}, {output_tokens})"
             )
 
     def start_stream(self) -> None:
@@ -147,6 +180,10 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         self.full_thinking = ""
         self.msg_id = f"msg-{uuid.uuid4().hex}"
         self.last_type = ""
+
+        # 重置 Token 使用量统计
+        self.stream_input_tokens = 0
+        self.stream_output_tokens = 0
 
         # 调用前端函数，开始新的流式输出
         js_name: str = json.dumps(self.profile_name)
@@ -184,10 +221,18 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         # 调用前端函数，更新 thinking 输出
         self.page().runJavaScript(f"updateThinking('{self.msg_id}', {js_thinking})")
 
+    def update_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """更新流式输出的 Token 使用量"""
+        self.stream_input_tokens = input_tokens
+        self.stream_output_tokens = output_tokens
+
     def finish_stream(self) -> str:
         """结束流式输出"""
-        # 调用前端函数，结束流式输出
-        self.page().runJavaScript(f"finishAssistantMessage('{self.msg_id}')")
+        # 调用前端函数，结束流式输出（传入 Token 使用量）
+        self.page().runJavaScript(
+            f"finishAssistantMessage('{self.msg_id}', "
+            f"{self.stream_input_tokens}, {self.stream_output_tokens})"
+        )
 
         # 返回完整的流式输出内容
         return self.full_content
@@ -277,6 +322,8 @@ class AgentWidget(QtWidgets.QWidget):
 
         assistant_content: str = ""
         assistant_thinking: str = ""
+        assistant_input_tokens: int = 0
+        assistant_output_tokens: int = 0
         last_type: str = ""
 
         for message in self.agent.messages:
@@ -292,10 +339,14 @@ class AgentWidget(QtWidgets.QWidget):
                         self.history_widget.append_message(
                             Role.ASSISTANT,
                             assistant_content,
-                            assistant_thinking
+                            assistant_thinking,
+                            assistant_input_tokens,
+                            assistant_output_tokens
                         )
                         assistant_content = ""
                         assistant_thinking = ""
+                        assistant_input_tokens = 0
+                        assistant_output_tokens = 0
                         last_type = ""
 
                     # 显示用户内容
@@ -325,9 +376,19 @@ class AgentWidget(QtWidgets.QWidget):
                         assistant_content += f"\n\n[执行工具: {tool_call.name}]\n\n"
                     last_type = "tool"
 
+                # 累积 usage 数据
+                assistant_input_tokens += message.usage.input_tokens
+                assistant_output_tokens += message.usage.output_tokens
+
         # 显示消息
         if assistant_content:
-            self.history_widget.append_message(Role.ASSISTANT, assistant_content, assistant_thinking)
+            self.history_widget.append_message(
+                Role.ASSISTANT,
+                assistant_content,
+                assistant_thinking,
+                assistant_input_tokens,
+                assistant_output_tokens
+            )
 
         self.update_buttons()
 
@@ -369,6 +430,7 @@ class AgentWidget(QtWidgets.QWidget):
         worker: StreamWorker = StreamWorker(self.agent, text)
         worker.signals.delta.connect(self.on_stream_delta)
         worker.signals.thinking.connect(self.on_stream_thinking)
+        worker.signals.usage.connect(self.on_stream_usage)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)
         worker.signals.title.connect(self.on_title_generated)
@@ -424,6 +486,10 @@ class AgentWidget(QtWidgets.QWidget):
     def on_stream_thinking(self, thinking_delta: str) -> None:
         """处理数据流返回的 thinking 数据块"""
         self.history_widget.update_thinking(thinking_delta)
+
+    def on_stream_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """处理数据流返回的 Token 使用量"""
+        self.history_widget.update_usage(input_tokens, output_tokens)
 
     def on_stream_finished(self) -> None:
         """处理数据流结束事件"""

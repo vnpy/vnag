@@ -100,7 +100,7 @@
 
 - **run_local_tool**: 演示如何使用 `LocalManager` 来列出和执行内置的本地工具（如获取当前时间、文件操作、网络检测等）。
 
-    - 文件系统工具需要配置权限：在用户目录下的 `.vnag` 文件夹中创建 `file_system_tool.json` 文件
+    - 文件系统工具需要配置权限：在用户目录下的 `.vnag` 文件夹中创建 `tool_filesystem.json` 文件
     - 配置格式示例：`{"read_allowed": ["D:/project"], "write_allowed": ["D:/project/output"]}`
 
 - **run_mcp_tool**: 演示如何使用 `McpManager` 来列出和执行通过 MCP（Module Communication Protocol）协议发现的外部工具。

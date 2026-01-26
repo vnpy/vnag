@@ -11,7 +11,7 @@ from vnag.local import LocalTool
 
 
 # 配置文件名称
-SETTING_NAME: str = "file_system_tool.json"
+SETTING_NAME: str = "tool_filesystem.json"
 
 # 默认配置
 setting: dict[str, list[str]] = {

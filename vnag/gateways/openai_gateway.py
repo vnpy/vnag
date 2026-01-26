@@ -251,6 +251,7 @@ class OpenaiGateway(BaseGateway):
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
 
         # 添加额外参数（通过钩子方法，子类可定制）

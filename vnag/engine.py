@@ -210,7 +210,11 @@ class AgentEngine:
     def list_models(self) -> list[str]:
         """查询可用模型列表"""
         if not self._models:
-            self._models = self.gateway.list_models()
+            try:
+                self._models = self.gateway.list_models()
+            except Exception:
+                # 填入错误提示，避免重复请求
+                self._models = ["获取模型列表失败，请检查API配置"]
 
         return self._models
 

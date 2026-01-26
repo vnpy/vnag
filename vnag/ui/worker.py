@@ -25,6 +25,9 @@ class StreamSignals(QtCore.QObject):
     # 标题生成完成
     title: QtCore.Signal = QtCore.Signal(str)
 
+    # Token 使用量更新 (input_tokens, output_tokens)
+    usage: QtCore.Signal = QtCore.Signal(int, int)
+
 
 class StreamWorker(QtCore.QRunnable):
     """
@@ -53,6 +56,10 @@ class StreamWorker(QtCore.QRunnable):
 
     def run(self) -> None:
         """处理数据流"""
+        # 累积 Token 使用量
+        total_input: int = 0
+        total_output: int = 0
+
         try:
             for delta in self.agent.stream(self.prompt):
                 # 用户手动停止
@@ -66,6 +73,10 @@ class StreamWorker(QtCore.QRunnable):
                 # 收到 content 数据块
                 if delta.content:
                     self._safe_emit(self.signals.delta, delta.content)
+                # 累积 Token 使用量
+                if delta.usage:
+                    total_input += delta.usage.input_tokens
+                    total_output += delta.usage.output_tokens
 
         except Exception:
             # 中止流式生成，保存已生成的部分内容
@@ -74,6 +85,8 @@ class StreamWorker(QtCore.QRunnable):
             error_msg: str = traceback.format_exc()
             self._safe_emit(self.signals.error, error_msg)
         finally:
+            # 发送最终的 Token 使用量
+            self._safe_emit(self.signals.usage, total_input, total_output)
             self._safe_emit(self.signals.finished)
 
         # 流式响应完成后，检查是否需要自动生成标题

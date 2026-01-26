@@ -187,3 +187,38 @@ tr:nth-child(2n) {
 .thinking-content p:last-child {
     margin-bottom: 0;
 }
+
+/* Message footer */
+.message-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #3d4450;
+}
+
+/* Copy all button */
+.copy-all-button {
+    padding: 4px 10px;
+    border: 1px solid #4b5563;
+    background-color: transparent;
+    color: #9ca3af;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.copy-all-button:hover {
+    background-color: #3d4450;
+    color: #abb2bf;
+}
+
+/* Token usage display */
+.token-usage {
+    color: #6c757d;
+    font-size: 12px;
+    margin-right: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}

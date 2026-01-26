@@ -1,7 +1,7 @@
 # VNAG - Your Agent, Your Data.
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-0.6.0-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-0.7.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
     <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnag.svg?color=orange"/>
@@ -170,6 +170,21 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 }
 ```
 
+**`connect_anthropic.json` 示例:**
+```json
+{
+    "api_key": "sk-ant-YourAnthropicKey",
+    "base_url": "https://api.anthropic.com"
+}
+```
+
+**`connect_dashscope.json` 示例:**
+```json
+{
+    "api_key": "sk-YourDashscopeKey"
+}
+```
+
 **`connect_deepseek.json` 示例:**
 ```json
 {
@@ -199,6 +214,15 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 {
     "api_key": "sk-YourOpenRouterKey",
     "base_url": "https://openrouter.ai/api/v1",
+    "reasoning_effort": "medium"
+}
+```
+
+**`connect_litellm.json` 示例:**
+```json
+{
+    "api_key": "sk-YourLiteLLMKey",
+    "base_url": "http://localhost:4000/",
     "reasoning_effort": "medium"
 }
 ```
@@ -248,7 +272,8 @@ vnag/
 │   │   ├── deepseek_gateway.py
 │   │   ├── minimax_gateway.py
 │   │   ├── bailian_gateway.py
-│   │   └── openrouter_gateway.py
+│   │   ├── openrouter_gateway.py
+│   │   └── litellm_gateway.py
 │   ├── embedder.py            # 嵌入器基类
 │   ├── embedders/             # 嵌入器实现
 │   │   ├── openai_embedder.py
@@ -271,7 +296,8 @@ vnag/
 │   │   ├── file_tools.py      # 文件系统工具
 │   │   ├── network_tools.py   # 网络工具
 │   │   ├── code_tools.py      # 代码工具
-│   │   └── web_tools.py       # Web工具
+│   │   ├── web_tools.py       # Web工具
+│   │   └── search_tools.py    # 联网搜索工具
 │   └── ui/                    # GUI界面实现
 │       ├── base.py            # UI基类
 │       ├── qt.py              # Qt主界面
@@ -322,7 +348,7 @@ vnag/
 - **`agent.py`**: Agent 基类，定义了智能体的基本接口和行为规范。
 - **`engine.py`**: Agent 引擎，负责对话管理、工具调用编排和与大模型交互。
 - **`tracer.py`**: 执行追踪器，用于记录和调试 Agent 的执行过程。
-- **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope、DeepSeek、MiniMax、百炼、OpenRouter 等多种实现。支持推理思考（Thinking）内容的提取和传递。
+- **`gateway.py` & `gateways/`**: 定义了与大模型 API 通信的统一接口，并提供了 OpenAI、Anthropic、Dashscope、DeepSeek、MiniMax、百炼、OpenRouter、LiteLLM 等多种实现。支持推理思考（Thinking）内容的提取和传递。
 - **`embedder.py` & `embedders/`**: 定义了文本嵌入的统一接口，并提供了 OpenAI、Dashscope、Sentence Transformers 等多种实现。
 - **`segmenter.py` & `segmenters/`**: 用于将文档（如 Markdown、Python、C++ 源码）解析为结构化数据段，是 RAG 的基础。
 - **`vector.py` & `vectors/`**: 向量数据库的统一接口和实现（支持 ChromaDB 和 Qdrant），用于存储和检索知识片段。
@@ -345,7 +371,7 @@ vnag/
 
 #### 文件系统工具 (`file_tools.py`)
 
-> **安全说明**：文件系统工具的使用受到权限控制。您需要在 `.vnag/file_system_tool.json` 配置文件中明确指定允许读写的路径，以防止 Agent 访问未授权的文件。
+> **安全说明**：文件系统工具的使用受到权限控制。您需要在 `.vnag/tool_filesystem.json` 配置文件中明确指定允许读写的路径，以防止 Agent 访问未授权的文件。
 
 - **list_directory**: 列出指定路径下的所有文件和子目录。
 - **read_file**: 读取指定文件的文本内容（自动检测编码）。
@@ -357,7 +383,7 @@ vnag/
 
 #### 网络工具 (`network_tools.py`)
 
-- **ping**: 通过执行 ping 命令检查与主机的网络连通性。
+- **ping**: 通过执行 ping 命令检查与主机的网络连通性（当前实现偏向 Windows 环境）。
 - **telnet**: 通过尝试建立套接字连接来测试目标主机的端口是否开放。
 - **get_local_ip**: 获取本机的局域网 IP 地址。
 - **get_public_ip**: 通过请求外部服务获取本机的公网 IP 地址。
@@ -374,7 +400,17 @@ vnag/
 
 - **fetch_html**: 获取并返回指定 URL 的 HTML 内容。
 - **fetch_json**: 获取并解析来自 URL 的 JSON 数据。
+- **fetch_markdown**: 使用 jina.ai Reader API 获取网页内容并转换为 Markdown 格式（推荐优先使用）。
 - **check_link**: 检查链接的 HTTP 状态码和状态信息。
+
+#### 联网搜索工具 (`search_tools.py`)
+
+> **配置说明**：联网搜索工具需要在 `.vnag/tool_search.json` 中配置对应的 API 密钥。
+
+- **bocha_search**: 使用博查 Web Search API 进行网络搜索。
+- **tavily_search**: 使用 Tavily Search API 进行网络搜索。
+- **serper_search**: 使用 Serper API 进行 Google 搜索。
+- **jina_search**: 使用 Jina Search API 进行网络搜索。
 
 ## 开发状态
 
@@ -393,8 +429,10 @@ vnag/
     - [x] MiniMax API 支持（含交错思维）
     - [x] 阿里云百炼平台支持（Qwen3/QwQ深度思考）
     - [x] OpenRouter 平台支持（多模型统一接入）
+    - [x] LiteLLM 网关代理支持（统一多模型接入）
     - [x] 流式输出和非流式输出
     - [x] 推理思考（Thinking）内容的提取和显示
+    - [x] Token 使用量跟踪和显示
     - [x] 统一的网关接口，易于扩展
 - [x] **嵌入器**：
     - [x] OpenAI Embeddings
@@ -407,16 +445,18 @@ vnag/
 - [x] **工具系统**：
     - [x] **本地工具**：自动加载 Python 函数作为工具，支持类型提示和文档字符串
     - [x] **MCP工具**：通过 MCP 客户端集成远程工具服务器
-    - [x] **内置工具**：日期时间、文件系统、网络、代码执行、Web 工具
+    - [x] **内置工具**：日期时间、文件系统、网络、代码执行、Web、联网搜索工具
 - [x] **图形界面**：
     - [x] 基于 PySide6 的现代化聊天 UI
     - [x] Profile 配置管理（创建、编辑、删除）
     - [x] Agent 实例管理（多智能体切换）
     - [x] Markdown 渲染和代码高亮
-    - [x] 执行追踪日志查看
+    - [x] 执行追踪日志记录（文件：`.vnag/log/{session_id}.log`）
     - [x] AI服务配置对话框（可视化配置API）
     - [x] 历史会话思考内容显示
     - [x] 模型下拉框智能显示（仅当前可用模型）
+    - [x] 回答一键复制按钮
+    - [x] Token 使用量统计显示
 - [x] **示例脚本**：覆盖所有核心功能的详细 `examples` 示例，包括网关、分段器、向量库、RAG、工具调用、Agent 和 UI。
 
 ## 常见问题 (FAQ)
@@ -435,7 +475,7 @@ vnag/
 
 **Q: 使用文件系统工具时提示"没有权限访问"怎么办？**
 
-**A:** 出于安全考虑，文件系统工具需要明确的权限配置。请在 `.vnag/file_system_tool.json` 文件中的 `read_allowed` 或 `write_allowed` 数组中添加您需要访问的目录路径。配置文件会在首次加载工具时自动生成。
+**A:** 出于安全考虑，文件系统工具需要明确的权限配置。请在 `.vnag/tool_filesystem.json` 文件中的 `read_allowed` 或 `write_allowed` 数组中添加您需要访问的目录路径。配置文件会在首次加载工具时自动生成。
 
 **Q: 如何为不同的项目使用不同的配置？**
 
