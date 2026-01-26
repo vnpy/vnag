@@ -184,6 +184,10 @@ class OpenaiGateway(BaseGateway):
         # 发起请求并获取响应
         response: ChatCompletion = self.client.chat.completions.create(**create_params)
 
+        if not response.choices:
+            self.write_log("API 返回的响应中没有 choices，返回空响应")
+            return Response(id=response.id or "", content="", usage=Usage())
+
         # 提取用量信息
         usage: Usage = Usage()
         if response.usage:
@@ -272,6 +276,9 @@ class OpenaiGateway(BaseGateway):
         for chuck in stream:
             if not response_id:
                 response_id = chuck.id
+
+            if not chuck.choices:
+                continue
 
             delta: Delta = Delta(id=response_id)
             should_yield: bool = False
