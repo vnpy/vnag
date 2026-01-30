@@ -135,6 +135,27 @@ class ChromaVector(BaseVector):
             for text, meta in zip(documents, metadatas, strict=True)
         ]
 
+    def list_segments(self, limit: int = 100, offset: int = 0) -> list[Segment]:
+        """分页获取向量存储中的文档块（不需要语义查询）。"""
+        results: GetResult = self.collection.get(
+            limit=limit,
+            offset=offset
+        )
+
+        documents: list[str] | None = results.get("documents")
+        metadatas: list[Mapping[str, Any]] | None = results.get("metadatas")
+
+        if not (documents and metadatas):
+            return []
+
+        return [
+            Segment(
+                text=text,
+                metadata={str(key): str(value) for key, value in meta.items()},
+            )
+            for text, meta in zip(documents, metadatas, strict=True)
+        ]
+
     @property
     def count(self) -> int:
         """获取向量存储中的文档总数。"""

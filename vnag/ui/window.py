@@ -10,7 +10,7 @@ from .widget import (
     ModelDialog,
     ProfileDialog,
     GatewayDialog,
-    KnowledgeManagerDialog,
+    KnowledgeWidget,
 )
 from .setting import get_setting
 from .qt import QtWidgets, QtGui, QtCore
@@ -203,7 +203,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_knowledge_dialog(self) -> None:
         """显示知识库管理界面"""
-        dialog: KnowledgeManagerDialog = KnowledgeManagerDialog(self)
+        dialog: QtWidgets.QDialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("知识库管理")
+        dialog.setMinimumSize(700, 500)
+
+        widget: KnowledgeWidget = KnowledgeWidget(dialog)
+        layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(dialog)
+        layout.addWidget(widget)
+
         dialog.exec()
 
     def show_profile_dialog(self) -> None:
