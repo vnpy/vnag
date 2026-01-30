@@ -13,6 +13,7 @@ from ..object import ToolSchema, Segment
 from ..agent import Profile, TaskAgent
 from ..utility import read_text_file
 from ..gateways import GATEWAY_CLASSES, get_gateway_class
+from ..embedders import get_embedder_names, get_embedder_class
 
 from .qt import (
     QtCore,
@@ -1462,27 +1463,6 @@ class GatewayDialog(QtWidgets.QDialog):
         return self.setting_modified
 
 
-# ============================================================
-# 知识库管理组件
-# ============================================================
-
-# Embedder 参数定义: (key, placeholder, is_password)
-EMBEDDER_PARAMS: dict[str, list[tuple[str, str, bool]]] = {
-    "OpenAI": [
-        ("api_key", "sk-...", True),
-        ("base_url", "https://api.openai.com/v1", False),
-        ("model_name", "text-embedding-3-small", False),
-    ],
-    "DashScope": [
-        ("api_key", "sk-...", True),
-        ("model_name", "text-embedding-v3", False),
-    ],
-    "Sentence": [
-        ("model_name", "BAAI/bge-large-zh-v1.5", False),
-    ],
-}
-
-
 class KnowledgeCreateDialog(QtWidgets.QDialog):
     """新建知识库对话框"""
 
@@ -1504,7 +1484,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
         self.desc_edit.setPlaceholderText("可选的描述信息")
 
         self.type_combo: QtWidgets.QComboBox = QtWidgets.QComboBox()
-        self.type_combo.addItems(list(EMBEDDER_PARAMS.keys()))
+        self.type_combo.addItems(get_embedder_names())
         self.type_combo.currentTextChanged.connect(self._refresh_params)
 
         self.param_widget: QtWidgets.QWidget = QtWidgets.QWidget()
@@ -1538,11 +1518,10 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
                 item.widget().deleteLater()
         self.inputs.clear()
 
-        for key, hint, is_pwd in EMBEDDER_PARAMS.get(embedder_type, []):
+        embedder_cls = get_embedder_class(embedder_type)
+        for key, default_value in embedder_cls.default_setting.items():
             edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
-            edit.setPlaceholderText(hint)
-            if is_pwd:
-                edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
+            edit.setPlaceholderText(str(default_value))
             self.param_layout.addRow(key, edit)
             self.inputs[key] = edit
 
@@ -1552,7 +1531,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
         if not name:
             QtWidgets.QMessageBox.warning(self, "错误", "名称不能为空")
             return
-        if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", name):
             QtWidgets.QMessageBox.warning(self, "错误", "名称只能包含英文字母、数字和下划线")
             return
         self.accept()
@@ -1594,7 +1573,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         self.file_edit.setPlaceholderText("请选择要导入的 Markdown 文件")
 
         file_button: QtWidgets.QPushButton = QtWidgets.QPushButton("选择")
-        file_button.clicked.connect(self._select_file)
+        file_button.clicked.connect(self.select_file)
 
         file_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         file_layout.addWidget(self.file_edit)
@@ -1611,7 +1590,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         self.status: QtWidgets.QLabel = QtWidgets.QLabel("就绪")
 
         self.import_button: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
-        self.import_button.clicked.connect(self._do_import)
+        self.import_button.clicked.connect(self.do_import)
 
         close_button: QtWidgets.QPushButton = QtWidgets.QPushButton("关闭")
         close_button.clicked.connect(self.close)
@@ -1633,7 +1612,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         main_vbox.addStretch()
         main_vbox.addLayout(button_layout)
 
-    def _select_file(self) -> None:
+    def select_file(self) -> None:
         """选择文件"""
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "选择 Markdown", "", "Markdown (*.md);;All (*)"
@@ -1645,7 +1624,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         """完整导入复选框状态变化"""
         self.chunk_spin.setEnabled(state != QtCore.Qt.CheckState.Checked.value)
 
-    def _do_import(self) -> None:
+    def do_import(self) -> None:
         """执行导入"""
         from .knowledge import get_knowledge_vector
         from ..segmenters.markdown_segmenter import MarkdownSegmenter
@@ -1706,7 +1685,7 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         self.current_page: int = 0
         self.total_count: int = 0
         self.init_ui()
-        self._load_data()
+        self.load_data()
 
     def init_ui(self) -> None:
         """初始化UI"""
@@ -1715,7 +1694,7 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
 
         self.list_widget: QtWidgets.QListWidget = QtWidgets.QListWidget()
         self.list_widget.setMaximumWidth(300)
-        self.list_widget.currentItemChanged.connect(self._on_select)
+        self.list_widget.currentItemChanged.connect(self.on_select)
 
         self.text_edit: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.text_edit.setReadOnly(True)
@@ -1726,10 +1705,10 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
 
         # 分页控件
         self.button_prev: QtWidgets.QPushButton = QtWidgets.QPushButton("上一页")
-        self.button_prev.clicked.connect(self._on_prev_page)
+        self.button_prev.clicked.connect(self.on_prev_page)
 
         self.button_next: QtWidgets.QPushButton = QtWidgets.QPushButton("下一页")
-        self.button_next.clicked.connect(self._on_next_page)
+        self.button_next.clicked.connect(self.on_next_page)
 
         self.page_label: QtWidgets.QLabel = QtWidgets.QLabel("第 1 页")
 
@@ -1743,7 +1722,7 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         layout.addWidget(splitter)
         layout.addLayout(page_layout)
 
-    def _load_data(self) -> None:
+    def load_data(self) -> None:
         """加载当前页数据"""
         try:
             from .knowledge import get_knowledge_vector
@@ -1785,20 +1764,20 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         self.button_prev.setEnabled(self.current_page > 0)
         self.button_next.setEnabled(current_display < total_pages)
 
-    def _on_prev_page(self) -> None:
+    def on_prev_page(self) -> None:
         """上一页"""
         if self.current_page > 0:
             self.current_page -= 1
-            self._load_data()
+            self.load_data()
 
-    def _on_next_page(self) -> None:
+    def on_next_page(self) -> None:
         """下一页"""
         total_pages: int = (self.total_count + self.PAGE_SIZE - 1) // self.PAGE_SIZE
         if self.current_page + 1 < total_pages:
             self.current_page += 1
-            self._load_data()
+            self.load_data()
 
-    def _on_select(
+    def on_select(
         self,
         current: QtWidgets.QListWidgetItem | None,
         previous: QtWidgets.QListWidgetItem | None
@@ -1830,16 +1809,16 @@ class KnowledgeWidget(QtWidgets.QWidget):
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
 
         button_new: QtWidgets.QPushButton = QtWidgets.QPushButton("新建")
-        button_new.clicked.connect(self._on_create)
+        button_new.clicked.connect(self.create_knowledge)
 
         button_import: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
-        button_import.clicked.connect(self._on_import)
+        button_import.clicked.connect(self.import_document)
 
         button_view: QtWidgets.QPushButton = QtWidgets.QPushButton("查看")
-        button_view.clicked.connect(self._on_view)
+        button_view.clicked.connect(self.view_knowledge)
 
         button_del: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
-        button_del.clicked.connect(self._on_delete)
+        button_del.clicked.connect(self.delete_knowledge)
 
         button_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         button_layout.addWidget(button_new)
@@ -1873,7 +1852,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
                 return item.text()
         return None
 
-    def _on_create(self) -> None:
+    def create_knowledge(self) -> None:
         """新建知识库"""
         dialog: KnowledgeCreateDialog = KnowledgeCreateDialog(self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
@@ -1885,7 +1864,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
             except Exception as e:
                 QtWidgets.QMessageBox.warning(self, "错误", str(e))
 
-    def _on_import(self) -> None:
+    def import_document(self) -> None:
         """导入文档"""
         name: str | None = self._selected_name()
         if not name:
@@ -1894,7 +1873,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
         dialog: KnowledgeImportDialog = KnowledgeImportDialog(name, self)
         dialog.exec()
 
-    def _on_view(self) -> None:
+    def view_knowledge(self) -> None:
         """查看知识库"""
         name: str | None = self._selected_name()
         if not name:
@@ -1903,7 +1882,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
         dialog: KnowledgeViewDialog = KnowledgeViewDialog(name, self)
         dialog.exec()
 
-    def _on_delete(self) -> None:
+    def delete_knowledge(self) -> None:
         """删除知识库"""
         name: str | None = self._selected_name()
         if not name:

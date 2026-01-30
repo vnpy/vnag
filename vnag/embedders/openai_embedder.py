@@ -10,6 +10,13 @@ from vnag.embedder import BaseEmbedder
 class OpenaiEmbedder(BaseEmbedder):
     """OpenAI Embedding API 适配器"""
 
+    default_name: str = "OpenAI"
+    default_setting: dict = {
+        "api_key": "",
+        "base_url": "",
+        "model_name": "text-embedding-3-small",
+    }
+
     def __init__(
         self,
         api_key: str,
