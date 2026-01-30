@@ -5,10 +5,10 @@ from vnag.object import Message, Request, Role, Segment
 from vnag.utility import load_json
 from vnag.gateways.openai_gateway import OpenaiGateway
 from vnag.segmenters.cpp_segmenter import CppSegmenter
-from vnag.vectors.chromadb_vector import ChromaVector
+from vnag.vectors.chromadb_vector import ChromadbVector
 
 
-def import_knowledge(vector: ChromaVector) -> None:
+def import_knowledge(vector: ChromadbVector) -> None:
     """
     遍历 CTP 头文件目录，使用 CppSegmenter 解析并将其插入向量数据库。
 
@@ -18,7 +18,7 @@ def import_knowledge(vector: ChromaVector) -> None:
     向量数据库中，以便后续的检索操作。
 
     Args:
-        vector (ChromaVector): 向量数据库的实例。
+        vector (ChromadbVector): 向量数据库的实例。
     """
     segmenter: CppSegmenter = CppSegmenter()
 
@@ -50,12 +50,12 @@ def import_knowledge(vector: ChromaVector) -> None:
             print(f"成功处理文件: {h_file.name}, 新增 {len(segments)} 个知识片段。")
 
 
-def query_vector(vector: ChromaVector, question: str, k: int = 5) -> list[Segment]:
+def query_vector(vector: ChromadbVector, question: str, k: int = 5) -> list[Segment]:
     """
     从向量数据库中查询与问题相关的知识片段。
 
     Args:
-        vector (ChromaVector): 向量数据库的实例。
+        vector (ChromadbVector): 向量数据库的实例。
         question (str): 用户提出的问题。
         k (int): 希望返回的相关知识片段数量。
 
@@ -78,7 +78,7 @@ def query_vector(vector: ChromaVector, question: str, k: int = 5) -> list[Segmen
 
 def generate_answer(
     gateway: OpenaiGateway,
-    vector: ChromaVector,
+    vector: ChromadbVector,
     question: str,
     model: str = "gpt-4o",
 ) -> str:
@@ -91,7 +91,7 @@ def generate_answer(
 
     Args:
         gateway (OpenaiGateway): AI 模型的调用接口。
-        vector (ChromaVector): 向量数据库的实例。
+        vector (ChromadbVector): 向量数据库的实例。
         question (str): 用户提出的问题。
         model (str): 希望使用的 AI 模型名称。
 
@@ -137,9 +137,9 @@ def main() -> None:
     CTP RAG Demo主程序入口。
     """
     # 1. 初始化向量数据库
-    # ChromaVector 默认会在当前工作目录下创建并使用 chroma 文件夹进行数据持久化
+    # ChromadbVector 默认会在当前工作目录下创建并使用 chroma 文件夹进行数据持久化
     embedder: SentenceEmbedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-    vector: ChromaVector = ChromaVector(name="ctp", embedder=embedder)
+    vector: ChromadbVector = ChromadbVector(name="ctp", embedder=embedder)
 
     print(f"向量数据库初始化完成，当前知识总数：{vector.count}")
 

@@ -3,7 +3,7 @@ from pathlib import Path
 from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.object import Segment
 from vnag.segmenters.markdown_segmenter import MarkdownSegmenter
-from vnag.vectors.duckdb_vector import DuckVector
+from vnag.vectors.duckdb_vector import DuckdbVector
 
 
 def main() -> None:
@@ -33,12 +33,12 @@ def main() -> None:
 
     # 创建向量库（使用 BGE 本地模型，name="bge"）
     embedder: SentenceEmbedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-    vector: DuckVector = DuckVector(name="bge", embedder=embedder)
+    vector: DuckdbVector = DuckdbVector(name="bge", embedder=embedder)
 
     # 如需使用 DashScope API，替换为（注意修改 name）：
     # from vnag.embedders.dashscope_embedder import DashscopeEmbedder
     # embedder = DashscopeEmbedder(api_key="your_api_key", model_name="text-embedding-v3")
-    # vector = DuckVector(name="dashscope", embedder=embedder)
+    # vector = DuckdbVector(name="dashscope", embedder=embedder)
 
     # 如需使用 OpenRouter API，替换为（注意修改 name）：
     # from vnag.embedders.openai_embedder import OpenaiEmbedder
@@ -47,7 +47,7 @@ def main() -> None:
     #     api_key="your_api_key",
     #     model_name="qwen/qwen3-embedding-8b"
     # )
-    # vector = DuckVector(name="openai", embedder=embedder)
+    # vector = DuckdbVector(name="openai", embedder=embedder)
 
     # 写入向量库
     vector.add_segments(segments)
