@@ -1552,7 +1552,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
         if not name:
             QtWidgets.QMessageBox.warning(self, "错误", "名称不能为空")
             return
-        if not re.match(r'^[a-zA-Z0-9_]+$', name):
+        if not re.match(r'^[a-zA-Z0-9_-]+$', name):
             QtWidgets.QMessageBox.warning(self, "错误", "名称只能包含英文字母、数字和下划线")
             return
         self.accept()
