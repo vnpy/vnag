@@ -13,7 +13,7 @@ from vnag.vector import BaseVector
 from vnag.embedder import BaseEmbedder
 
 
-class DuckVector(BaseVector):
+class DuckdbVector(BaseVector):
     """基于 DuckDB VSS 扩展实现的向量存储。"""
 
     def __init__(

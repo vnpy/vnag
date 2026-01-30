@@ -6,6 +6,7 @@ import json
 
 from ..utility import get_folder_path, get_file_path
 from ..embedder import BaseEmbedder
+from ..vectors.duckdb_vector import DuckdbVector
 
 
 # 知识库存储目录
@@ -128,16 +129,16 @@ def _create_embedder(embedder_type: str, setting: dict[str, Any]) -> BaseEmbedde
         raise ValueError(f"不支持的 Embedder 类型: {embedder_type}")
 
 
-def get_knowledge_vector(name: str):
+def get_knowledge_vector(name: str) -> DuckdbVector:
     """获取知识库向量存储（自动创建专属 Embedder）
 
     Args:
         name: 知识库名称
 
     Returns:
-        DuckVector 实例
+        DuckdbVector 实例
     """
-    from ..vectors.duckdb_vector import DuckVector
+    from ..vectors.duckdb_vector import DuckdbVector
 
     metadata: dict[str, Any] | None = load_knowledge_base(name)
     if metadata is None:
@@ -150,4 +151,4 @@ def get_knowledge_vector(name: str):
     embedder: BaseEmbedder = _create_embedder(embedder_type, setting)
 
     # 创建向量存储，使用知识库专用目录
-    return DuckVector(name=name, embedder=embedder)
+    return DuckdbVector(name=name, embedder=embedder)

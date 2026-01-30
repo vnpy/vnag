@@ -16,7 +16,7 @@ from vnag.vector import BaseVector
 from vnag.embedder import BaseEmbedder
 
 
-class ChromaVector(BaseVector):
+class ChromadbVector(BaseVector):
     """基于 ChromaDB 实现的向量存储。"""
 
     def __init__(

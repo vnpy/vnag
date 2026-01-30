@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -159,7 +160,7 @@ def jina_search(
     Returns:
         搜索结果的 JSON 数据
     """
-    url: str = f"https://s.jina.ai/{requests.utils.quote(query)}"
+    url: str = f"https://s.jina.ai/{quote(query)}"
     headers: dict[str, str] = {"Accept": "application/json"}
 
     api_key: str = setting["jina_key"]

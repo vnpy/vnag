@@ -1519,7 +1519,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
                 item.widget().deleteLater()
         self.inputs.clear()
 
-        embedder_cls: BaseEmbedder = get_embedder_class(embedder_type)
+        embedder_cls: type[BaseEmbedder] = get_embedder_class(embedder_type)
         for key, default_value in embedder_cls.default_setting.items():
             if key == "api_key":
                 text: str = "API 密钥"
@@ -1661,7 +1661,9 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         vector.add_segments(segments)
 
         self.status.setText("就绪")
-        QtWidgets.QMessageBox.information(self, "成功", f"导入 {len(segments)} 个片段")
+        QtWidgets.QMessageBox.information(
+            self, "成功", f"导入 {len(segments)} 个片段", QtWidgets.QMessageBox.StandardButton.Ok
+        )
 
         self.import_button.setEnabled(True)
 
