@@ -14,6 +14,7 @@ from ..agent import Profile, TaskAgent
 from ..utility import read_text_file
 from ..gateways import GATEWAY_CLASSES, get_gateway_class
 from ..embedders import get_embedder_names, get_embedder_class
+from ..embedder import BaseEmbedder
 
 from .qt import (
     QtCore,
@@ -1475,7 +1476,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
     def init_ui(self) -> None:
         """初始化UI"""
         self.setWindowTitle("新建知识库")
-        self.setMinimumWidth(450)
+        self.setMinimumWidth(800)
 
         self.name_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
         self.name_edit.setPlaceholderText("请输入知识库名称（英文、数字、下划线）")
@@ -1518,11 +1519,20 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
                 item.widget().deleteLater()
         self.inputs.clear()
 
-        embedder_cls = get_embedder_class(embedder_type)
+        embedder_cls: BaseEmbedder = get_embedder_class(embedder_type)
         for key, default_value in embedder_cls.default_setting.items():
+            if key == "api_key":
+                text: str = "API 密钥"
+            elif key == "base_url":
+                text = "API 地址"
+            elif key == "model_name":
+                text = "模型名称"
+            else:
+                text = key
+
             edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
             edit.setPlaceholderText(str(default_value))
-            self.param_layout.addRow(key, edit)
+            self.param_layout.addRow(text, edit)
             self.inputs[key] = edit
 
     def _validate_and_accept(self) -> None:
@@ -1566,7 +1576,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
     def init_ui(self) -> None:
         """初始化UI"""
         self.setWindowTitle(f"导入到: {self.kb_name}")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(800)
 
         self.file_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
         self.file_edit.setReadOnly(True)
@@ -1586,7 +1596,6 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         self.chunk_spin.setRange(100, 100000)
         self.chunk_spin.setValue(2000)
 
-        self.progress: QtWidgets.QProgressBar = QtWidgets.QProgressBar()
         self.status: QtWidgets.QLabel = QtWidgets.QLabel("就绪")
 
         self.import_button: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
@@ -1608,7 +1617,6 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         main_vbox: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
         main_vbox.addLayout(form)
         main_vbox.addWidget(self.status)
-        main_vbox.addWidget(self.progress)
         main_vbox.addStretch()
         main_vbox.addLayout(button_layout)
 
@@ -1635,42 +1643,27 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
             return
 
         self.import_button.setEnabled(False)
-        self.status.setText("读取文件...")
-        self.progress.setValue(10)
+        self.status.setText("处理中...")
         QtWidgets.QApplication.processEvents()
 
-        try:
-            text: str = read_text_file(Path(filepath))
-            source: str = Path(filepath).name
+        text: str = read_text_file(Path(filepath))
+        source: str = Path(filepath).name
 
-            self.status.setText("切片中...")
-            self.progress.setValue(20)
-            QtWidgets.QApplication.processEvents()
+        if self.full_check.isChecked():
+            segments: list[Segment] = [
+                Segment(text=text, metadata={"source": source, "chunk_index": "0"})
+            ]
+        else:
+            segmenter = MarkdownSegmenter(chunk_size=self.chunk_spin.value())
+            segments = segmenter.parse(text, {"source": source})
 
-            if self.full_check.isChecked():
-                segments: list[Segment] = [
-                    Segment(text=text, metadata={"source": source, "chunk_index": "0"})
-                ]
-            else:
-                segmenter = MarkdownSegmenter(chunk_size=self.chunk_spin.value())
-                segments = segmenter.parse(text, {"source": source})
+        vector = get_knowledge_vector(self.kb_name)
+        vector.add_segments(segments)
 
-            self.status.setText(f"向量化 {len(segments)} 个片段...")
-            self.progress.setValue(40)
-            QtWidgets.QApplication.processEvents()
+        self.status.setText("就绪")
+        QtWidgets.QMessageBox.information(self, "成功", f"导入 {len(segments)} 个片段")
 
-            vector = get_knowledge_vector(self.kb_name)
-            vector.add_segments(segments)
-
-            self.progress.setValue(100)
-            self.status.setText("完成")
-            QtWidgets.QMessageBox.information(self, "成功", f"导入 {len(segments)} 个片段")
-
-        except Exception as e:
-            import traceback
-            QtWidgets.QMessageBox.warning(self, "错误", traceback.format_exc())
-        finally:
-            self.import_button.setEnabled(True)
+        self.import_button.setEnabled(True)
 
 
 class KnowledgeViewDialog(QtWidgets.QDialog):
@@ -1681,33 +1674,77 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
     def __init__(self, kb_name: str, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数"""
         super().__init__(parent)
+
         self.kb_name: str = kb_name
         self.current_page: int = 0
         self.total_count: int = 0
+
         self.init_ui()
         self.load_data()
 
     def init_ui(self) -> None:
         """初始化UI"""
         self.setWindowTitle(f"查看: {self.kb_name}")
-        self.resize(900, 600)
+        self.resize(1400, 1000)
 
-        self.list_widget: QtWidgets.QListWidget = QtWidgets.QListWidget()
-        self.list_widget.setMaximumWidth(300)
-        self.list_widget.currentItemChanged.connect(self.on_select)
+        # 搜索框
+        self.search_edit: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.search_edit.setPlaceholderText("搜索片段内容...")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self.on_search)
 
+        # 树形控件，按来源分组
+        self.tree_widget: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
+        self.tree_widget.setHeaderLabels(["来源 / 片段预览", "字数"])
+        self.tree_widget.setColumnWidth(0, 380)
+        self.tree_widget.setColumnWidth(1, 60)
+        self.tree_widget.itemSelectionChanged.connect(self.on_select)
+        self.tree_widget.setAlternatingRowColors(True)
+        self.tree_widget.setRootIsDecorated(True)
+
+        # 左侧布局
+        left_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        left_layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(self.search_edit)
+        left_layout.addWidget(self.tree_widget)
+
+        # 右侧：元数据区域
+        self.meta_label: QtWidgets.QLabel = QtWidgets.QLabel()
+        self.meta_label.setWordWrap(True)
+        self.meta_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        self.meta_label.setStyleSheet(
+            "background: #f5f5f5; padding: 8px; border-radius: 4px; color: #333;"
+        )
+        self.meta_label.setMinimumHeight(60)
+
+        # 右侧：内容区域
         self.text_edit: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
         self.text_edit.setReadOnly(True)
 
+        meta_title: QtWidgets.QLabel = QtWidgets.QLabel("📋 元数据")
+        meta_title.setStyleSheet("font-weight: bold; margin-top: 4px;")
+        content_title: QtWidgets.QLabel = QtWidgets.QLabel("📝 内容")
+        content_title.setStyleSheet("font-weight: bold; margin-top: 8px;")
+
+        right_widget: QtWidgets.QWidget = QtWidgets.QWidget()
+        right_layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.addWidget(meta_title)
+        right_layout.addWidget(self.meta_label)
+        right_layout.addWidget(content_title)
+        right_layout.addWidget(self.text_edit, 1)
+
         splitter: QtWidgets.QSplitter = QtWidgets.QSplitter()
-        splitter.addWidget(self.list_widget)
-        splitter.addWidget(self.text_edit)
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setSizes([450, 650])
 
         # 分页控件
-        self.button_prev: QtWidgets.QPushButton = QtWidgets.QPushButton("上一页")
+        self.button_prev: QtWidgets.QPushButton = QtWidgets.QPushButton("◀ 上一页")
         self.button_prev.clicked.connect(self.on_prev_page)
 
-        self.button_next: QtWidgets.QPushButton = QtWidgets.QPushButton("下一页")
+        self.button_next: QtWidgets.QPushButton = QtWidgets.QPushButton("下一页 ▶")
         self.button_next.clicked.connect(self.on_next_page)
 
         self.page_label: QtWidgets.QLabel = QtWidgets.QLabel("第 1 页")
@@ -1724,33 +1761,45 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
 
     def load_data(self) -> None:
         """加载当前页数据"""
-        try:
-            from .knowledge import get_knowledge_vector
+        from .knowledge import get_knowledge_vector
 
-            vector = get_knowledge_vector(self.kb_name)
-            self.total_count = vector.count
+        vector = get_knowledge_vector(self.kb_name)
+        self.total_count = vector.count
 
-            # 计算分页参数
-            offset: int = self.current_page * self.PAGE_SIZE
-            segments = vector.list_segments(limit=self.PAGE_SIZE, offset=offset)
+        # 计算分页参数
+        offset: int = self.current_page * self.PAGE_SIZE
+        segments = vector.list_segments(limit=self.PAGE_SIZE, offset=offset)
 
-            # 清空列表并填充数据
-            self.list_widget.clear()
-            self.text_edit.clear()
+        # 清空并重建
+        self.tree_widget.clear()
+        self.meta_label.clear()
+        self.text_edit.clear()
 
-            for seg in segments:
-                src: str = seg.metadata.get("source", "?")
-                preview: str = seg.text[:40].replace("\n", " ")
-                item: QtWidgets.QListWidgetItem = QtWidgets.QListWidgetItem(f"[{src}] {preview}...")
-                item.setData(QtCore.Qt.ItemDataRole.UserRole, seg)
-                self.list_widget.addItem(item)
+        # 按来源分组
+        grouped: dict[str, list] = {}
+        for seg in segments:
+            src: str = seg.metadata.get("source", "未知来源")
+            grouped.setdefault(src, []).append(seg)
 
-            # 更新标题和分页状态
-            self._update_page_state()
-        except Exception:
-            import traceback
-            traceback.print_exc()
-            QtWidgets.QMessageBox.warning(self, "错误", traceback.format_exc())
+        # 构建树形结构
+        for src, segs in grouped.items():
+            # 父节点：来源文件
+            parent: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                [f"📄 {src}", f"({len(segs)})"]
+            )
+            parent.setExpanded(True)
+            self.tree_widget.addTopLevelItem(parent)
+
+            for seg in segs:
+                preview: str = seg.text[:60].replace("\n", " ").strip()
+                child: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                    [preview + "...", str(len(seg.text))]
+                )
+                child.setData(0, QtCore.Qt.ItemDataRole.UserRole, seg)
+                parent.addChild(child)
+
+        # 更新分页状态
+        self._update_page_state()
 
     def _update_page_state(self) -> None:
         """更新分页状态"""
@@ -1763,6 +1812,26 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         # 控制按钮状态
         self.button_prev.setEnabled(self.current_page > 0)
         self.button_next.setEnabled(current_display < total_pages)
+
+    def on_search(self, text: str) -> None:
+        """搜索过滤片段"""
+        text = text.lower()
+        for i in range(self.tree_widget.topLevelItemCount()):
+            parent: QtWidgets.QTreeWidgetItem | None = self.tree_widget.topLevelItem(i)
+            if parent is None:
+                continue
+            parent_visible: bool = False
+            for j in range(parent.childCount()):
+                child: QtWidgets.QTreeWidgetItem | None = parent.child(j)
+                if child is None:
+                    continue
+                seg = child.data(0, QtCore.Qt.ItemDataRole.UserRole)
+                visible: bool = text in seg.text.lower() if seg else False
+                child.setHidden(not visible)
+                if visible:
+                    parent_visible = True
+            # 如果没有搜索词，显示所有父节点；否则只显示有匹配子项的父节点
+            parent.setHidden(not parent_visible and bool(text))
 
     def on_prev_page(self) -> None:
         """上一页"""
@@ -1777,17 +1846,24 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
             self.current_page += 1
             self.load_data()
 
-    def on_select(
-        self,
-        current: QtWidgets.QListWidgetItem | None,
-        previous: QtWidgets.QListWidgetItem | None
-    ) -> None:
+    def on_select(self) -> None:
         """选中片段时显示详情"""
-        if not current:
+        items: list[QtWidgets.QTreeWidgetItem] = self.tree_widget.selectedItems()
+        if not items:
             return
-        seg = current.data(QtCore.Qt.ItemDataRole.UserRole)
-        meta: str = "\n".join(f"{k}: {v}" for k, v in seg.metadata.items())
-        self.text_edit.setText(f"=== 元数据 ===\n{meta}\n\n=== 内容 ===\n{seg.text}")
+        seg = items[0].data(0, QtCore.Qt.ItemDataRole.UserRole)
+        if not seg:
+            # 选中的是父节点（来源），清空详情
+            self.meta_label.clear()
+            self.text_edit.clear()
+            return
+        # 显示元数据（HTML格式）
+        meta_html: str = " &nbsp;|&nbsp; ".join(
+            f"<b>{k}:</b> {v}" for k, v in seg.metadata.items()
+        )
+        self.meta_label.setText(meta_html)
+        # 显示内容
+        self.text_edit.setText(seg.text)
 
 
 class KnowledgeDialog(QtWidgets.QDialog):
@@ -1807,27 +1883,33 @@ class KnowledgeDialog(QtWidgets.QDialog):
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(["名称", "描述"])
         self.table.horizontalHeader().setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
 
         button_new: QtWidgets.QPushButton = QtWidgets.QPushButton("新建")
         button_new.clicked.connect(self.create_knowledge)
 
-        button_import: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
-        button_import.clicked.connect(self.import_document)
+        self.button_import: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
+        self.button_import.clicked.connect(self.import_document)
+        self.button_import.setEnabled(False)
 
-        button_view: QtWidgets.QPushButton = QtWidgets.QPushButton("查看")
-        button_view.clicked.connect(self.view_knowledge)
+        self.button_view: QtWidgets.QPushButton = QtWidgets.QPushButton("查看")
+        self.button_view.clicked.connect(self.view_knowledge)
+        self.button_view.setEnabled(False)
 
-        button_del: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
-        button_del.clicked.connect(self.delete_knowledge)
+        self.button_del: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
+        self.button_del.clicked.connect(self.delete_knowledge)
+        self.button_del.setEnabled(False)
+
+        self.table.itemSelectionChanged.connect(self._on_selection_changed)
 
         button_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         button_layout.addWidget(button_new)
-        button_layout.addWidget(button_import)
-        button_layout.addWidget(button_view)
-        button_layout.addWidget(button_del)
         button_layout.addStretch()
+        button_layout.addWidget(self.button_import)
+        button_layout.addWidget(self.button_view)
+        button_layout.addWidget(self.button_del)
 
         layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
         layout.addLayout(button_layout)
@@ -1844,6 +1926,13 @@ class KnowledgeDialog(QtWidgets.QDialog):
             self.table.insertRow(row)
             self.table.setItem(row, 0, QtWidgets.QTableWidgetItem(kb["name"]))
             self.table.setItem(row, 1, QtWidgets.QTableWidgetItem(kb["description"]))
+
+    def _on_selection_changed(self) -> None:
+        """选择变化时更新按钮状态"""
+        has_selection: bool = self.table.currentRow() >= 0
+        self.button_import.setEnabled(has_selection)
+        self.button_view.setEnabled(has_selection)
+        self.button_del.setEnabled(has_selection)
 
     def _selected_name(self) -> str | None:
         """获取选中的知识库名称"""

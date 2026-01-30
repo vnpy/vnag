@@ -130,11 +130,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         function_menu: QtWidgets.QMenu = menu_bar.addMenu("功能")
         function_menu.addAction("AI服务配置", self.show_gateway_dialog)
-        function_menu.addAction("知识库管理", self.show_knowledge_dialog)
         function_menu.addSeparator()
-        function_menu.addAction("智能体配置", self.show_profile_dialog)
-        function_menu.addAction("工具浏览器", self.show_tool_dialog)
         function_menu.addAction("模型浏览器", self.show_model_dialog)
+        function_menu.addAction("工具浏览器", self.show_tool_dialog)
+        function_menu.addAction("智能体配置", self.show_profile_dialog)
+        function_menu.addSeparator()
+        function_menu.addAction("知识库管理", self.show_knowledge_dialog)
 
         help_menu: QtWidgets.QMenu = menu_bar.addMenu("帮助")
         help_menu.addAction("官网", self.open_website)
