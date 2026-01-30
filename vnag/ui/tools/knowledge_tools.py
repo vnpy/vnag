@@ -37,24 +37,18 @@ def query_knowledge_base(
         - metadata: 元数据（source, chunk_index, section_title等）
         - score: 相似度分数（越小越相似）
     """
-    try:
-        vector = get_knowledge_vector(name)
-        segments = vector.retrieve(query, k=k)
+    vector = get_knowledge_vector(name)
+    segments = vector.retrieve(query, k=k)
 
-        results: list[dict[str, Any]] = []
-        for seg in segments:
-            results.append({
-                "text": seg.text,
-                "metadata": seg.metadata,
-                "score": seg.score
-            })
+    results: list[dict[str, Any]] = []
+    for seg in segments:
+        results.append({
+            "text": seg.text,
+            "metadata": seg.metadata,
+            "score": seg.score
+        })
 
-        return results
-
-    except ValueError as e:
-        return [{"error": str(e)}]
-    except Exception as e:
-        return [{"error": f"查询失败: {str(e)}"}]
+    return results
 
 
 # 注册工具

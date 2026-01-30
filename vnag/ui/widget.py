@@ -1,14 +1,17 @@
 import json
 import os
+import re
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
+from pathlib import Path
 from typing import cast, NamedTuple
 
 from ..constant import Role
 from ..engine import AgentEngine, default_profile
-from ..object import ToolSchema
+from ..object import ToolSchema, Segment
 from ..agent import Profile, TaskAgent
+from ..utility import read_text_file
 from ..gateways import GATEWAY_CLASSES, get_gateway_class
 
 from .qt import (
@@ -1507,12 +1510,12 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
         self.param_widget: QtWidgets.QWidget = QtWidgets.QWidget()
         self.param_layout: QtWidgets.QFormLayout = QtWidgets.QFormLayout(self.param_widget)
 
-        btn_box: QtWidgets.QDialogButtonBox = QtWidgets.QDialogButtonBox(
+        button_box: QtWidgets.QDialogButtonBox = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok |
             QtWidgets.QDialogButtonBox.StandardButton.Cancel
         )
-        btn_box.accepted.connect(self._validate_and_accept)
-        btn_box.rejected.connect(self.reject)
+        button_box.accepted.connect(self._validate_and_accept)
+        button_box.rejected.connect(self.reject)
 
         form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
         form.addRow("名称", self.name_edit)
@@ -1523,7 +1526,7 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
         main_vbox.addLayout(form)
         main_vbox.addWidget(self.param_widget)
         main_vbox.addStretch()
-        main_vbox.addWidget(btn_box)
+        main_vbox.addWidget(button_box)
 
         self._refresh_params(self.type_combo.currentText())
 
@@ -1545,7 +1548,6 @@ class KnowledgeCreateDialog(QtWidgets.QDialog):
 
     def _validate_and_accept(self) -> None:
         """验证并接受"""
-        import re
         name: str = self.name_edit.text().strip()
         if not name:
             QtWidgets.QMessageBox.warning(self, "错误", "名称不能为空")
@@ -1591,12 +1593,12 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         self.file_edit.setReadOnly(True)
         self.file_edit.setPlaceholderText("请选择要导入的 Markdown 文件")
 
-        file_btn: QtWidgets.QPushButton = QtWidgets.QPushButton("选择")
-        file_btn.clicked.connect(self._select_file)
+        file_button: QtWidgets.QPushButton = QtWidgets.QPushButton("选择")
+        file_button.clicked.connect(self._select_file)
 
         file_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
         file_layout.addWidget(self.file_edit)
-        file_layout.addWidget(file_btn)
+        file_layout.addWidget(file_button)
 
         self.full_check: QtWidgets.QCheckBox = QtWidgets.QCheckBox("完整导入（不切片）")
         self.full_check.stateChanged.connect(self._on_full_changed)
@@ -1608,16 +1610,16 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         self.progress: QtWidgets.QProgressBar = QtWidgets.QProgressBar()
         self.status: QtWidgets.QLabel = QtWidgets.QLabel("就绪")
 
-        self.import_btn: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
-        self.import_btn.clicked.connect(self._do_import)
+        self.import_button: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
+        self.import_button.clicked.connect(self._do_import)
 
-        close_btn: QtWidgets.QPushButton = QtWidgets.QPushButton("关闭")
-        close_btn.clicked.connect(self.close)
+        close_button: QtWidgets.QPushButton = QtWidgets.QPushButton("关闭")
+        close_button.clicked.connect(self.close)
 
-        btn_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
-        btn_layout.addStretch()
-        btn_layout.addWidget(self.import_btn)
-        btn_layout.addWidget(close_btn)
+        button_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.import_button)
+        button_layout.addWidget(close_button)
 
         form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
         form.addRow("文件", file_layout)
@@ -1629,7 +1631,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
         main_vbox.addWidget(self.status)
         main_vbox.addWidget(self.progress)
         main_vbox.addStretch()
-        main_vbox.addLayout(btn_layout)
+        main_vbox.addLayout(button_layout)
 
     def _select_file(self) -> None:
         """选择文件"""
@@ -1645,18 +1647,15 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
 
     def _do_import(self) -> None:
         """执行导入"""
-        from pathlib import Path
         from .knowledge import get_knowledge_vector
-        from ..utility import read_text_file
         from ..segmenters.markdown_segmenter import MarkdownSegmenter
-        from ..object import Segment
 
         filepath: str = self.file_edit.text()
         if not filepath or not Path(filepath).exists():
             QtWidgets.QMessageBox.warning(self, "错误", "请选择有效文件")
             return
 
-        self.import_btn.setEnabled(False)
+        self.import_button.setEnabled(False)
         self.status.setText("读取文件...")
         self.progress.setValue(10)
         QtWidgets.QApplication.processEvents()
@@ -1692,7 +1691,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
             import traceback
             QtWidgets.QMessageBox.warning(self, "错误", traceback.format_exc())
         finally:
-            self.import_btn.setEnabled(True)
+            self.import_button.setEnabled(True)
 
 
 class KnowledgeViewDialog(QtWidgets.QDialog):
@@ -1726,18 +1725,18 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         splitter.addWidget(self.text_edit)
 
         # 分页控件
-        self.btn_prev: QtWidgets.QPushButton = QtWidgets.QPushButton("上一页")
-        self.btn_prev.clicked.connect(self._on_prev_page)
+        self.button_prev: QtWidgets.QPushButton = QtWidgets.QPushButton("上一页")
+        self.button_prev.clicked.connect(self._on_prev_page)
 
-        self.btn_next: QtWidgets.QPushButton = QtWidgets.QPushButton("下一页")
-        self.btn_next.clicked.connect(self._on_next_page)
+        self.button_next: QtWidgets.QPushButton = QtWidgets.QPushButton("下一页")
+        self.button_next.clicked.connect(self._on_next_page)
 
         self.page_label: QtWidgets.QLabel = QtWidgets.QLabel("第 1 页")
 
         page_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
-        page_layout.addWidget(self.btn_prev)
+        page_layout.addWidget(self.button_prev)
         page_layout.addWidget(self.page_label)
-        page_layout.addWidget(self.btn_next)
+        page_layout.addWidget(self.button_next)
         page_layout.addStretch()
 
         layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
@@ -1783,8 +1782,8 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         self.page_label.setText(f"第 {current_display} / {total_pages} 页")
 
         # 控制按钮状态
-        self.btn_prev.setEnabled(self.current_page > 0)
-        self.btn_next.setEnabled(current_display < total_pages)
+        self.button_prev.setEnabled(self.current_page > 0)
+        self.button_next.setEnabled(current_display < total_pages)
 
     def _on_prev_page(self) -> None:
         """上一页"""
@@ -1830,27 +1829,27 @@ class KnowledgeWidget(QtWidgets.QWidget):
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
 
-        btn_new: QtWidgets.QPushButton = QtWidgets.QPushButton("新建")
-        btn_new.clicked.connect(self._on_create)
+        button_new: QtWidgets.QPushButton = QtWidgets.QPushButton("新建")
+        button_new.clicked.connect(self._on_create)
 
-        btn_import: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
-        btn_import.clicked.connect(self._on_import)
+        button_import: QtWidgets.QPushButton = QtWidgets.QPushButton("导入")
+        button_import.clicked.connect(self._on_import)
 
-        btn_view: QtWidgets.QPushButton = QtWidgets.QPushButton("查看")
-        btn_view.clicked.connect(self._on_view)
+        button_view: QtWidgets.QPushButton = QtWidgets.QPushButton("查看")
+        button_view.clicked.connect(self._on_view)
 
-        btn_del: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
-        btn_del.clicked.connect(self._on_delete)
+        button_del: QtWidgets.QPushButton = QtWidgets.QPushButton("删除")
+        button_del.clicked.connect(self._on_delete)
 
-        btn_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
-        btn_layout.addWidget(btn_new)
-        btn_layout.addWidget(btn_import)
-        btn_layout.addWidget(btn_view)
-        btn_layout.addWidget(btn_del)
-        btn_layout.addStretch()
+        button_layout: QtWidgets.QHBoxLayout = QtWidgets.QHBoxLayout()
+        button_layout.addWidget(button_new)
+        button_layout.addWidget(button_import)
+        button_layout.addWidget(button_view)
+        button_layout.addWidget(button_del)
+        button_layout.addStretch()
 
         layout: QtWidgets.QVBoxLayout = QtWidgets.QVBoxLayout(self)
-        layout.addLayout(btn_layout)
+        layout.addLayout(button_layout)
         layout.addWidget(self.table)
 
     def refresh(self) -> None:

@@ -4,6 +4,8 @@ from importlib import import_module
 from glob import glob
 from typing import TYPE_CHECKING
 
+from vnag.local import LocalTool
+
 if TYPE_CHECKING:
     from vnag.engine import AgentEngine
 
@@ -16,7 +18,6 @@ def register_all(engine: "AgentEngine") -> None:
     Args:
         engine: AgentEngine 实例
     """
-    from vnag.local import LocalTool
 
     folder: Path = Path(__file__).parent
 

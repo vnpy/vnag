@@ -1,7 +1,4 @@
-from typing import Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .gateway import BaseGateway
+from typing import Any
 
 from .utility import load_json, save_json
 from .gateways import get_gateway_class
