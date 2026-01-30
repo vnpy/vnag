@@ -1790,12 +1790,14 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
         self.text_edit.setText(f"=== 元数据 ===\n{meta}\n\n=== 内容 ===\n{seg.text}")
 
 
-class KnowledgeWidget(QtWidgets.QWidget):
-    """知识库管理主控件"""
+class KnowledgeDialog(QtWidgets.QDialog):
+    """知识库管理对话框"""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         """构造函数"""
         super().__init__(parent)
+        self.setWindowTitle("知识库管理")
+        self.setMinimumSize(700, 500)
         self.init_ui()
         self.refresh()
 
