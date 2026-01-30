@@ -4,8 +4,8 @@ from pathlib import Path
 from datetime import datetime
 import json
 
-from .utility import get_folder_path, get_file_path
-from .embedder import BaseEmbedder
+from ..utility import get_folder_path, get_file_path
+from ..embedder import BaseEmbedder
 
 
 # 知识库存储目录
@@ -116,13 +116,13 @@ def delete_knowledge_base(name: str) -> None:
 def _create_embedder(embedder_type: str, setting: dict[str, Any]) -> BaseEmbedder:
     """根据类型和配置创建 Embedder 实例"""
     if embedder_type == "OpenAI":
-        from .embedders.openai_embedder import OpenaiEmbedder
+        from ..embedders.openai_embedder import OpenaiEmbedder
         return OpenaiEmbedder(**setting)
     elif embedder_type == "DashScope":
-        from .embedders.dashscope_embedder import DashscopeEmbedder
+        from ..embedders.dashscope_embedder import DashscopeEmbedder
         return DashscopeEmbedder(**setting)
     elif embedder_type == "Sentence":
-        from .embedders.sentence_embedder import SentenceEmbedder
+        from ..embedders.sentence_embedder import SentenceEmbedder
         return SentenceEmbedder(**setting)
     else:
         raise ValueError(f"不支持的 Embedder 类型: {embedder_type}")
@@ -137,7 +137,7 @@ def get_knowledge_vector(name: str):
     Returns:
         DuckVector 实例
     """
-    from .vectors.duckdb_vector import DuckVector
+    from ..vectors.duckdb_vector import DuckVector
 
     metadata: dict[str, Any] | None = load_knowledge_base(name)
     if metadata is None:

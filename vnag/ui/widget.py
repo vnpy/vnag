@@ -1646,7 +1646,7 @@ class KnowledgeImportDialog(QtWidgets.QDialog):
     def _do_import(self) -> None:
         """执行导入"""
         from pathlib import Path
-        from ..knowledge import get_knowledge_vector
+        from .knowledge import get_knowledge_vector
         from ..utility import read_text_file
         from ..segmenters.markdown_segmenter import MarkdownSegmenter
         from ..object import Segment
@@ -1747,7 +1747,7 @@ class KnowledgeViewDialog(QtWidgets.QDialog):
     def _load_data(self) -> None:
         """加载当前页数据"""
         try:
-            from ..knowledge import get_knowledge_vector
+            from .knowledge import get_knowledge_vector
 
             vector = get_knowledge_vector(self.kb_name)
             self.total_count = vector.count
@@ -1855,7 +1855,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
 
     def refresh(self) -> None:
         """刷新列表"""
-        from ..knowledge import list_knowledge_bases
+        from .knowledge import list_knowledge_bases
         kbs: list[dict[str, str]] = list_knowledge_bases()
         self.table.setRowCount(0)
 
@@ -1880,7 +1880,7 @@ class KnowledgeWidget(QtWidgets.QWidget):
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             data: dict = dialog.get_data()
             try:
-                from ..knowledge import create_knowledge_base
+                from .knowledge import create_knowledge_base
                 create_knowledge_base(**data)
                 self.refresh()
             except Exception as e:
@@ -1914,6 +1914,6 @@ class KnowledgeWidget(QtWidgets.QWidget):
             self, "确认", f"删除知识库 '{name}'？此操作不可恢复。"
         )
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            from ..knowledge import delete_knowledge_base
+            from .knowledge import delete_knowledge_base
             delete_knowledge_base(name)
             self.refresh()

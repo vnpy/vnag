@@ -2,8 +2,8 @@
 from typing import Any
 
 from vnag.local import LocalTool
-from vnag.knowledge import list_knowledge_bases as _list_knowledge_bases
-from vnag.knowledge import get_knowledge_vector
+from vnag.ui.knowledge import list_knowledge_bases as _list_knowledge_bases
+from vnag.ui.knowledge import get_knowledge_vector
 
 
 def list_knowledge_bases() -> list[dict[str, str]]:
@@ -59,4 +59,5 @@ def query_knowledge_base(
 
 # 注册工具
 list_knowledge_bases_tool = LocalTool(list_knowledge_bases)
+
 query_knowledge_base_tool = LocalTool(query_knowledge_base)
