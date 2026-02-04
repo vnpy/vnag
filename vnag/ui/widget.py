@@ -1160,12 +1160,7 @@ class ModelDialog(QtWidgets.QDialog):
                 [vendor, ""]
             )
             for model_name in sorted(model_list):
-                if separator:
-                    _, model_display = model_name.split(separator, 1)
-                else:
-                    model_display = model_name
-
-                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(vendor_item, ["", model_display])
+                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(vendor_item, ["", model_name])
                 item.setData(0, QtCore.Qt.ItemDataRole.UserRole, model_name)
 
         self.tree_widget.expandAll()
