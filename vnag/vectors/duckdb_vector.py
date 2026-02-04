@@ -13,7 +13,7 @@ from vnag.vector import BaseVector
 from vnag.embedder import BaseEmbedder
 
 
-class DuckVector(BaseVector):
+class DuckdbVector(BaseVector):
     """基于 DuckDB VSS 扩展实现的向量存储。"""
 
     def __init__(
@@ -197,6 +197,31 @@ class DuckVector(BaseVector):
         """
 
         results = self.conn.execute(select_sql, segment_ids).fetchall()
+
+        segments: list[Segment] = []
+        for row in results:
+            text: str = row[1]
+            metadata_json: str = row[2]
+
+            metadata: dict[str, Any] = json.loads(metadata_json)
+            safe_meta: dict[str, str] = {
+                str(key): str(value) for key, value in metadata.items()
+            }
+
+            segment: Segment = Segment(text=text, metadata=safe_meta)
+            segments.append(segment)
+
+        return segments
+
+    def list_segments(self, limit: int = 100, offset: int = 0) -> list[Segment]:
+        """分页获取向量存储中的文档块（不需要语义查询）。"""
+        select_sql: str = """
+            SELECT id, text, metadata FROM segments
+            ORDER BY id
+            LIMIT ? OFFSET ?;
+        """
+
+        results = self.conn.execute(select_sql, [limit, offset]).fetchall()
 
         segments: list[Segment] = []
         for row in results:

@@ -73,6 +73,23 @@ class BaseVector(ABC):
         """
         pass
 
+    @abstractmethod
+    def list_segments(self, limit: int = 100, offset: int = 0) -> list[Segment]:
+        """
+        分页获取向量存储中的文档块（不需要语义查询）。
+
+        此方法用于浏览/管理场景，直接从数据库分页读取记录，
+        不调用 Embedder，不进行相似度计算。
+
+        Args:
+            limit (int, optional): 返回的最大数量。默认为 100。
+            offset (int, optional): 偏移量（用于分页）。默认为 0。
+
+        Returns:
+            list[Segment]: 文档块列表。
+        """
+        pass
+
     @property
     @abstractmethod
     def count(self) -> int:

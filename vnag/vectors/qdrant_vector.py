@@ -196,6 +196,38 @@ class QdrantVector(BaseVector):
 
         return results
 
+    def list_segments(self, limit: int = 100, offset: int = 0) -> list[Segment]:
+        """分页获取向量存储中的文档块（不需要语义查询）。"""
+        # Qdrant 使用 scroll API 进行分页
+        # 注意：Qdrant 的 scroll 不直接支持 offset，需要使用 scroll_id
+        # 这里使用 scroll 并跳过前 offset 个结果
+        points, _ = self.client.scroll(
+            collection_name=self.collection_name,
+            limit=limit + offset,
+            with_payload=True,
+            with_vectors=False
+        )
+
+        # 跳过前 offset 个结果
+        points = points[offset:]
+
+        results: list[Segment] = []
+        for point in points:
+            if point.payload:
+                payload: dict[str, Any] = dict(point.payload)
+            else:
+                payload = {}
+            text: str = payload.pop("text", "")
+
+            safe_meta: dict[str, str] = {
+                str(key): str(value) for key, value in payload.items()
+            }
+
+            segment: Segment = Segment(text=text, metadata=safe_meta)
+            results.append(segment)
+
+        return results
+
     @property
     def count(self) -> int:
         """获取向量存储中的文档总数。"""

@@ -16,7 +16,7 @@ from vnag.vector import BaseVector
 from vnag.embedder import BaseEmbedder
 
 
-class ChromaVector(BaseVector):
+class ChromadbVector(BaseVector):
     """基于 ChromaDB 实现的向量存储。"""
 
     def __init__(
@@ -120,6 +120,27 @@ class ChromaVector(BaseVector):
             return []
 
         results: GetResult = self.collection.get(ids=segment_ids)
+
+        documents: list[str] | None = results.get("documents")
+        metadatas: list[Mapping[str, Any]] | None = results.get("metadatas")
+
+        if not (documents and metadatas):
+            return []
+
+        return [
+            Segment(
+                text=text,
+                metadata={str(key): str(value) for key, value in meta.items()},
+            )
+            for text, meta in zip(documents, metadatas, strict=True)
+        ]
+
+    def list_segments(self, limit: int = 100, offset: int = 0) -> list[Segment]:
+        """分页获取向量存储中的文档块（不需要语义查询）。"""
+        results: GetResult = self.collection.get(
+            limit=limit,
+            offset=offset
+        )
 
         documents: list[str] | None = results.get("documents")
         metadatas: list[Mapping[str, Any]] | None = results.get("metadatas")

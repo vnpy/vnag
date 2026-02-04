@@ -11,6 +11,12 @@ from vnag.embedder import BaseEmbedder
 class DashscopeEmbedder(BaseEmbedder):
     """阿里云 DashScope Embedding API 适配器"""
 
+    default_name: str = "DashScope"
+    default_setting: dict = {
+        "api_key": "",
+        "model_name": "text-embedding-v3",
+    }
+
     def __init__(
         self,
         api_key: str,
