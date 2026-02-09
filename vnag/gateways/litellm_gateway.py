@@ -130,8 +130,7 @@ class LitellmGateway(OpenaiGateway):
             message_dict: dict[str, Any] = {"role": msg.role.value}
 
             # 处理内容
-            if msg.content:
-                message_dict["content"] = msg.content
+            message_dict["content"] = msg.content or ""
 
             # 处理 tool_calls
             if msg.tool_calls:
