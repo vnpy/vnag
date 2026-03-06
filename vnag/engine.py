@@ -15,6 +15,7 @@ from .object import (
 from .mcp import McpManager
 from .local import LocalManager, LocalTool
 from .agent import Profile, TaskAgent, AgentTool
+from .skill import SkillManager
 from .utility import PROFILE_DIR, SESSION_DIR
 
 
@@ -37,6 +38,7 @@ class AgentEngine:
 
         self._local_manager: LocalManager = LocalManager()
         self._mcp_manager: McpManager = McpManager()
+        self._skill_manager: SkillManager = SkillManager()
 
         self._local_schemas: dict[str, ToolSchema] = {}
         self._mcp_schemas: dict[str, ToolSchema] = {}
@@ -50,6 +52,8 @@ class AgentEngine:
         """初始化引擎"""
         self._load_local_schemas()
         self._load_mcp_schemas()
+
+        self._skill_manager.load_skills()
 
         self._load_profiles()
         self._load_agents()
@@ -99,6 +103,14 @@ class AgentEngine:
     def get_mcp_schemas(self) -> dict[str, ToolSchema]:
         """获取MCP工具的Schema"""
         return self._mcp_schemas
+
+    def get_skill_catalog(self) -> str:
+        """获取技能目录文本（Level 1 元数据）"""
+        return self._skill_manager.get_skill_catalog()
+
+    def get_skill_schema(self) -> ToolSchema | None:
+        """获取 get_skill 工具的 Schema"""
+        return self._skill_manager.get_tool_schema()
 
     def add_profile(self, profile: Profile) -> bool:
         """添加智能体配置"""
@@ -220,6 +232,8 @@ class AgentEngine:
 
     def execute_tool(self, tool_call: ToolCall) -> ToolResult:
         """执行单个工具并返回结果"""
+        is_error: bool = False
+
         if tool_call.name in self._local_schemas:
             result_content: str = self._local_manager.execute_tool(
                 tool_call.name,
@@ -234,14 +248,18 @@ class AgentEngine:
             agent_tool: AgentTool = self._agent_tools[tool_call.name]
             prompt: str = tool_call.arguments.get("prompt", "")
             result_content = agent_tool.execute(prompt)
+        elif tool_call.name == SkillManager.TOOL_NAME:
+            skill_name: str = tool_call.arguments.get("skill_name", "")
+            result_content = self._skill_manager.execute_tool(skill_name)
         else:
-            result_content = ""
+            result_content = f"Error: Tool [{tool_call.name}] not found"
+            is_error = True
 
         return ToolResult(
             id=tool_call.id,
             name=tool_call.name,
             content=result_content,
-            is_error=bool(result_content)
+            is_error=is_error
         )
 
     def stream(self, request: Request) -> Generator[Delta, None, None]:

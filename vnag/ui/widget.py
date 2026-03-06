@@ -633,25 +633,33 @@ class ProfileDialog(QtWidgets.QDialog):
 
         # 右侧表单
         self.name_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        self.name_line.setPlaceholderText("为此配置起个名字，例如：代码助手、翻译助理")
+
         self.prompt_text: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+        self.prompt_text.setPlaceholderText("定义智能体的角色、目标与行为规范（System Prompt）")
 
         # 温度
         self.temperature_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
         temperature_validator: QtGui.QDoubleValidator = QtGui.QDoubleValidator(0.0, 2.0, 1)
         temperature_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.temperature_line.setValidator(temperature_validator)
-        self.temperature_line.setPlaceholderText("可选，0.0-2.0之间，1位小数")
+        self.temperature_line.setPlaceholderText("可选，范围 0.0 ~ 2.0，值越高回复越随机，通常建议 1.0")
 
         # 最大Token数
         self.tokens_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
         max_tokens_validator: QtGui.QIntValidator = QtGui.QIntValidator(1, 10_000_000)
         self.tokens_line.setValidator(max_tokens_validator)
-        self.tokens_line.setPlaceholderText("可选，正整数")
+        self.tokens_line.setPlaceholderText("可选，限制单次回复的最大 Token 数量，请输入正整数")
 
         self.iterations_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
         self.iterations_spin.setRange(1, 200)
         self.iterations_spin.setSingleStep(1)
-        self.iterations_spin.setValue(10)
+        self.iterations_spin.setValue(20)
+        self.iterations_spin.setToolTip("智能体连续调用工具的最大轮数，建议保持默认值")
+
+        # 技能开关
+        self.skills_check: QtWidgets.QCheckBox = QtWidgets.QCheckBox("允许调用")
+        self.skills_check.setToolTip("启用后，智能体可调用 skills/ 目录下的技能脚本")
 
         # 工具列表
         self.tool_tree: QtWidgets.QTreeWidget = QtWidgets.QTreeWidget()
@@ -660,11 +668,12 @@ class ProfileDialog(QtWidgets.QDialog):
 
         # 中间区域表单
         settings_form: QtWidgets.QFormLayout = QtWidgets.QFormLayout()
-        settings_form.addRow("配置名称", self.name_line)
-        settings_form.addRow("系统提示词", self.prompt_text)
+        settings_form.addRow("名称", self.name_line)
+        settings_form.addRow("提示", self.prompt_text)
         settings_form.addRow("温度", self.temperature_line)
-        settings_form.addRow("最大Token数", self.tokens_line)
-        settings_form.addRow("最大迭代次数", self.iterations_spin)
+        settings_form.addRow("Token", self.tokens_line)
+        settings_form.addRow("迭代", self.iterations_spin)
+        settings_form.addRow("技能", self.skills_check)
 
         middle_widget: QtWidgets.QWidget = QtWidgets.QWidget()
         middle_widget.setLayout(settings_form)
@@ -775,6 +784,7 @@ class ProfileDialog(QtWidgets.QDialog):
         self.temperature_line.clear()
         self.tokens_line.clear()
         self.iterations_spin.setValue(10)
+        self.skills_check.setChecked(False)
 
         iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
         while iterator.value():
@@ -807,6 +817,7 @@ class ProfileDialog(QtWidgets.QDialog):
         max_tokens: int | None = int(max_tokens_text) if max_tokens_text else None
 
         max_iterations: int = self.iterations_spin.value()
+        use_skills: bool = self.skills_check.isChecked()
 
         selected_tools: list[str] = []
         iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
@@ -824,6 +835,7 @@ class ProfileDialog(QtWidgets.QDialog):
 
             profile.prompt = prompt
             profile.tools = selected_tools
+            profile.use_skills = use_skills
             profile.temperature = temperature
             profile.max_tokens = max_tokens
             profile.max_iterations = max_iterations
@@ -835,6 +847,7 @@ class ProfileDialog(QtWidgets.QDialog):
                 name=name,
                 prompt=prompt,
                 tools=selected_tools,
+                use_skills=use_skills,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_iterations=max_iterations,
@@ -900,6 +913,7 @@ class ProfileDialog(QtWidgets.QDialog):
             self.tokens_line.clear()
 
         self.iterations_spin.setValue(profile.max_iterations)
+        self.skills_check.setChecked(profile.use_skills)
 
         # 只操作叶子节点（工具项），让AutoTristate自动更新父节点
         iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
@@ -1160,7 +1174,7 @@ class ModelDialog(QtWidgets.QDialog):
                 [vendor, ""]
             )
             for model_name in sorted(model_list):
-                if separator:
+                if separator and separator in model_name:
                     _, model_display = model_name.split(separator, 1)
                 else:
                     model_display = model_name

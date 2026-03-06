@@ -58,9 +58,17 @@ class TaskAgent:
 
         # 新会话自动添加系统提示词并保存
         if not self.session.messages:
+            system_content: str = self.profile.prompt
+
+            # 如果启用了技能，追加 Level 1 技能目录
+            if self.profile.use_skills:
+                skill_catalog: str = self.engine.get_skill_catalog()
+                if skill_catalog:
+                    system_content += "\n\n" + skill_catalog
+
             system_message: Message = Message(
                 role=Role.SYSTEM,
-                content=self.profile.prompt
+                content=system_content
             )
             self.session.messages.append(system_message)
 
@@ -117,6 +125,12 @@ class TaskAgent:
 
         # 查询工具定义
         tool_schemas: list[ToolSchema] = self.engine.get_tool_schemas(self.profile.tools)
+
+        # 如果启用了技能，追加 get_skill 工具
+        if self.profile.use_skills:
+            skill_tool_schema: ToolSchema | None = self.engine.get_skill_schema()
+            if skill_tool_schema:
+                tool_schemas.append(skill_tool_schema)
 
         # 主循环，该循环负责处理多次工具调用的情况
         while iteration < self.profile.max_iterations:

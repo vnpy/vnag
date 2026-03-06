@@ -99,6 +99,7 @@ class Profile(BaseModel):
     name: str
     prompt: str
     tools: list[str]
+    use_skills: bool = False
     temperature: float | None = None
     max_tokens: int | None = None
     max_iterations: int = 10
