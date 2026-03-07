@@ -419,7 +419,6 @@ class TaskAgent:
             model=self.session.model,
             messages=messages,
             tool_schemas=[],
-            temperature=0.5,
             max_tokens=self.profile.max_tokens
         )
 
