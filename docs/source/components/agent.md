@@ -78,11 +78,13 @@ agent.rename("新名称")
 # 设置模型
 agent.set_model("gpt-4o")
 
-# 删除最后一轮对话
-agent.delete_round()
+# 检查是否存在可操作的最后一轮
+if agent.round_prompt:
+    # 删除最后一轮对话
+    agent.delete_round()
 
-# 重新发送最后一轮（返回用户输入）
-prompt = agent.resend_round()
+    # 删除最后一轮并返回用户 prompt（用于重发）
+    prompt = agent.pop_round()
 
 # 生成会话标题
 title = agent.generate_title(max_length=20)

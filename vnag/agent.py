@@ -56,6 +56,10 @@ class TaskAgent:
         self.collected_content: str = ""
         self.collected_tool_calls: list[ToolCall] = []
 
+        # 最后一轮对话状态：用户 prompt 和轮次起始索引
+        self.round_prompt: str = ""
+        self._round_start: int = 0
+
         # 新会话自动添加系统提示词并保存
         if not self.session.messages:
             system_content: str = self.profile.prompt
@@ -73,6 +77,23 @@ class TaskAgent:
             self.session.messages.append(system_message)
 
             self._save_session()
+
+        # 从已有消息推导最后一轮状态
+        self._init_round()
+
+    def _init_round(self) -> None:
+        """从已有消息推导最后一轮的轮次状态"""
+        for i in range(len(self.session.messages) - 1, -1, -1):
+            msg: Message = self.session.messages[i]
+            if msg.role == Role.SYSTEM:
+                break
+            if msg.role == Role.USER and msg.content:
+                self.round_prompt = msg.content
+                self._round_start = i
+                return
+
+        self.round_prompt = ""
+        self._round_start = len(self.session.messages)
 
     def _save_session(self) -> None:
         """保存会话状态到文件"""
@@ -112,6 +133,10 @@ class TaskAgent:
 
     def stream(self, prompt: str) -> Generator[Delta, None, None]:
         """流式生成"""
+        # 记录轮次起点
+        self.round_prompt = prompt
+        self._round_start = len(self.session.messages)
+
         # 将用户输入添加到会话
         user_message: Message = Message(
             role=Role.USER,
@@ -335,68 +360,19 @@ class TaskAgent:
         self._save_session()
 
     def delete_round(self) -> None:
-        """删除最后一轮对话
-
-        一轮对话包含：用户prompt -> [助手回复 -> 工具结果 -> ...] -> 最终助手回复
-        删除时需要回溯到用户发送的真正prompt（content非空的USER消息）
-        """
-        # 必须有对话历史，且最后一条是助手消息
-        if (
-            not self.messages
-            or self.messages[-1].role != Role.ASSISTANT
-        ):
+        """删除最后一轮对话，截断到轮次起始位置"""
+        if not self.round_prompt:
             return
 
-        # 从后往前删除，直到删除用户发送的真正prompt为止
-        while self.messages:
-            message: Message = self.messages.pop()
-
-            # 如果遇到系统消息，需要恢复并停止
-            if message.role == Role.SYSTEM:
-                self.messages.append(message)
-                break
-
-            # 如果是用户发送的真正prompt（有content内容），则停止删除
-            if message.role == Role.USER and message.content:
-                break
-
-        # 保存会话状态
+        del self.session.messages[self._round_start:]
+        self._init_round()
         self._save_session()
 
-    def resend_round(self) -> str:
-        """重新发送最后一轮对话
-
-        一轮对话包含：用户prompt -> [助手回复 -> 工具结果 -> ...] -> 最终助手回复
-        删除时需要回溯到用户发送的真正prompt（content非空的USER消息）
-        """
-        # 必须有对话历史，且最后一条是助手消息
-        if (
-            not self.messages
-            or self.messages[-1].role != Role.ASSISTANT
-        ):
-            return ""
-
-        user_prompt: str = ""
-
-        # 从后往前删除，直到删除用户发送的真正prompt为止
-        while self.messages:
-            message: Message = self.messages.pop()
-
-            # 如果遇到系统消息，需要恢复并停止
-            if message.role == Role.SYSTEM:
-                self.messages.append(message)
-                break
-
-            # 如果是用户发送的真正prompt（有content内容），则停止删除
-            if message.role == Role.USER and message.content:
-                user_prompt = message.content
-                break
-
-        # 保存会话状态
-        self._save_session()
-
-        # 返回用户消息内容
-        return user_prompt
+    def pop_round(self) -> str:
+        """删除最后一轮对话并返回用户 prompt（用于重发）"""
+        prompt: str = self.round_prompt
+        self.delete_round()
+        return prompt
 
     def set_model(self, model: str) -> None:
         """设置模型"""

@@ -455,7 +455,7 @@ class AgentWidget(QtWidgets.QWidget):
 
     def resend_round(self) -> None:
         """重新发送最后一轮对话"""
-        prompt: str = self.agent.resend_round()
+        prompt: str = self.agent.pop_round()
 
         if prompt:
             self.input_widget.setText(prompt)
@@ -464,12 +464,9 @@ class AgentWidget(QtWidgets.QWidget):
 
     def update_buttons(self) -> None:
         """更新功能按钮状态"""
-        if self.agent.messages and self.agent.messages[-1].role == Role.ASSISTANT:
-            self.resend_button.setEnabled(True)
-            self.delete_button.setEnabled(True)
-        else:
-            self.resend_button.setEnabled(False)
-            self.delete_button.setEnabled(False)
+        enabled: bool = bool(self.agent.round_prompt)
+        self.resend_button.setEnabled(enabled)
+        self.delete_button.setEnabled(enabled)
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """事件过滤器"""
