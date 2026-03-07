@@ -45,6 +45,7 @@ class StreamWorker(QtCore.QRunnable):
     def stop(self) -> None:
         """停止流式请求"""
         self.stopped = True
+        self.agent.aborted = True
 
     def _safe_emit(self, signal: QtCore.SignalInstance, *args: Any) -> None:
         """安全地发出信号，忽略对象已删除的情况"""

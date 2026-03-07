@@ -56,6 +56,9 @@ class TaskAgent:
         self.collected_content: str = ""
         self.collected_tool_calls: list[ToolCall] = []
 
+        # 中止标志
+        self.aborted: bool = False
+
         # 最后一轮对话状态：用户 prompt 和轮次起始索引
         self.round_prompt: str = ""
         self._round_start: int = 0
@@ -133,6 +136,9 @@ class TaskAgent:
 
     def stream(self, prompt: str) -> Generator[Delta, None, None]:
         """流式生成"""
+        # 重置中止标志
+        self.aborted = False
+
         # 记录轮次起点
         self.round_prompt = prompt
         self._round_start = len(self.session.messages)
@@ -147,6 +153,7 @@ class TaskAgent:
         # 初始化变量
         iteration: int = 0                                  # 迭代次数
         response_id: str = ""                               # 响应ID
+        checkpoint: int = len(self.session.messages)        # 消息回滚点
 
         # 查询工具定义
         tool_schemas: list[ToolSchema] = self.engine.get_tool_schemas(self.profile.tools)
@@ -158,173 +165,194 @@ class TaskAgent:
                 tool_schemas.append(skill_tool_schema)
 
         # 主循环，该循环负责处理多次工具调用的情况
-        while iteration < self.profile.max_iterations:
-            # 重置收集的内容
-            self.collected_content = ""
-            self.collected_thinking = ""
-            self.collected_reasoning: list[dict[str, Any]] = []
-            self.collected_tool_calls = []
-            self.collected_usage: Usage = Usage()
+        try:
+            while iteration < self.profile.max_iterations:
+                # 更新回滚点，检查中止标志
+                checkpoint = len(self.session.messages)
+                if self.aborted:
+                    break
 
-            # 迭代次数加1
-            iteration += 1
+                # 重置收集的内容
+                self.collected_content = ""
+                self.collected_thinking = ""
+                self.collected_reasoning: list[dict[str, Any]] = []
+                self.collected_tool_calls = []
+                self.collected_usage: Usage = Usage()
 
-            # 准备请求
-            request: Request = Request(
-                model=self.session.model,
-                messages=self.session.messages,
-                tool_schemas=tool_schemas,
-                temperature=self.profile.temperature,
-                max_tokens=self.profile.max_tokens
-            )
+                # 迭代次数加1
+                iteration += 1
 
-            # 调用追踪器：记录请求发送
-            self.tracer.on_llm_start(request)
+                # 准备请求
+                request: Request = Request(
+                    model=self.session.model,
+                    messages=self.session.messages,
+                    tool_schemas=tool_schemas,
+                    temperature=self.profile.temperature,
+                    max_tokens=self.profile.max_tokens
+                )
 
-            # 本轮循环中的数据缓存
-            finish_reason: FinishReason | None = None       # 累积收到的结束原因
+                # 调用追踪器：记录请求发送
+                self.tracer.on_llm_start(request)
 
-            # 发送请求到AI服务端，并收集响应
-            for delta in self.engine.stream(request):
-                # 记录响应ID
-                if delta.id and not response_id:
-                    response_id = delta.id
+                # 本轮循环中的数据缓存
+                finish_reason: FinishReason | None = None       # 累积收到的结束原因
 
-                # 累积收到的文本内容
-                if delta.content:
-                    self.collected_content += delta.content
+                # 发送请求到AI服务端，并收集响应
+                for delta in self.engine.stream(request):
+                    # 记录响应ID
+                    if delta.id and not response_id:
+                        response_id = delta.id
 
-                # 累积收到的 thinking 内容
-                if delta.thinking:
-                    self.collected_thinking += delta.thinking
+                    # 累积收到的文本内容
+                    if delta.content:
+                        self.collected_content += delta.content
 
-                # 累积收到的 reasoning 数据（保留原始结构用于回传）
-                if delta.reasoning:
-                    for new_item in delta.reasoning:
-                        # 如果没有 index，直接追加
-                        if "index" not in new_item:
-                            self.collected_reasoning.append(new_item)
-                            continue
+                    # 累积收到的 thinking 内容
+                    if delta.thinking:
+                        self.collected_thinking += delta.thinking
 
-                        # 查找是否存在相同 index 的项
-                        existing_item = next(
-                            (item for item in self.collected_reasoning if item.get("index") == new_item["index"]),
-                            None
+                    # 累积收到的 reasoning 数据（保留原始结构用于回传）
+                    if delta.reasoning:
+                        for new_item in delta.reasoning:
+                            # 如果没有 index，直接追加
+                            if "index" not in new_item:
+                                self.collected_reasoning.append(new_item)
+                                continue
+
+                            # 查找是否存在相同 index 的项
+                            existing_item = next(
+                                (item for item in self.collected_reasoning if item.get("index") == new_item["index"]),
+                                None
+                            )
+
+                            if existing_item:
+                                # 合并字段
+                                for key, value in new_item.items():
+                                    # 字符串类型的字段进行拼接 (signature 不拼接)
+                                    if key in ["text", "data", "summary"] and isinstance(value, str):
+                                        existing_item[key] = existing_item.get(key, "") + value
+                                    # 其他字段直接覆盖（如 type, format, id, signature 等）
+                                    else:
+                                        existing_item[key] = value
+                            else:
+                                # 不存在则追加
+                                self.collected_reasoning.append(new_item)
+
+                    # 累积收到的工具调用请求
+                    if delta.calls:
+                        self.collected_tool_calls.extend(delta.calls)
+
+                    # 累积收到的 usage 信息
+                    if delta.usage:
+                        self.collected_usage.input_tokens += delta.usage.input_tokens
+                        self.collected_usage.output_tokens += delta.usage.output_tokens
+
+                    # 记录结束原因
+                    if delta.finish_reason:
+                        finish_reason = delta.finish_reason
+
+                    # 调用追踪器：记录收到数据块
+                    self.tracer.on_llm_delta(delta)
+
+                    # 将原始的 Delta 对象直接转发给调用者，实现实时流式效果
+                    yield delta
+
+                # 将AI的回复（包括思考过程和工具调用请求）作为一个消息添加到会话中
+                assistant_msg: Message = Message(
+                    role=Role.ASSISTANT,
+                    content=self.collected_content,
+                    thinking=self.collected_thinking,
+                    reasoning=self.collected_reasoning,
+                    tool_calls=self.collected_tool_calls,
+                    usage=self.collected_usage
+                )
+
+                self.session.messages.append(assistant_msg)
+
+                # 调用追踪器：记录响应接收
+                self.tracer.on_llm_end(assistant_msg)
+
+                # 正常结束则直接退出循环
+                if finish_reason == FinishReason.STOP:
+                    break
+                # 模型要求调用工具
+                elif (
+                    finish_reason == FinishReason.TOOL_CALLS
+                    and self.collected_tool_calls    # 且收到了具体的工具调用请求
+                ):
+                    # 批量执行所有工具调用
+                    tool_results: list[ToolResult] = []
+
+                    for tool_call in self.collected_tool_calls:
+                        # 检查中止标志
+                        if self.aborted:
+                            break
+
+                        # 在执行前，先通过 yield 发送一个通知，告诉上层应用"正在执行哪个工具"
+                        yield Delta(
+                            id=response_id or str(uuid4()),
+                            content=f"\n\n[执行工具: {tool_call.name}]\n\n"
                         )
 
-                        if existing_item:
-                            # 合并字段
-                            for key, value in new_item.items():
-                                # 字符串类型的字段进行拼接 (signature 不拼接)
-                                if key in ["text", "data", "summary"] and isinstance(value, str):
-                                    existing_item[key] = existing_item.get(key, "") + value
-                                # 其他字段直接覆盖（如 type, format, id, signature 等）
-                                else:
-                                    existing_item[key] = value
-                        else:
-                            # 不存在则追加
-                            self.collected_reasoning.append(new_item)
+                        # 调用追踪器：记录工具开始执行
+                        self.tracer.on_tool_start(tool_call)
 
-                # 累积收到的工具调用请求
-                if delta.calls:
-                    self.collected_tool_calls.extend(delta.calls)
+                        # 执行单个工具调用，并记录结果
+                        result: ToolResult = self.engine.execute_tool(tool_call)
+                        tool_results.append(result)
 
-                # 累积收到的 usage 信息
-                if delta.usage:
-                    self.collected_usage.input_tokens += delta.usage.input_tokens
-                    self.collected_usage.output_tokens += delta.usage.output_tokens
+                        # 调用追踪器：记录工具执行完毕
+                        self.tracer.on_tool_end(result)
 
-                # 记录结束原因
-                if delta.finish_reason:
-                    finish_reason = delta.finish_reason
+                    # 中止时不添加不完整的工具结果
+                    if self.aborted:
+                        break
 
-                # 调用追踪器：记录收到数据块
-                self.tracer.on_llm_delta(delta)
-
-                # 将原始的 Delta 对象直接转发给调用者，实现实时流式效果
-                yield delta
-
-            # 将AI的回复（包括思考过程和工具调用请求）作为一个消息添加到会话中
-            assistant_msg: Message = Message(
-                role=Role.ASSISTANT,
-                content=self.collected_content,
-                thinking=self.collected_thinking,
-                reasoning=self.collected_reasoning,
-                tool_calls=self.collected_tool_calls,
-                usage=self.collected_usage
-            )
-
-            self.session.messages.append(assistant_msg)
-
-            # 调用追踪器：记录响应接收
-            self.tracer.on_llm_end(assistant_msg)
-
-            # 正常结束则直接退出循环
-            if finish_reason == FinishReason.STOP:
-                break
-            # 模型要求调用工具
-            elif (
-                finish_reason == FinishReason.TOOL_CALLS
-                and self.collected_tool_calls    # 且收到了具体的工具调用请求
-            ):
-                # 批量执行所有工具调用
-                tool_results: list[ToolResult] = []
-
-                for tool_call in self.collected_tool_calls:
-                    # 在执行前，先通过 yield 发送一个通知，告诉上层应用"正在执行哪个工具"
-                    yield Delta(
-                        id=response_id or str(uuid4()),
-                        content=f"\n\n[执行工具: {tool_call.name}]\n\n"
+                    # 将所有工具的执行结果打包成一个消息，也添加到工作列表中
+                    user_message = Message(
+                        role=Role.USER,
+                        tool_results=tool_results
                     )
+                    self.session.messages.append(user_message)
 
-                    # 调用追踪器：记录工具开始执行
-                    self.tracer.on_tool_start(tool_call)
+                    # 继续下一次循环
+                    continue
+                # 其他异常情况，直接退出
+                else:
+                    break
 
-                    # 执行单个工具调用，并记录结果
-                    result: ToolResult = self.engine.execute_tool(tool_call)
-                    tool_results.append(result)
-
-                    # 调用追踪器：记录工具执行完毕
-                    self.tracer.on_tool_end(result)
-
-                # 将所有工具的执行结果打包成一个消息，也添加到工作列表中
-                user_message = Message(
-                    role=Role.USER,
-                    tool_results=tool_results
+            # 如果循环次数达到上限，发送一条警告信息
+            if not self.aborted and iteration >= self.profile.max_iterations:
+                yield Delta(
+                    id=response_id or str(uuid4()),
+                    content="\n[警告: 达到最大工具调用次数限制]\n"
                 )
-                self.session.messages.append(user_message)
 
-                # 继续下一次循环
-                continue
-            # 其他异常情况，直接退出
-            else:
-                break
+        except Exception:
+            # 异常时也标记为中止，确保 finally 中统一清理
+            self.aborted = True
+            raise
+        finally:
+            # 中止时回滚本次迭代中不完整的消息，保留已收集的纯文本
+            if self.aborted and len(self.session.messages) > checkpoint:
+                del self.session.messages[checkpoint:]
 
-        # 如果循环次数达到上限，发送一条警告信息
-        if iteration >= self.profile.max_iterations:
-            yield Delta(
-                id=response_id or str(uuid4()),
-                content="\n[警告: 达到最大工具调用次数限制]\n"
-            )
+                if self.collected_content or self.collected_thinking:
+                    partial_msg: Message = Message(
+                        role=Role.ASSISTANT,
+                        content=self.collected_content,
+                        thinking=self.collected_thinking,
+                        reasoning=self.collected_reasoning,
+                        usage=self.collected_usage
+                    )
+                    self.session.messages.append(partial_msg)
 
-        # 将最新会话保存到文件
-        self._save_session()
+            # 将最新会话保存到文件
+            self._save_session()
 
     def abort_stream(self) -> None:
-        """中止流式生成，保存已生成的部分内容"""
-        # 检查是否有内容需要保存
-        if not self.collected_content:
-            return
-
-        # 保存部分生成的内容
-        assistant_msg = Message(
-            role=Role.ASSISTANT,
-            content=self.collected_content,
-            tool_calls=self.collected_tool_calls
-        )
-        self.session.messages.append(assistant_msg)
-
-        self._save_session()
+        """中止流式生成"""
+        self.aborted = True
 
     def invoke(self, prompt: str) -> Response:
         """阻塞式生成"""
