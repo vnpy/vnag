@@ -12,6 +12,8 @@ from .deepseek_gateway import DeepseekGateway
 from .minimax_gateway import MinimaxGateway
 from .bailian_gateway import BailianGateway
 from .openrouter_gateway import OpenrouterGateway
+from .moonshot_gateway import MoonshotGateway
+from .zhipu_gateway import ZhipuGateway
 from .litellm_gateway import LitellmGateway
 
 
@@ -24,6 +26,8 @@ GATEWAY_CLASSES: dict[str, type["BaseGateway"]] = {
     MinimaxGateway.default_name: MinimaxGateway,
     BailianGateway.default_name: BailianGateway,
     OpenrouterGateway.default_name: OpenrouterGateway,
+    MoonshotGateway.default_name: MoonshotGateway,
+    ZhipuGateway.default_name: ZhipuGateway,
     LitellmGateway.default_name: LitellmGateway,
 }
 
