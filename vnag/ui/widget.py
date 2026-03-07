@@ -476,6 +476,7 @@ class AgentWidget(QtWidgets.QWidget):
             if (
                 key_event.key() in [QtCore.Qt.Key.Key_Return, QtCore.Qt.Key.Key_Enter]
                 and not key_event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+                and self.worker is None
             ):
                 self.send_message()
                 return True
