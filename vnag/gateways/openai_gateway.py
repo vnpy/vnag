@@ -287,11 +287,21 @@ class OpenaiGateway(BaseGateway):
             if not response_id:
                 response_id = chuck.id
 
-            if not chuck.choices:
-                continue
-
             delta: Delta = Delta(id=response_id)
             should_yield: bool = False
+
+            # 检查用量信息（流式尾事件可能只带 usage、不带 choices）
+            if chuck.usage:
+                delta.usage = Usage(
+                    input_tokens=chuck.usage.prompt_tokens or 0,
+                    output_tokens=chuck.usage.completion_tokens or 0,
+                )
+                should_yield = True
+
+            if not chuck.choices:
+                if should_yield:
+                    yield delta
+                continue
 
             choice: ChunkChoice = chuck.choices[0]
 
@@ -360,14 +370,6 @@ class OpenaiGateway(BaseGateway):
                         ))
 
                     delta.calls = tool_calls
-
-            # 检查用量信息（通常在最后一个数据块中）
-            if chuck.usage:
-                delta.usage = Usage(
-                    input_tokens=chuck.usage.prompt_tokens or 0,
-                    output_tokens=chuck.usage.completion_tokens or 0,
-                )
-                should_yield = True
 
             if should_yield:
                 yield delta

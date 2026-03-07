@@ -15,6 +15,7 @@ from .openrouter_gateway import OpenrouterGateway
 from .moonshot_gateway import MoonshotGateway
 from .zhipu_gateway import ZhipuGateway
 from .litellm_gateway import LitellmGateway
+from .volcengine_gateway import VolcengineGateway
 
 
 # Gateway 类型名称到类的映射
@@ -29,6 +30,7 @@ GATEWAY_CLASSES: dict[str, type["BaseGateway"]] = {
     MoonshotGateway.default_name: MoonshotGateway,
     ZhipuGateway.default_name: ZhipuGateway,
     LitellmGateway.default_name: LitellmGateway,
+    VolcengineGateway.default_name: VolcengineGateway,
 }
 
 

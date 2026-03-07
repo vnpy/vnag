@@ -13,7 +13,7 @@ class BailianGateway(OpenaiGateway):
     - 回传 thinking 内容到后续请求
     """
 
-    default_name: str = "Bailian"
+    default_name: str = "BaiLian"
 
     default_setting: dict = {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",

@@ -24,7 +24,7 @@ class ZhipuGateway(OpenaiGateway):
       有助于提高缓存命中率和推理连贯性，适合 Agent 和编码场景
     """
 
-    default_name: str = "Zhipu"
+    default_name: str = "ZhiPu"
 
     default_setting: dict = {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -82,20 +82,3 @@ class ZhipuGateway(OpenaiGateway):
         if not thinking:
             return None
         return {"reasoning_content": thinking}
-
-    def list_models(self) -> list[str]:
-        """智谱 GLM 主要模型列表"""
-        models: list[str] = [
-            "glm-5",
-            "glm-4.7",
-            "glm-4.6",
-            "glm-4.5",
-            "glm-4.5v",
-            "glm-4-plus",
-            "glm-4-air",
-            "glm-4-airx",
-            "glm-4-long",
-            "glm-4-flash",
-            "glm-4-flashx",
-        ]
-        return models
