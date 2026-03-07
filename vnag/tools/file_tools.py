@@ -162,6 +162,34 @@ def delete_file(path: str) -> str:
         return f"删除文件时发生未知错误: {traceback.format_exc()}"
 
 
+def check_file(path: str) -> str:
+    """
+    检查指定路径的文件是否存在，并返回基本信息。
+    必须拥有该路径的读权限。
+
+    参数:
+        path (str): 要检查的文件路径。
+
+    返回:
+        str: 文件的存在状态和大小信息。
+    """
+    try:
+        target_path: Path = Path(path)
+        if not _check_read_allowed(target_path):
+            return f"错误：没有权限访问路径 '{path}'。"
+
+        abs_path: Path = target_path.resolve()
+        if abs_path.is_file():
+            size: int = abs_path.stat().st_size
+            return f"文件存在: '{path}' (大小: {size} 字节)"
+        elif abs_path.is_dir():
+            return f"路径存在但是目录: '{path}'"
+        else:
+            return f"文件不存在: '{path}'"
+    except Exception:
+        return f"检查文件时发生未知错误: {traceback.format_exc()}"
+
+
 def glob_files(path: str, pattern: str) -> str:
     """
     根据给定的模式和路径，匹配符合条件的文件。
@@ -244,6 +272,8 @@ read_file_tool: LocalTool = LocalTool(read_file)
 write_file_tool: LocalTool = LocalTool(write_file)
 
 delete_file_tool: LocalTool = LocalTool(delete_file)
+
+check_file_tool: LocalTool = LocalTool(check_file)
 
 glob_files_tool: LocalTool = LocalTool(glob_files)
 

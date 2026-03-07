@@ -21,7 +21,12 @@ class Skill:
 
     def to_prompt(self) -> str:
         """将技能转换为提示词格式"""
-        return f"# 技能: {self.name}\n\n{self.description}\n\n---\n\n{self.content}"
+        return (
+            f"# 技能: {self.name}\n\n"
+            f"{self.description}\n\n"
+            f"工作目录: {self.skill_dir}\n\n"
+            f"---\n\n{self.content}"
+        )
 
 
 class SkillManager:
