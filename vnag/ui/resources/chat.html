@@ -17,22 +17,52 @@
                 linkify: true,
                 typographer: true,
                 highlight: function (str, lang) {
+                    const langAttr = lang ? ` data-lang="${md.utils.escapeHtml(lang)}"` : '';
                     if (lang && hljs.getLanguage(lang)) {
                         try {
-                            return '<pre class="hljs"><code>' +
+                            return `<pre class="hljs"${langAttr}><code>` +
                                     hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
                                     '</code></pre>';
                         } catch (__) {}
                     }
-                    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+                    return `<pre class="hljs"${langAttr}><code>` + md.utils.escapeHtml(str) + '</code></pre>';
                 }
             });
+
+            // 流式输出复制按钮的节流定时器
+            let copyButtonTimer = null;
 
             function getCurrentTime() {
                 const now = new Date();
                 const hours = String(now.getHours()).padStart(2, '0');
                 const minutes = String(now.getMinutes()).padStart(2, '0');
                 return `${hours}:${minutes}`;
+            }
+
+            // 通用复制函数，带成功/失败反馈和 CSS 状态类
+            function copyText(text, button, successText) {
+                successText = successText || '已复制 ✓';
+                if (!text) return;
+
+                navigator.clipboard.writeText(text).then(() => {
+                    const oldText = button.innerText;
+                    button.innerText = successText;
+                    button.classList.add('copied');
+                    button.disabled = true;
+                    setTimeout(() => {
+                        button.innerText = oldText;
+                        button.classList.remove('copied');
+                        button.disabled = false;
+                    }, 1500);
+                }).catch(() => {
+                    const oldText = button.innerText;
+                    button.innerText = '复制失败';
+                    button.classList.add('copy-error');
+                    setTimeout(() => {
+                        button.innerText = oldText;
+                        button.classList.remove('copy-error');
+                    }, 1500);
+                });
             }
 
             window.appendUserMessage = function(content) {
@@ -45,9 +75,17 @@
                         <div class="icon">🧐</div>
                         <div class="role">用户</div>
                         <div class="timestamp">${getCurrentTime()}</div>
+                        <button class="copy-user-button" title="复制消息" aria-label="复制用户消息内容">📋</button>
                     </div>
                     <div class="message-content">${content}</div>
                 `;
+
+                // 添加用户消息复制按钮事件
+                const copyBtn = messageDiv.querySelector('.copy-user-button');
+                copyBtn.addEventListener('click', function() {
+                    const contentDiv = messageDiv.querySelector('.message-content');
+                    copyText(contentDiv.innerText, this, '已复制 ✓');
+                });
 
                 history.appendChild(messageDiv);
                 scrollToBottom();
@@ -96,7 +134,7 @@
                     <div class="message-content">${htmlContent}</div>
                     <div class="message-footer">
                         ${usageHtml}
-                        <button class="copy-all-button" title="复制全文">📋 复制</button>
+                        <button class="copy-all-button" title="复制全文" aria-label="复制完整回复内容">📋 复制</button>
                     </div>
                 `;
 
@@ -105,22 +143,7 @@
 
                 // 添加折叠/展开功能（如果有 thinking）
                 if (thinkingContent && thinkingContent.trim()) {
-                    const thinkingHeader = messageDiv.querySelector('.thinking-header');
-                    thinkingHeader.addEventListener('click', function() {
-                        const container = this.parentElement;
-                        const content = container.querySelector('.thinking-content');
-                        const toggle = container.querySelector('.thinking-toggle');
-                        
-                        if (container.classList.contains('collapsed')) {
-                            container.classList.remove('collapsed');
-                            content.style.display = 'block';
-                            toggle.textContent = '▼';
-                        } else {
-                            container.classList.add('collapsed');
-                            content.style.display = 'none';
-                            toggle.textContent = '▶';
-                        }
-                    });
+                    addThinkingToggle(messageDiv);
                 }
 
                 addCopyButtons(messageDiv);
@@ -153,7 +176,7 @@
                     </div>
                     <div class="message-content"></div>
                     <div class="message-footer">
-                        <button class="copy-all-button" title="复制全文">📋 复制</button>
+                        <button class="copy-all-button" title="复制全文" aria-label="复制完整回复内容" disabled>📋 复制</button>
                     </div>
                 `;
 
@@ -161,22 +184,7 @@
                 addCopyAllButtonEvent(messageDiv);
 
                 // 添加折叠/展开功能
-                const thinkingHeader = messageDiv.querySelector('.thinking-header');
-                thinkingHeader.addEventListener('click', function() {
-                    const container = this.parentElement;
-                    const content = container.querySelector('.thinking-content');
-                    const toggle = container.querySelector('.thinking-toggle');
-                    
-                    if (container.classList.contains('collapsed')) {
-                        container.classList.remove('collapsed');
-                        content.style.display = 'block';
-                        toggle.textContent = '▼';
-                    } else {
-                        container.classList.add('collapsed');
-                        content.style.display = 'none';
-                        toggle.textContent = '▶';
-                    }
-                });
+                addThinkingToggle(messageDiv);
 
                 history.appendChild(messageDiv);
                 scrollToBottom();
@@ -218,6 +226,14 @@
 
                     contentDiv.innerHTML = md.render(markdownContent);
 
+                    // 节流添加代码块复制按钮（每 500ms 最多执行一次）
+                    if (!copyButtonTimer) {
+                        copyButtonTimer = setTimeout(() => {
+                            addCopyButtons(messageDiv);
+                            copyButtonTimer = null;
+                        }, 500);
+                    }
+
                     if (isScrolledToBottom) {
                         window.scrollTo(0, document.body.scrollHeight);
                     }
@@ -227,7 +243,19 @@
             window.finishAssistantMessage = function(msgId, inputTokens, outputTokens) {
                 const messageDiv = document.getElementById(msgId);
                 if (messageDiv) {
+                    // 清除节流定时器，确保最终状态完整
+                    if (copyButtonTimer) {
+                        clearTimeout(copyButtonTimer);
+                        copyButtonTimer = null;
+                    }
+
                     addCopyButtons(messageDiv);
+
+                    // 启用全文复制按钮
+                    const copyAllBtn = messageDiv.querySelector('.copy-all-button');
+                    if (copyAllBtn) {
+                        copyAllBtn.disabled = false;
+                    }
 
                     // 添加 Token 使用量显示（分开显示 input/output）
                     if (inputTokens > 0 || outputTokens > 0) {
@@ -240,23 +268,71 @@
                 }
             }
 
+            // 常用语言的友好显示名称映射
+            const langDisplayNames = {
+                'csharp': 'C#', 'cs': 'C#',
+                'cpp': 'C++', 'cc': 'C++',
+                'c': 'C',
+                'js': 'JavaScript', 'javascript': 'JavaScript',
+                'ts': 'TypeScript', 'typescript': 'TypeScript',
+                'py': 'Python', 'python': 'Python',
+                'rb': 'Ruby', 'ruby': 'Ruby',
+                'go': 'Go', 'java': 'Java',
+                'kotlin': 'Kotlin', 'kt': 'Kotlin',
+                'swift': 'Swift', 'rust': 'Rust',
+                'php': 'PHP', 'sql': 'SQL',
+                'html': 'HTML', 'css': 'CSS',
+                'scss': 'SCSS', 'less': 'LESS',
+                'json': 'JSON', 'xml': 'XML',
+                'yaml': 'YAML', 'yml': 'YAML',
+                'toml': 'TOML',
+                'md': 'Markdown', 'markdown': 'Markdown',
+                'bash': 'Bash', 'sh': 'Shell', 'shell': 'Shell',
+                'powershell': 'PowerShell', 'ps1': 'PowerShell',
+                'bat': 'Batch', 'cmd': 'Batch',
+                'dockerfile': 'Dockerfile',
+                'lua': 'Lua', 'r': 'R',
+                'scala': 'Scala', 'dart': 'Dart',
+                'objectivec': 'Objective-C', 'objc': 'Objective-C',
+                'fsharp': 'F#', 'vb': 'VB.NET', 'vbnet': 'VB.NET',
+                'graphql': 'GraphQL',
+                'proto': 'Protobuf', 'protobuf': 'Protobuf',
+            };
+
             function addCopyButtons(element) {
                 const pres = element.querySelectorAll('pre');
                 pres.forEach(pre => {
+                    // 防重复：已有头部栏则跳过
+                    if (pre.querySelector('.code-header')) return;
+
+                    const code = pre.querySelector('code');
+                    if (!code) return;
+
+                    // 创建代码块头部栏
+                    const header = document.createElement('div');
+                    header.className = 'code-header';
+
+                    // 语言标签（优先使用映射表，未匹配则保留原始值）
+                    const lang = pre.dataset.lang;
+                    const langLabel = document.createElement('span');
+                    langLabel.className = 'code-lang';
+                    langLabel.textContent = lang ? (langDisplayNames[lang.toLowerCase()] || lang) : '';
+                    header.appendChild(langLabel);
+
+                    // 复制按钮
                     const button = document.createElement('button');
                     button.className = 'copy-button';
-                    button.innerText = '📋 复制';
-                    
+                    button.type = 'button';
+                    button.title = '复制代码';
+                    button.setAttribute('aria-label', '复制代码到剪贴板');
+                    button.innerText = '复制代码';
+
                     button.addEventListener('click', () => {
-                        const code = pre.querySelector('code').innerText;
-                        navigator.clipboard.writeText(code).then(() => {
-                            button.innerText = '✓ 已复制';
-                            setTimeout(() => {
-                                button.innerText = '📋 复制';
-                            }, 2000);
-                        });
+                        copyText(code.innerText, button, '已复制 ✓');
                     });
-                    pre.appendChild(button);
+
+                    header.appendChild(button);
+                    pre.insertBefore(header, pre.firstChild);
                 });
             }
 
@@ -269,14 +345,29 @@
                         rawContent = rawContent.replace(/\[执行工具: [^\]]+\]\s*/g, '');
                         // 清理多余的空行
                         rawContent = rawContent.replace(/\n{3,}/g, '\n\n').trim();
-                        navigator.clipboard.writeText(rawContent).then(() => {
-                            this.innerText = '✓ 已复制';
-                            setTimeout(() => {
-                                this.innerText = '📋 复制';
-                            }, 2000);
-                        });
+                        copyText(rawContent, this, '已复制 ✓');
                     });
                 }
+            }
+
+            function addThinkingToggle(messageDiv) {
+                const thinkingHeader = messageDiv.querySelector('.thinking-header');
+                if (!thinkingHeader) return;
+                thinkingHeader.addEventListener('click', function() {
+                    const container = this.parentElement;
+                    const content = container.querySelector('.thinking-content');
+                    const toggle = container.querySelector('.thinking-toggle');
+                    
+                    if (container.classList.contains('collapsed')) {
+                        container.classList.remove('collapsed');
+                        content.style.display = 'block';
+                        toggle.textContent = '▼';
+                    } else {
+                        container.classList.add('collapsed');
+                        content.style.display = 'none';
+                        toggle.textContent = '▶';
+                    }
+                });
             }
 
             function scrollToBottom() {
