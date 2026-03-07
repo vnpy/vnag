@@ -21,7 +21,8 @@ class OpenrouterGateway(OpenaiGateway):
     default_setting: dict = {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key": "",
-        "reasoning_effort": ["high", "medium", "low"]
+        "proxy": "",
+        "reasoning_effort": ["high", "medium", "low"],
     }
 
     def init(self, setting: dict[str, Any]) -> bool:

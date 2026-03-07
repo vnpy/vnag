@@ -1430,6 +1430,7 @@ class GatewayDialog(QtWidgets.QDialog):
             "base_url": "API 地址",
             "api_key": "API 密钥",
             "reasoning_effort": "推理强度",
+            "proxy": "代理地址",
         }
         return labels.get(key, key)
 

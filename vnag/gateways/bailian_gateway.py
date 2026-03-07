@@ -17,7 +17,8 @@ class BailianGateway(OpenaiGateway):
 
     default_setting: dict = {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key": ""
+        "api_key": "",
+        "proxy": "",
     }
 
     def _extract_thinking(self, message: Any) -> str:

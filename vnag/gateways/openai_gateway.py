@@ -2,6 +2,7 @@ from typing import Any
 from collections.abc import Generator
 import json
 
+import httpx
 from openai import OpenAI, Stream
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.chat.chat_completion import Choice
@@ -32,6 +33,7 @@ class OpenaiGateway(BaseGateway):
     default_setting: dict = {
         "base_url": "",
         "api_key": "",
+        "proxy": "",
     }
 
     def __init__(self, gateway_name: str = "") -> None:
@@ -142,6 +144,7 @@ class OpenaiGateway(BaseGateway):
         """初始化连接和内部服务组件，返回是否成功。"""
         base_url: str = setting.get("base_url", "")
         api_key: str = setting.get("api_key", "")
+        proxy: str = setting.get("proxy", "")
 
         if not base_url or not api_key:
             self.write_log("配置不完整，请检查以下配置项：")
@@ -151,7 +154,14 @@ class OpenaiGateway(BaseGateway):
                 self.write_log("  - api_key: API密钥未设置")
             return False
 
-        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        # 如果设置了代理，则构建 httpx 客户端
+        http_client: httpx.Client | None = httpx.Client(proxy=proxy) if proxy else None
+
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            http_client=http_client,
+        )
 
         return True
 

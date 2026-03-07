@@ -26,6 +26,7 @@ class LitellmGateway(OpenaiGateway):
     default_setting: dict = {
         "base_url": "http://47.117.247.211:4000/",
         "api_key": "",
+        "proxy": "",
         "reasoning_effort": ["high", "medium", "low"],
     }
 

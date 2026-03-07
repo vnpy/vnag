@@ -25,6 +25,7 @@ class DeepseekGateway(OpenaiGateway):
     default_setting: dict = {
         "base_url": "https://api.deepseek.com",
         "api_key": "",
+        "proxy": "",
     }
 
     def _extract_thinking(self, message: Any) -> str:

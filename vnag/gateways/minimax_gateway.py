@@ -18,6 +18,7 @@ class MinimaxGateway(OpenaiGateway):
     default_setting: dict = {
         "base_url": "https://api.minimaxi.com/v1",
         "api_key": "",
+        "proxy": "",
     }
 
     def _get_reasoning_data(self, obj: Any) -> list[dict[str, Any]] | None:
