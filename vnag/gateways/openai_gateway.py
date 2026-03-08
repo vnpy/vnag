@@ -369,7 +369,7 @@ class OpenaiGateway(BaseGateway):
                             arguments=arguments
                         ))
 
-                    delta.calls = tool_calls
+                    delta.tool_calls = tool_calls
 
             if should_yield:
                 yield delta

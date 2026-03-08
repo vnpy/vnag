@@ -194,7 +194,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         js_name: str = json.dumps(self.profile_name)
         self.page().runJavaScript(f"startAssistantMessage('{self.msg_id}', {js_name})")
 
-    def update_stream(self, content_delta: str) -> None:
+    def update_content(self, content_delta: str) -> None:
         """更新流式输出（content 内容）"""
         # 记录当前类型为 content
         self.last_type = "content"
@@ -433,12 +433,15 @@ class AgentWidget(QtWidgets.QWidget):
         self.delete_button.setEnabled(False)
 
         worker: StreamWorker = StreamWorker(self.agent, text)
-        worker.signals.delta.connect(self.on_stream_delta)
+        worker.signals.content.connect(self.on_stream_content)
         worker.signals.thinking.connect(self.on_stream_thinking)
         worker.signals.usage.connect(self.on_stream_usage)
         worker.signals.finished.connect(self.on_stream_finished)
         worker.signals.error.connect(self.on_stream_error)
         worker.signals.title.connect(self.on_title_generated)
+        worker.signals.tool_start.connect(self.on_tool_start)
+        worker.signals.tool_end.connect(self.on_tool_end)
+        worker.signals.warning.connect(self.on_warning)
 
         self.worker = worker
         QtCore.QThreadPool.globalInstance().start(worker)
@@ -482,9 +485,9 @@ class AgentWidget(QtWidgets.QWidget):
                 return True
         return super().eventFilter(obj, event)
 
-    def on_stream_delta(self, content_delta: str) -> None:
+    def on_stream_content(self, content: str) -> None:
         """处理数据流返回的 content 数据块"""
-        self.history_widget.update_stream(content_delta)
+        self.history_widget.update_content(content)
 
     def on_stream_thinking(self, thinking_delta: str) -> None:
         """处理数据流返回的 thinking 数据块"""
@@ -516,6 +519,18 @@ class AgentWidget(QtWidgets.QWidget):
 
         dialog = ErrorDialog("流式请求失败：", error_msg, self)
         dialog.exec()
+
+    def on_tool_start(self, tool_name: str) -> None:
+        """处理工具开始执行事件"""
+        self.history_widget.update_content(f"\n\n[执行工具: {tool_name}]\n\n")
+
+    def on_tool_end(self, tool_name: str, success: bool) -> None:
+        """处理工具执行完毕事件"""
+        pass
+
+    def on_warning(self, message: str) -> None:
+        """处理系统警告事件"""
+        self.history_widget.update_content(f"\n[警告: {message}]\n")
 
     def on_title_generated(self, title: str) -> None:
         """处理标题生成完成"""

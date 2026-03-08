@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .constant import Role, FinishReason
+from .constant import Role, FinishReason, DeltaEvent
 
 
 class Segment(BaseModel):
@@ -56,9 +56,11 @@ class Delta(BaseModel):
     content: str | None = None
     thinking: str | None = None
     reasoning: list[dict[str, Any]] = Field(default_factory=list)
-    calls: list["ToolCall"] | None = None
+    tool_calls: list["ToolCall"] | None = None
     finish_reason: FinishReason | None = None
     usage: Usage | None = None
+    event: DeltaEvent | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolSchema(BaseModel):

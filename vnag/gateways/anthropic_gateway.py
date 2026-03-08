@@ -305,7 +305,7 @@ class AnthropicGateway(BaseGateway):
                             arguments=arguments
                         ))
 
-                    delta.calls = tool_calls
+                    delta.tool_calls = tool_calls
 
                 yield delta
 

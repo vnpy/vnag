@@ -15,3 +15,11 @@ class FinishReason(str, Enum):
     TOOL_CALLS = "tool_calls"
     UNKNOWN = "unknown"
     ERROR = "error"
+
+
+class DeltaEvent(str, Enum):
+    """流式响应结构化事件"""
+    TOOL_START = "tool_start"
+    TOOL_END = "tool_end"
+    WARNING = "warning"
+    ERROR = "error"

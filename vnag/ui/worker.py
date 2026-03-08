@@ -2,7 +2,7 @@ import traceback
 from typing import Any
 
 from ..agent import TaskAgent
-from ..constant import Role
+from ..constant import Role, DeltaEvent
 from .qt import QtCore
 
 
@@ -11,7 +11,7 @@ class StreamSignals(QtCore.QObject):
     定义StreamWorker可以发出的信号
     """
     # 流式响应块（content 内容）
-    delta: QtCore.Signal = QtCore.Signal(str)
+    content: QtCore.Signal = QtCore.Signal(str)
 
     # 流式响应块（thinking 内容）
     thinking: QtCore.Signal = QtCore.Signal(str)
@@ -27,6 +27,15 @@ class StreamSignals(QtCore.QObject):
 
     # Token 使用量更新 (input_tokens, output_tokens)
     usage: QtCore.Signal = QtCore.Signal(int, int)
+
+    # 工具开始执行信号
+    tool_start: QtCore.Signal = QtCore.Signal(str)
+
+    # 工具执行完成信号
+    tool_end: QtCore.Signal = QtCore.Signal(str, bool)
+
+    # 警告信号
+    warning: QtCore.Signal = QtCore.Signal(str)
 
 
 class StreamWorker(QtCore.QRunnable):
@@ -73,11 +82,29 @@ class StreamWorker(QtCore.QRunnable):
                     self._safe_emit(self.signals.thinking, delta.thinking)
                 # 收到 content 数据块
                 if delta.content:
-                    self._safe_emit(self.signals.delta, delta.content)
+                    self._safe_emit(self.signals.content, delta.content)
                 # 累积 Token 使用量
                 if delta.usage:
                     total_input += delta.usage.input_tokens
                     total_output += delta.usage.output_tokens
+
+                # 结构化事件分发
+                if delta.event == DeltaEvent.TOOL_START:
+                    self._safe_emit(
+                        self.signals.tool_start,
+                        delta.payload["name"],
+                    )
+                elif delta.event == DeltaEvent.TOOL_END:
+                    self._safe_emit(
+                        self.signals.tool_end,
+                        delta.payload["name"],
+                        delta.payload["success"],
+                    )
+                elif delta.event == DeltaEvent.WARNING:
+                    self._safe_emit(
+                        self.signals.warning,
+                        delta.payload["message"],
+                    )
 
         except Exception:
             # 中止流式生成，保存已生成的部分内容
