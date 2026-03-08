@@ -10,6 +10,7 @@ from prompt_toolkit.history import FileHistory
 from ..engine import AgentEngine
 from ..agent import TaskAgent
 from ..object import Profile
+from ..tracer import setup_logging
 from ..utility import TEMP_DIR
 from .factory import create_gateway, get_cli_value
 from .bridge import StreamBridge
@@ -74,9 +75,7 @@ def _make_toolbar(agent_ref: list[TaskAgent]) -> Callable[[], HTML]:
 
 def main() -> None:
     """CLI 主函数"""
-    # 抑制日志输出到终端（文件日志不受影响）
-    import vnag.tracer as _tracer
-    _tracer._stdout_enabled = False
+    setup_logging(enable_console=False)
 
     args: argparse.Namespace = _parse_args()
 
