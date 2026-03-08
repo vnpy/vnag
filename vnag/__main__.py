@@ -7,7 +7,7 @@ from vnag.ui.tools import register_all
 
 
 def main() -> None:
-    """主函数"""
+    """主函数（启动 Qt GUI 界面）"""
     qapp: QtWidgets.QApplication = create_qapp()
 
     gateway: BaseGateway = create_gateway()
@@ -15,7 +15,7 @@ def main() -> None:
     engine: AgentEngine = AgentEngine(gateway)
     engine.init()
 
-    register_all(engine)  # 注册 UI 专属工具
+    register_all(engine)
 
     window: MainWindow = MainWindow(engine)
     window.showMaximized()

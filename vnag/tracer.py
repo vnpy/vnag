@@ -7,8 +7,9 @@ from .object import Request, Delta, Message, ToolCall, ToolResult
 from .utility import get_folder_path
 
 
-# 使用模块级变量记录是否已配置
-_logger_configured = False
+# 模块级控制变量
+_logger_configured: bool = False
+_stdout_enabled: bool = True
 
 
 def _configure_logger() -> None:
@@ -24,18 +25,19 @@ def _configure_logger() -> None:
     except ValueError:
         pass
 
-    # 添加 stdout handler，只处理带有 vnag_module 标记的日志
-    logger.add(
-        sys.stdout,
-        level="INFO",
-        filter=lambda record: record["extra"].get("vnag_module") is True,
-        format=(
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{extra[profile_name]}</cyan> | "
-            "<level>{message}</level>"
+    # 添加 stdout handler（CLI 模式下可通过 _stdout_enabled 关闭）
+    if _stdout_enabled:
+        logger.add(
+            sys.stdout,
+            level="INFO",
+            filter=lambda record: record["extra"].get("vnag_module") is True,
+            format=(
+                "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                "<level>{level: <8}</level> | "
+                "<cyan>{extra[profile_name]}</cyan> | "
+                "<level>{message}</level>"
+            )
         )
-    )
 
     _logger_configured = True
 

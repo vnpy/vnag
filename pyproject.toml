@@ -41,6 +41,10 @@ requires-python = ">=3.10"
 keywords = ["ai", "agent"]
 
 [project.optional-dependencies]
+tui = [
+    "prompt_toolkit",
+    "rich",
+]
 rag = [
     # 分段器
     "markdown-it-py",
