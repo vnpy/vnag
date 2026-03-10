@@ -2,9 +2,38 @@
 
 本页面记录 VNAG 的版本更新历史。
 
-## v0.7.0
+## v0.8.0
 
 最新版本。
+
+### 新功能
+
+- 添加 DuckDB 向量化数据库支持
+- 增加本地知识库功能
+- 新增 Agent Skill 的支持
+- 新增 MoonshotGateway、ZhipuGateway、VolcengineGateway
+- 增加终端工具模块 terminal_tools
+- 新增 CLI 交互模式
+
+### 改进
+
+- Embedder 类增加默认名称和参数
+- Vector 类增加 list_segments 函数
+- 增加 AI 服务的网络代理支持
+- 优化回答内容中代码片段的展示
+- 优化会话历史的删除和重发
+- 当前会话返回结束前禁止发送新的请求
+- 优化 TaskAgent 的 ReAct 执行
+- 优化日志追踪模块
+
+### 修复
+
+- 修复 LiteLLM 接口的 content 缺失问题
+- 修复停止请求后导致的状态异常问题
+
+---
+
+## v0.7.0
 
 ### 新功能
 
@@ -69,10 +98,11 @@
 ### 核心模块
 
 - **Agent**: TaskAgent 任务型智能体、AgentTool 智能体工具
-- **Gateway**: 统一的大模型 API 接口（支持 OpenAI、Anthropic、Dashscope、DeepSeek、MiniMax、百炼、OpenRouter、LiteLLM）
+- **Gateway**: 统一的大模型 API 接口（支持 OpenAI、Anthropic、Dashscope、DeepSeek、MiniMax、百炼、OpenRouter、LiteLLM、Moonshot、智谱、火山引擎）
 - **Tool**: LocalManager 本地工具管理、McpManager MCP 工具管理
-- **RAG**: Segmenter 分段器、Embedder 嵌入器、Vector 向量库
+- **RAG**: Segmenter 分段器、Embedder 嵌入器、Vector 向量库（ChromaDB、Qdrant、DuckDB）
 - **UI**: Chat UI 图形界面
+- **CLI**: 命令行交互界面
 
 ### 内置工具
 
@@ -82,6 +112,7 @@
 - code_tools: 代码执行工具
 - web_tools: Web 工具
 - search_tools: 联网搜索工具
+- terminal_tools: 终端命令工具
 
 ---
 
