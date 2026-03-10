@@ -36,7 +36,7 @@ class BaseVector:
 
 检索返回的 `Segment.score` 为**距离（distance）**，数值越小表示越相似。
 
-## ChromaVector
+## ChromadbVector
 
 ChromaDB 是轻量级的本地向量库，适合开发与小规模知识库。
 
@@ -53,11 +53,11 @@ from pathlib import Path
 
 from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.segmenters.simple_segmenter import SimpleSegmenter
-from vnag.vectors.chromadb_vector import ChromaVector
+from vnag.vectors.chromadb_vector import ChromadbVector
 
 segmenter = SimpleSegmenter(chunk_size=800, overlap=100)
 embedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-vector = ChromaVector(name="my_knowledge", embedder=embedder)
+vector = ChromadbVector(name="my_knowledge", embedder=embedder)
 
 doc_path = Path("README.md").resolve()
 text = doc_path.read_text(encoding="utf-8")

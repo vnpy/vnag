@@ -28,14 +28,14 @@ from pathlib import Path
 
 from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.segmenters.markdown_segmenter import MarkdownSegmenter
-from vnag.vectors.chromadb_vector import ChromaVector
+from vnag.vectors.chromadb_vector import ChromadbVector
 
 
 def main() -> None:
     # 1) 初始化分段器/嵌入器/向量库
     segmenter = MarkdownSegmenter(chunk_size=2000)
     embedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-    vector = ChromaVector(name="docs", embedder=embedder)
+    vector = ChromadbVector(name="docs", embedder=embedder)
 
     # 2) 索引文档（注意：metadata 至少要包含 source，向量库会用它生成唯一ID）
     doc_path = Path("README.md").resolve()

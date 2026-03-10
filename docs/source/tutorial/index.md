@@ -13,6 +13,7 @@ local_tool
 mcp_tool
 rag
 chat_ui
+cli
 ```
 
 ## 教程概览
@@ -25,6 +26,7 @@ chat_ui
 | [使用 MCP 工具](mcp_tool.md) | ⭐⭐ | 15 分钟 | 连接 MCP 远程工具服务器 |
 | [实现 RAG](rag.md) | ⭐⭐⭐ | 20 分钟 | 构建检索增强生成系统 |
 | [使用图形界面](chat_ui.md) | ⭐ | 10 分钟 | 使用 Chat UI 管理和调试 Agent |
+| [使用命令行界面](cli.md) | ⭐ | 10 分钟 | 在终端中运行 Agent，支持脚本集成 |
 
 ## 前置要求
 

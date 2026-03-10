@@ -82,6 +82,13 @@ ui/index
 
 ```{toctree}
 :maxdepth: 2
+:caption: 命令行界面
+
+cli/index
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: 配置指南
 
 configuration/index

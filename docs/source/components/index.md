@@ -10,6 +10,7 @@
 agent
 gateway
 tool
+skill
 message
 tracer
 ```
@@ -25,10 +26,10 @@ VNAG 采用模块化的分层架构：
 ├─────────────────────────────────────────────────────────────┤
 │                      AgentEngine                             │
 │              (工具管理、Agent 工厂)                           │
-├──────────────────────┬──────────────────────────────────────┤
-│    LocalManager      │         McpManager                    │
-│    (本地工具)         │         (MCP 工具)                    │
-├──────────────────────┴──────────────────────────────────────┤
+├──────────────────┬──────────────────┬────────────────────────┤
+│  LocalManager    │   McpManager     │    SkillManager        │
+│  (本地工具)       │   (MCP 工具)     │    (技能系统)           │
+├──────────────────┴──────────────────┴────────────────────────┤
 │                      BaseGateway                             │
 │          (OpenAI / Anthropic / Dashscope / ...)             │
 └─────────────────────────────────────────────────────────────┘
@@ -43,6 +44,7 @@ VNAG 采用模块化的分层架构：
 | **BaseGateway** | `vnag.gateway` | 网关基类，统一大模型 API 接口 |
 | **LocalManager** | `vnag.local` | 本地工具管理器 |
 | **McpManager** | `vnag.mcp` | MCP 工具管理器 |
+| **SkillManager** | `vnag.skill` | 技能管理器，按需加载专业操作指南 |
 | **LogTracer** | `vnag.tracer` | 执行追踪器，记录调试信息 |
 
 ## 数据对象
@@ -86,6 +88,7 @@ FinishReason.ERROR       # 发生错误
 - [Agent 智能体](agent.md) - 核心智能体类
 - [Gateway 网关](gateway.md) - 大模型 API 接口
 - [Tool 工具系统](tool.md) - 本地和 MCP 工具
+- [Skill 技能系统](skill.md) - 按需加载的专业操作指南
 - [Message 消息](message.md) - 消息结构和格式
 - [Tracer 追踪器](tracer.md) - 执行追踪和调试
 

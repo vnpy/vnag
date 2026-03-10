@@ -51,7 +51,7 @@
 
 ### Vector 示例
 
-- **run_chromadb_add**: 演示如何使用 `ChromaVector` 将 Markdown 文件进行分段处理，并添加到 ChromaDB 向量数据库中。
+- **run_chromadb_add**: 演示如何使用 `ChromadbVector` 将 Markdown 文件进行分段处理，并添加到 ChromaDB 向量数据库中。
 
     - 默认使用本地 `SentenceEmbedder`（无需 API Key，首次运行会自动下载模型）
     - 如需使用 DashScope API，可参考脚本中的注释修改

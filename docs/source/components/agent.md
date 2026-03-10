@@ -254,6 +254,7 @@ profile = Profile(
     name="助手名称",           # 必填
     prompt="系统提示词",        # 必填
     tools=["tool1", "tool2"], # 可用工具
+    use_skills=False,         # 是否启用技能
     temperature=0.7,          # 生成温度
     max_tokens=4096,          # 最大输出
     max_iterations=10         # 最大工具调用轮次
@@ -267,6 +268,7 @@ profile = Profile(
 | `name` | str | 必填 | 配置名称 |
 | `prompt` | str | 必填 | 系统提示词 |
 | `tools` | list[str] | 必填 | 可用工具名称列表（可传空列表 `[]`） |
+| `use_skills` | bool | False | 是否启用技能系统 |
 | `temperature` | float | None | 生成温度 (0-2) |
 | `max_tokens` | int | None | 最大输出 token |
 | `max_iterations` | int | 10 | 最大工具调用轮次 |

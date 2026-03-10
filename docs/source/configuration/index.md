@@ -37,7 +37,7 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 ├── log/                     # 追踪日志（按会话分文件）
 │   ├── 20240115_103000_123456.log
 │   └── ...
-├── chroma_db/               # ChromaDB 数据（如果使用 ChromaVector）
+├── chroma_db/               # ChromaDB 数据（如果使用 ChromadbVector）
 ├── qdrant_db/               # Qdrant 数据（如果使用 QdrantVector）
 └── ui_setting.json          # UI 配置（如当前选择的网关类型、常用模型等）
 ```
@@ -319,6 +319,34 @@ Profile 配置保存在 `.vnag/profile/` 目录下。
 :::{note}
 此文件通常无需手动编辑，可通过 UI 界面进行设置。
 :::
+
+## CLI 配置
+
+**文件**：`.vnag/cli_setting.json`
+
+此文件由 CLI 自动创建和更新，也可手动编辑：
+
+```json
+{
+    "gateway_name": "OpenAI",
+    "profile_name": "助手",
+    "model_name": "gpt-4o"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `gateway_name` | str | 网关类型（如 OpenAI、Anthropic、DeepSeek 等），默认 `OpenAI` |
+| `profile_name` | str | 启动时默认加载的 Profile 名称；留空则使用第一个 Profile |
+| `model_name` | str | 启动时默认使用的模型名称；留空则沿用 Profile 默认值 |
+
+:::{note}
+使用 `/model` 或 `/profile` 命令切换时，CLI 会自动更新此文件以持久化设置。
+:::
+
+网关连接参数（API Key 等）与图形界面共用同一套 `connect_*.json` 文件，无需重复配置。
+
+
 
 ## 自定义工具
 

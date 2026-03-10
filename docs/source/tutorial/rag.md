@@ -29,14 +29,14 @@ from pathlib import Path
 
 from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.segmenters.markdown_segmenter import MarkdownSegmenter
-from vnag.vectors.chromadb_vector import ChromaVector
+from vnag.vectors.chromadb_vector import ChromadbVector
 
 
 def main() -> None:
     # 1) 初始化组件
     segmenter = MarkdownSegmenter(chunk_size=2000)
     embedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-    vector = ChromaVector(name="demo", embedder=embedder)
+    vector = ChromadbVector(name="demo", embedder=embedder)
 
     # 2) 读取并切分文档（metadata 必须至少包含 source）
     doc_path = Path("README.md").resolve()
@@ -56,12 +56,12 @@ if __name__ == "__main__":
 
 ```python
 from vnag.embedders.sentence_embedder import SentenceEmbedder
-from vnag.vectors.chromadb_vector import ChromaVector
+from vnag.vectors.chromadb_vector import ChromadbVector
 
 
 def main() -> None:
     embedder = SentenceEmbedder("BAAI/bge-large-zh-v1.5")
-    vector = ChromaVector(name="demo", embedder=embedder)
+    vector = ChromadbVector(name="demo", embedder=embedder)
 
     results = vector.retrieve(query_text="VNAG 的核心特点是什么？", k=3)
     for i, seg in enumerate(results, start=1):
