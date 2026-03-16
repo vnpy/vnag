@@ -371,6 +371,8 @@ class OpenaiGateway(BaseGateway):
 
                     delta.tool_calls = tool_calls
 
+                    accumulated_tool_calls.clear()
+
                     # 若 finish_reason 被错误地标记为 stop/unknown，将其修正为 tool_calls
                     if vnag_finish_reason not in {
                         FinishReason.TOOL_CALLS,
