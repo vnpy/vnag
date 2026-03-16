@@ -1,6 +1,6 @@
 from vnag.utility import load_json
 from vnag.object import Message, Request, Response, Role, ToolSchema
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
 
 def main() -> None:
@@ -15,7 +15,7 @@ def main() -> None:
     setting: dict = load_json("connect_openai.json")
 
     # 创建接口实例
-    gateway: OpenaiGateway = OpenaiGateway()
+    gateway: CompletionGateway = CompletionGateway()
 
     # 初始化接口
     gateway.init(setting)

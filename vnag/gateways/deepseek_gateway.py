@@ -1,13 +1,13 @@
 from typing import Any
 
-from .openai_gateway import OpenaiGateway
+from .completion_gateway import CompletionGateway
 
 
-class DeepseekGateway(OpenaiGateway):
+class DeepseekGateway(CompletionGateway):
     """
     DeepSeek 网关
 
-    继承自 OpenaiGateway，覆盖钩子方法以支持：
+    继承自 CompletionGateway，覆盖钩子方法以支持：
     - reasoning_content 格式的 thinking 提取
     - 请求中启用 thinking 参数
     - 回传 thinking 内容到后续请求（工具调用场景）

@@ -13,7 +13,7 @@
 
 ```python
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 
@@ -23,7 +23,7 @@ def main():
     setting = load_json("connect_openai.json")
     
     # 2. 创建并初始化网关
-    gateway = OpenaiGateway()
+    gateway = CompletionGateway()
     gateway.init(setting)
     
     # 3. 创建并初始化引擎
@@ -79,15 +79,15 @@ setting = load_json("connect_openai.json")
 ### 第二步：初始化网关
 
 ```python
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init(setting)
 ```
 
 网关（Gateway）负责与大模型 API 通信。VNAG 支持多种网关：
 
-- `OpenaiGateway` - OpenAI 及兼容接口
+- `CompletionGateway` - OpenAI Chat Completions 及兼容接口
 - `AnthropicGateway` - Anthropic Claude
 - `DashscopeGateway` - 阿里云 Dashscope
 - `DeepseekGateway` - DeepSeek

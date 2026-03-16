@@ -102,9 +102,16 @@ vnag.utility
 --------
 
 vnag.gateways.openai_gateway
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: vnag.gateways.openai_gateway
+   :members:
+   :show-inheritance:
+
+vnag.gateways.completion_gateway
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: vnag.gateways.completion_gateway
    :members:
    :show-inheritance:
 

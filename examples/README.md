@@ -37,7 +37,7 @@
 
 ### Gateway 示例
 
-- **run_openai_gateway**: 演示如何使用 `OpenaiGateway` 调用 OpenAI 风格的 API 接口，例如 OpenAI 官方服务、OpenRouter 聚合路由服务等。
+- **run_completion_gateway**: 演示如何使用 `CompletionGateway` 调用 OpenAI Chat Completions 风格的 API 接口，例如 OpenAI 官方服务、OpenRouter 聚合路由服务等。
 
     - 使用时需要将 `connect_openai.json` 文件放置在用户目录下的 `.vnag` 文件夹中
 
@@ -137,6 +137,6 @@
 
 ### UI 示例
 
-- **run_chat_ui**: 演示如何初始化 `OpenaiGateway` 并启动 `MainWindow`，从而运行一个可以与大模型进行交互的聊天应用。
+- **run_chat_ui**: 演示如何初始化 `CompletionGateway` 并启动 `MainWindow`，从而运行一个可以与大模型进行交互的聊天应用。
 
     - 使用时需要将 `connect_openai.json` 文件放置在用户目录下的 `.vnag` 文件夹中

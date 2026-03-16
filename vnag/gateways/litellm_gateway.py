@@ -1,16 +1,16 @@
 from typing import Any, cast
 import json
 
-from .openai_gateway import OpenaiGateway
+from .completion_gateway import CompletionGateway
 from vnag.object import Message
 from vnag.constant import Role
 
 
-class LitellmGateway(OpenaiGateway):
+class LitellmGateway(CompletionGateway):
     """
     LiteLLM 网关
 
-    继承自 OpenaiGateway，覆盖钩子方法以支持：
+    继承自 CompletionGateway，覆盖钩子方法以支持：
     - reasoning_content 格式的 thinking 提取（所有模型）
     - thinking_blocks 格式的 thinking 提取（Anthropic 模型）
     - 请求中启用 reasoning_effort 参数
