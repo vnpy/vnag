@@ -124,7 +124,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 
 | 功能模块 | 示例脚本 | 说明 |
 |---------|---------|------|
-| **Gateway<br/>网关** | `run_openai_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py` | 测试与不同大模型提供商的 API 连接 |
+| **Gateway<br/>网关** | `run_completion_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py` | 测试与不同大模型提供商的 API 连接 |
 | **Segmenter<br/>分段器** | `run_simple_segmenter.py`<br/>`run_markdown_segmenter.py`<br/>`run_python_segmenter.py`<br/>`run_cpp_segmenter.py` | 将不同类型的文档切分为结构化数据段 |
 | **Vector<br/>向量库** | `run_chromadb_demo.py`<br/>`run_qdrant_demo.py`<br/>`run_duckdb_demo.py` | 文本向量化存储和相似度搜索 |
 | **RAG** | `run_ctp_rag.py` | 完整的 RAG 流程：分段、入库、检索生成 |
@@ -136,7 +136,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 
 ```bash
 # 示例：测试 OpenAI Gateway
-python examples/gateway/run_openai_gateway.py
+python examples/gateway/run_completion_gateway.py
 
 # 示例：运行聊天 UI
 python examples/ui/run_chat_ui.py

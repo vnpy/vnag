@@ -7,7 +7,7 @@
 """
 
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 from vnag.agent import TaskAgent
@@ -24,7 +24,7 @@ def main() -> None:
         return
 
     # 创建接口实例
-    gateway: OpenaiGateway = OpenaiGateway()
+    gateway: CompletionGateway = CompletionGateway()
 
     # 初始化接口
     gateway.init(setting)

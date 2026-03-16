@@ -134,7 +134,7 @@ Gateway 是与大模型 API 通信的抽象层，提供统一的接口。
 
 | 网关 | 说明 |
 |------|------|
-| `OpenaiGateway` | OpenAI API（及兼容接口） |
+| `CompletionGateway` | OpenAI Chat Completions API（及兼容接口） |
 | `AnthropicGateway` | Anthropic Claude API |
 | `DashscopeGateway` | 阿里云 Dashscope API |
 | `DeepseekGateway` | DeepSeek API（支持思维链） |
@@ -146,9 +146,9 @@ Gateway 是与大模型 API 通信的抽象层，提供统一的接口。
 ### 使用示例
 
 ```python
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init({
     "api_key": "sk-xxx",
     "base_url": "https://api.openai.com/v1"

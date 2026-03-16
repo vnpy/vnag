@@ -38,14 +38,14 @@ class BaseGateway(ABC):
 
 ## 支持的网关
 
-### OpenaiGateway
+### CompletionGateway
 
 OpenAI API 及兼容接口。
 
 ```python
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init({
     "api_key": "sk-xxx",
     "base_url": "https://api.openai.com/v1"

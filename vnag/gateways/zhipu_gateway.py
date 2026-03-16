@@ -1,13 +1,13 @@
 from typing import Any
 
-from .openai_gateway import OpenaiGateway
+from .completion_gateway import CompletionGateway
 
 
-class ZhipuGateway(OpenaiGateway):
+class ZhipuGateway(CompletionGateway):
     """
     智谱 (Zhipu) 网关
 
-    继承自 OpenaiGateway，覆盖钩子方法以支持：
+    继承自 CompletionGateway，覆盖钩子方法以支持：
     - reasoning_content 格式的 thinking 提取
     - 请求中启用 thinking 参数（始终开启保留式思考）
     - 回传 thinking 内容到后续请求（交错式思考）

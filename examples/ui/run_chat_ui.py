@@ -1,5 +1,5 @@
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.ui.window import MainWindow
 from vnag.ui.qt import create_qapp, QtWidgets
 from vnag.engine import AgentEngine
@@ -11,7 +11,7 @@ def main() -> None:
 
     setting: dict = load_json("connect_openai.json")
 
-    gateway: OpenaiGateway = OpenaiGateway()
+    gateway: CompletionGateway = CompletionGateway()
     gateway.init(setting)
 
     engine: AgentEngine = AgentEngine(gateway)

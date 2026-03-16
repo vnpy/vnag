@@ -1,16 +1,16 @@
 from typing import Any
 import json
 
-from .openai_gateway import OpenaiGateway
+from .completion_gateway import CompletionGateway
 from vnag.object import Message
 from vnag.constant import Role
 
 
-class OpenrouterGateway(OpenaiGateway):
+class OpenrouterGateway(CompletionGateway):
     """
     OpenRouter 网关
 
-    继承自 OpenaiGateway，覆盖钩子方法以支持：
+    继承自 CompletionGateway，覆盖钩子方法以支持：
     - reasoning_details 格式的 thinking 提取
     - 请求中启用 reasoning 参数
     - 回传 thinking 内容到后续请求

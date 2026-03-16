@@ -84,7 +84,7 @@ VNAG 提供了多类内置工具：
 
 ```python
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 
@@ -92,7 +92,7 @@ from vnag.object import Profile
 def main():
     # 初始化
     setting = load_json("connect_openai.json")
-    gateway = OpenaiGateway()
+    gateway = CompletionGateway()
     gateway.init(setting)
     
     engine = AgentEngine(gateway)
