@@ -354,8 +354,8 @@ class OpenaiGateway(BaseGateway):
                 delta.finish_reason = vnag_finish_reason
                 should_yield = True
 
-                # 如果是 tool_calls 结束，转换累积的 tool_calls
-                if vnag_finish_reason == FinishReason.TOOL_CALLS and accumulated_tool_calls:
+                # 只要流中累积到完整的 tool_calls，就向上传递，
+                if accumulated_tool_calls:
                     tool_calls: list[ToolCall] = []
                     for tc_data in accumulated_tool_calls.values():
                         try:
@@ -370,6 +370,13 @@ class OpenaiGateway(BaseGateway):
                         ))
 
                     delta.tool_calls = tool_calls
+
+                    # 若 finish_reason 被错误地标记为 stop/unknown，将其修正为 tool_calls
+                    if vnag_finish_reason not in {
+                        FinishReason.TOOL_CALLS,
+                        FinishReason.LENGTH,
+                    }:
+                        delta.finish_reason = FinishReason.TOOL_CALLS
 
             if should_yield:
                 yield delta

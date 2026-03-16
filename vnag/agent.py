@@ -357,15 +357,10 @@ class TaskAgent:
                 # 调用追踪器：记录响应接收
                 self.tracer.on_llm_end(assistant_msg)
 
-                # 正常结束（LLM 不再需要工具），退出循环
-                if step.finish_reason == FinishReason.STOP:
-                    break
-
-                # Action: 逐一执行工具调用
-                if (
-                    step.finish_reason == FinishReason.TOOL_CALLS
-                    and step.tool_calls
-                ):
+                # Action: 优先依据"事实上存在的工具调用"驱动控制流。
+                # 不以 finish_reason 作为是否执行工具的唯一依据，
+                # 避免 OpenAI 兼容网关将工具调用轮误标为 "stop" 时 Agent 提前终止。
+                if step.tool_calls:
                     rid: str = response_id or str(uuid4())
                     tool_results: list[ToolResult] = []
 
@@ -408,15 +403,38 @@ class TaskAgent:
                     # 继续下一次 ReAct 迭代
                     continue
 
-                # 其他结束原因（如 length），直接退出
+                # 正常结束（LLM 不再需要工具），退出循环
+                if step.finish_reason == FinishReason.STOP:
+                    break
+
+                # 输出被 token 长度限制截断
+                if step.finish_reason == FinishReason.LENGTH:
+                    yield Delta(
+                        id=response_id or str(uuid4()),
+                        event=DeltaEvent.WARNING,
+                        payload={"message": "模型输出因长度限制被截断"},
+                    )
+                    break
+
+                # 其他非预期结束原因（unknown / error / None）
+                if step.finish_reason in {
+                    FinishReason.UNKNOWN, FinishReason.ERROR, None
+                }:
+                    yield Delta(
+                        id=response_id or str(uuid4()),
+                        event=DeltaEvent.WARNING,
+                        payload={"message": "模型以非预期结束原因结束"},
+                    )
+                    break
+
                 break
 
-            # 迭代次数达到上限，发送警告事件
+            # 仅当循环因达到迭代上限而退出（非正常 STOP / break）时才发出警告
             if not self.aborted and iteration >= self.profile.max_iterations:
                 yield Delta(
                     id=response_id or str(uuid4()),
                     event=DeltaEvent.WARNING,
-                    payload={"message": "达到最大工具调用次数限制"},
+                    payload={"message": "达到最大迭代次数限制"},
                 )
 
         except Exception:
