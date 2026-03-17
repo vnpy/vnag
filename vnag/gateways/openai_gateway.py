@@ -18,6 +18,11 @@ class OpenaiGateway(BaseGateway):
 
     调用 OpenAI /v1/responses 端点，支持纯文本、function calling、
     流式输出及 reasoning summary 透传。
+
+    reasoning 策略：
+    - 请求时显式启用 reasoning，获取 summary 文本
+    - thinking 字段存放 summary 供 UI 展示
+    - 不回传 reasoning items（避免触发 OpenAI 对 item 邻接关系的严格校验）
     """
 
     default_name: str = "OpenAI"
@@ -26,6 +31,7 @@ class OpenaiGateway(BaseGateway):
         "base_url": "",
         "api_key": "",
         "proxy": "",
+        "reasoning_effort": ["high", "medium", "low", "minimal"]
     }
 
     def __init__(self, gateway_name: str = "") -> None:
@@ -35,6 +41,7 @@ class OpenaiGateway(BaseGateway):
         self.gateway_name = gateway_name
 
         self.client: OpenAI | None = None
+        self.reasoning_effort: str = "medium"
 
     def _convert_input(
         self, messages: list[Message]
@@ -119,11 +126,10 @@ class OpenaiGateway(BaseGateway):
                 ))
 
             elif item.type == "reasoning":
-                parts: list[str] = [s.text for s in item.summary]
+                parts: list[str] = [s.text for s in item.summary if s.text]
                 if parts:
                     thinking = "\n".join(parts)
 
-        # 确定 finish_reason
         status = oai_resp.status or ""
         if status == "incomplete":
             finish_reason: FinishReason = FinishReason.LENGTH
@@ -169,6 +175,8 @@ class OpenaiGateway(BaseGateway):
                 self.write_log("  - api_key: API密钥未设置")
             return False
 
+        self.reasoning_effort = setting.get("reasoning_effort", "medium")
+
         http_client: httpx.Client | None = httpx.Client(proxy=proxy) if proxy else None
 
         self.client = OpenAI(
@@ -190,6 +198,10 @@ class OpenaiGateway(BaseGateway):
         create_params: dict[str, Any] = {
             "model": request.model,
             "input": input_items,
+            "reasoning": {
+                "effort": self.reasoning_effort,
+                "summary": "detailed",
+            },
         }
 
         if instructions:
@@ -209,7 +221,7 @@ class OpenaiGateway(BaseGateway):
         return self._parse_response(oai_resp)
 
     def stream(self, request: Request) -> Generator[Delta, None, None]:
-        """流式调用接口。"""
+        """流式调用接口"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
             return
@@ -220,6 +232,10 @@ class OpenaiGateway(BaseGateway):
             "model": request.model,
             "input": input_items,
             "stream": True,
+            "reasoning": {
+                "effort": self.reasoning_effort,
+                "summary": "detailed",
+            },
         }
 
         if instructions:
@@ -236,26 +252,20 @@ class OpenaiGateway(BaseGateway):
 
         response_id: str = ""
 
+        event: ResponseStreamEvent
         with self.client.responses.create(**create_params) as stream:
-            for event in stream:  # type: ResponseStreamEvent
-                etype: str = event.type
-
-                if etype == "response.created":
+            for event in stream:
+                if event.type == "response.created":
                     response_id = event.response.id
                     continue
 
-                if not response_id and hasattr(event, "item_id"):
-                    pass
+                if event.type == "response.output_text.delta":
+                    yield Delta(id=response_id, content=event.delta)
 
-                if etype == "response.output_text.delta":
-                    delta: Delta = Delta(id=response_id, content=event.delta)
-                    yield delta
+                elif event.type == "response.reasoning_summary_text.delta":
+                    yield Delta(id=response_id, thinking=event.delta)
 
-                elif etype == "response.reasoning_summary_text.delta":
-                    delta = Delta(id=response_id, thinking=event.delta)
-                    yield delta
-
-                elif etype == "response.output_item.done":
+                elif event.type == "response.output_item.done":
                     item = event.item
                     if item.type == "function_call":
                         try:
@@ -267,14 +277,13 @@ class OpenaiGateway(BaseGateway):
                             name=item.name,
                             arguments=arguments,
                         )
-                        delta = Delta(
+                        yield Delta(
                             id=response_id,
                             tool_calls=[tc],
                             finish_reason=FinishReason.TOOL_CALLS,
                         )
-                        yield delta
 
-                elif etype == "response.completed":
+                elif event.type == "response.completed":
                     oai_resp: OAIResponse = event.response
                     status: str = oai_resp.status or ""
                     has_function_calls: bool = any(
@@ -293,12 +302,11 @@ class OpenaiGateway(BaseGateway):
                         usage.input_tokens = oai_resp.usage.input_tokens
                         usage.output_tokens = oai_resp.usage.output_tokens
 
-                    delta = Delta(
+                    yield Delta(
                         id=response_id,
                         finish_reason=finish_reason,
                         usage=usage,
                     )
-                    yield delta
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""
