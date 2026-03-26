@@ -491,11 +491,12 @@ class TaskAgent:
         messages: list[Message] = self.session.messages.copy()
         messages.append(Message(role=Role.USER, content=TITLE_PROMPT.format(max_length=max_length)))
 
-        # 构造请求（使用较低温度以获得更稳定的结果）
+        # 构造请求（固定温度，避免上游 API 拒绝 null temperature）
         request: Request = Request(
             model=self.session.model,
             messages=messages,
             tool_schemas=[],
+            temperature=1.0,
             max_tokens=self.profile.max_tokens
         )
 
