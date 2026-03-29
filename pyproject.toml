@@ -26,6 +26,7 @@ dependencies = [
     "openai",
     "anthropic",
     "dashscope",
+    "boto3",
     # UI界面
     "PySide6",
     "PySide6-Addons",
