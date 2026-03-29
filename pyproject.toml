@@ -27,6 +27,7 @@ dependencies = [
     "anthropic",
     "dashscope",
     "boto3",
+    "google-genai",
     # UI界面
     "PySide6",
     "PySide6-Addons",
