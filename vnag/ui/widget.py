@@ -397,6 +397,31 @@ class AgentWidget(QtWidgets.QWidget):
 
         self.update_buttons()
 
+    def build_markdown_text(self) -> str:
+        """生成会话的 Markdown 纯文本（仅用户与助手的正文 content，不含思考与工具信息）"""
+        parts: list[str] = [f"# {self.agent.name}\n\n"]
+        assistant_content: str = ""
+
+        for message in self.agent.messages:
+            if message.role is Role.SYSTEM:
+                continue
+            elif message.role is Role.USER:
+                if message.content:
+                    if assistant_content:
+                        parts.append(f"## 助手\n\n{assistant_content}\n\n")
+                        assistant_content = ""
+                    parts.append(f"## 用户\n\n{message.content}\n\n")
+                else:
+                    continue
+            elif message.role is Role.ASSISTANT:
+                if message.content:
+                    assistant_content += message.content
+
+        if assistant_content:
+            parts.append(f"## 助手\n\n{assistant_content}\n\n")
+
+        return "".join(parts).rstrip() + "\n"
+
     def send_message(self) -> None:
         """发送消息"""
         # 检查是否已配置 AI Gateway
