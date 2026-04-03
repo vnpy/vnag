@@ -90,6 +90,7 @@ gateway.init(setting)
 - `CompletionGateway` - OpenAI Chat Completions 及兼容接口
 - `AnthropicGateway` - Anthropic Claude
 - `DashscopeGateway` - 阿里云 Dashscope
+- `OllamaGateway` - Ollama 本地或云端模型
 - `DeepseekGateway` - DeepSeek
 - `MinimaxGateway` - MiniMax
 - `BailianGateway` - 阿里云百炼

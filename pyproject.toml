@@ -25,6 +25,7 @@ dependencies = [
     # AI服务
     "openai",
     "anthropic",
+    "ollama",
     "dashscope",
     "boto3",
     "google-genai",

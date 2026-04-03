@@ -124,7 +124,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 
 | 功能模块 | 示例脚本 | 说明 |
 |---------|---------|------|
-| **Gateway<br/>网关** | `run_completion_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py` | 测试与不同大模型提供商的 API 连接 |
+| **Gateway<br/>网关** | `run_completion_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py`<br/>`run_ollama_gateway.py` | 测试与不同大模型提供商的 API 连接 |
 | **Segmenter<br/>分段器** | `run_simple_segmenter.py`<br/>`run_markdown_segmenter.py`<br/>`run_python_segmenter.py`<br/>`run_cpp_segmenter.py` | 将不同类型的文档切分为结构化数据段 |
 | **Vector<br/>向量库** | `run_chromadb_demo.py`<br/>`run_qdrant_demo.py`<br/>`run_duckdb_demo.py` | 文本向量化存储和相似度搜索 |
 | **RAG** | `run_ctp_rag.py` | 完整的 RAG 流程：分段、入库、检索生成 |
@@ -177,7 +177,7 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 }
 ```
 
-支持的网关：OpenAI、Anthropic、Dashscope、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM。各网关的完整配置示例请参考 [Gateway 文档](docs/source/components/gateway.md)。
+支持的网关：OpenAI、Anthropic、Dashscope、Ollama、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM、Bedrock、Gemini。各网关的完整配置示例请参考 [Gateway 文档](docs/source/components/gateway.md)。
 
 #### MCP 配置
 
@@ -202,7 +202,7 @@ vnag/
 │   ├── agent.py         # 智能体（TaskAgent / AgentTool）
 │   ├── engine.py        # 智能体引擎
 │   ├── skill.py         # 技能系统
-│   ├── gateways/        # 大模型网关（11 种）
+│   ├── gateways/        # 大模型网关（15 种）
 │   ├── tools/           # 内置本地工具（7 类）
 │   ├── segmenters/      # RAG 分段器
 │   ├── embedders/       # RAG 嵌入器
@@ -225,7 +225,7 @@ vnag 内置了日期时间、文件系统、网络、终端与系统、代码执
 | 模块 | 说明 |
 |------|------|
 | **Agent 引擎** | ReAct 循环编排、多轮对话、Profile 配置、技能系统、执行追踪 |
-| **LLM 网关** | OpenAI、Anthropic、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、Dashscope、OpenRouter、LiteLLM，支持流式输出和思维链 |
+| **LLM 网关** | OpenAI、Anthropic、Dashscope、Ollama、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM、Bedrock、Gemini，支持流式输出和思维链 |
 | **工具系统** | 本地函数工具、MCP 远程工具、7 类内置工具 |
 | **RAG** | 4 种分段器（Simple / Markdown / Python / C++）、3 种嵌入器（OpenAI / Dashscope / SentenceTransformers）、3 种向量库（ChromaDB / Qdrant / DuckDB） |
 | **图形界面** | 基于 PySide6 的聊天 UI，支持 Profile 管理、多智能体切换、Markdown 渲染、Thinking 显示 |

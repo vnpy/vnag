@@ -20,6 +20,7 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
 ├── connect_openai.json      # OpenAI 网关配置
 ├── connect_anthropic.json   # Anthropic 网关配置
 ├── connect_dashscope.json   # Dashscope 网关配置
+├── connect_ollama.json      # Ollama 网关配置
 ├── connect_deepseek.json    # DeepSeek 网关配置
 ├── connect_minimax.json     # MiniMax 网关配置
 ├── connect_bailian.json     # 百炼网关配置
@@ -77,6 +78,30 @@ VNAG 采用统一的配置文件管理机制，所有配置文件都存放在 `.
     "api_key": "sk-YourDashscopeKey"
 }
 ```
+
+### Ollama
+
+**文件**：`.vnag/connect_ollama.json`
+
+```json
+{
+    "host": "http://localhost:11434",
+    "api_key": "",
+    "proxy": "",
+    "thinking_mode": "auto",
+    "thinking_level": "medium",
+    "keep_alive": "5m"
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `host` | Ollama 服务地址 |
+| `api_key` | Ollama Cloud API 密钥，可选 |
+| `proxy` | 网络代理地址，可选 |
+| `thinking_mode` | 思考模式：`auto`、`on`、`off` |
+| `thinking_level` | GPT-OSS 等模型的思考强度：`low`、`medium`、`high` |
+| `keep_alive` | 模型保活时间 |
 
 ### DeepSeek
 
