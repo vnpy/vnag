@@ -24,6 +24,7 @@ S = 100 × (1 + 100) / 2 = 100 × 101 / 2 = 5050
 
 | 网关 | 字段 | 说明 |
 |------|------|------|
+| OllamaGateway | `thinking` / `reasoning` | Ollama thinking 输出和跨轮恢复 |
 | DeepseekGateway | `thinking` | DeepSeek 思维链 |
 | MinimaxGateway | `reasoning` | MiniMax 交错思维 |
 | BailianGateway | `thinking` | 百炼 Qwen3/QwQ 深度思考 |
@@ -136,8 +137,8 @@ class Delta(BaseModel):
 
 ### thinking vs reasoning
 
-- **thinking**：纯文本的思考过程，用于 DeepSeek、百炼等
-- **reasoning**：结构化的推理数据，用于 MiniMax 等
+- **thinking**：纯文本的思考过程，用于 Ollama、DeepSeek、百炼等
+- **reasoning**：结构化的推理数据，用于 MiniMax，或用于保存 Ollama 的 thinking 增量
 
 ```python
 # MiniMax 的 reasoning 格式示例
@@ -163,6 +164,7 @@ Chat UI 会自动显示思考过程：
 不是所有模型都支持思维链，选择专门的推理模型：
 
 - DeepSeek Reasoner
+- Ollama 上的 Qwen3 / DeepSeek-R1 / GPT-OSS
 - Qwen3 / QwQ
 - Claude 3.5 Sonnet（通过 OpenRouter）
 

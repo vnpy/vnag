@@ -137,6 +137,7 @@ Gateway 是与大模型 API 通信的抽象层，提供统一的接口。
 | `CompletionGateway` | OpenAI Chat Completions API（及兼容接口） |
 | `AnthropicGateway` | Anthropic Claude API |
 | `DashscopeGateway` | 阿里云 Dashscope API |
+| `OllamaGateway` | Ollama 原生 SDK（支持 thinking） |
 | `DeepseekGateway` | DeepSeek API（支持思维链） |
 | `MinimaxGateway` | MiniMax API |
 | `BailianGateway` | 阿里云百炼平台 |
