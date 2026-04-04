@@ -290,7 +290,7 @@ Profile 配置保存在 `.vnag/profile/` 目录下。
         "code-tools_execute-code",
         "file-tools_read-file"
     ],
-    "temperature": 0.5,
+    "temperature": 1.0,
     "max_tokens": 4096,
     "max_iterations": 10
 }

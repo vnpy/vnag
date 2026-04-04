@@ -65,7 +65,7 @@ profile = Profile(
     name="我的助手",
     prompt="你是一个乐于助人的 AI 助手。",
     tools=["datetime-tools_current-date"],  # 工具列表，不需要工具时传空列表 []
-    temperature=0.7
+    temperature=1.0
 )
 
 # 4. 创建 Agent 并对话

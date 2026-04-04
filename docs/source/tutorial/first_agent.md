@@ -35,7 +35,7 @@ def main():
         name="我的第一个助手",
         prompt="你是一个友好、乐于助人的 AI 助手。请用简洁清晰的语言回答用户的问题。",
         tools=[],  # 暂不使用工具
-        temperature=0.7
+        temperature=1.0
     )
     
     # 5. 创建 Agent
@@ -119,7 +119,7 @@ profile = Profile(
     name="我的第一个助手",
     prompt="你是一个友好、乐于助人的 AI 助手...",
     tools=[],
-    temperature=0.7
+    temperature=1.0
 )
 ```
 
@@ -127,7 +127,7 @@ Profile 定义了 Agent 的行为特征：
 - `name` - 配置名称
 - `prompt` - 系统提示词，定义 Agent 的角色和行为
 - `tools` - 可用的工具列表
-- `temperature` - 生成温度（0-2，越高越随机）
+- `temperature` - 生成温度。部分模型支持 0-2 范围调节，部分模型会固定为 `1.0` 或忽略该参数
 
 ### 第五步：创建 Agent
 

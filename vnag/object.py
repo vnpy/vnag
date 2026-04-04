@@ -105,6 +105,8 @@ class Profile(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     max_iterations: int = 10
+    compaction_threshold: int = 0
+    compaction_turns: int = 3
 
 
 class Session(BaseModel):
@@ -114,3 +116,5 @@ class Session(BaseModel):
     name: str
     model: str = ""
     messages: list[Message] = Field(default_factory=list)
+    summary: str = ""
+    offset: int = 1

@@ -257,7 +257,7 @@ messages = [
 request = Request(
     model="gpt-4o",
     messages=messages,
-    temperature=0.7
+    temperature=1.0
 )
 
 # 流式调用
@@ -319,7 +319,7 @@ request = Request(
     model="gpt-4o",           # 模型名称
     messages=[...],           # 消息列表
     tool_schemas=[...],       # 工具定义列表
-    temperature=0.7,          # 生成温度 (0-2)
+    temperature=1.0,          # 生成温度；部分模型会固定为 1.0 或忽略该参数
     top_p=0.9,               # 核采样参数
     max_tokens=4096          # 最大输出 token
 )

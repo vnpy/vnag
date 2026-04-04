@@ -255,9 +255,11 @@ profile = Profile(
     prompt="系统提示词",        # 必填
     tools=["tool1", "tool2"], # 可用工具
     use_skills=False,         # 是否启用技能
-    temperature=0.7,          # 生成温度
+    temperature=1.0,          # 生成温度
     max_tokens=4096,          # 最大输出
-    max_iterations=10         # 最大工具调用轮次
+    max_iterations=10,        # 最大工具调用轮次
+    compaction_threshold=0,   # 输入 token 阈值，0 表示关闭
+    compaction_turns=3        # 压缩后保留最近轮数
 )
 ```
 
@@ -269,9 +271,11 @@ profile = Profile(
 | `prompt` | str | 必填 | 系统提示词 |
 | `tools` | list[str] | 必填 | 可用工具名称列表（可传空列表 `[]`） |
 | `use_skills` | bool | False | 是否启用技能系统 |
-| `temperature` | float | None | 生成温度 (0-2) |
+| `temperature` | float | None | 生成温度。部分模型支持 0-2 范围调节，部分模型会固定为 `1.0` 或忽略该参数 |
 | `max_tokens` | int | None | 最大输出 token |
 | `max_iterations` | int | 10 | 最大工具调用轮次 |
+| `compaction_threshold` | int | 0 | 输入 token 阈值，0 表示关闭 |
+| `compaction_turns` | int | 3 | 压缩后保留最近完整轮次参与后续请求 |
 
 ## Session 会话
 
@@ -290,6 +294,8 @@ session = Session(
 ```
 
 Session 会自动保存到 `.vnag/session/` 目录。
+
+启用会话压缩后，`Session` 仍会保留完整原始消息历史；压缩只影响后续请求时发送给模型的上下文窗口。内部会额外维护 `summary` 和 `offset`，用于记录已折叠进摘要的历史范围。压缩触发基于最近一次请求返回的 `usage.input_tokens`；摘要长度主要通过提示词约束控制，实际请求仍复用当前会话的 `max_tokens` 配置。
 
 ## 下一步
 

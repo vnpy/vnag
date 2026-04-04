@@ -64,7 +64,7 @@ profile = Profile(
     prompt="你是一个专业的代码助手...",   # 系统提示词
     tools=["code-tools_execute-code"],  # 可用工具列表
     use_skills=False,                   # 是否启用技能系统
-    temperature=0.7,                    # 生成温度
+    temperature=1.0,                    # 生成温度
     max_tokens=4096,                    # 最大输出 token
     max_iterations=10                   # 最大工具调用轮次
 )
@@ -76,7 +76,7 @@ profile = Profile(
 | `prompt` | str | 是 | 系统提示词，定义 Agent 的角色和行为 |
 | `tools` | list[str] | 是 | 工具名称列表，Agent 可以调用的工具（不需要工具时传 `[]`） |
 | `use_skills` | bool | 否 | 是否启用技能系统（默认 False） |
-| `temperature` | float | 否 | 生成温度，控制随机性（0-2） |
+| `temperature` | float | 否 | 生成温度。部分模型支持 0-2 范围调节，部分模型会固定为 `1.0` 或忽略该参数 |
 | `max_tokens` | int | 否 | 单次回复的最大 token 数 |
 | `max_iterations` | int | 否 | 单次请求中最大的工具调用轮次（默认 10） |
 
@@ -95,6 +95,8 @@ session = Session(
     messages=[]                      # 消息历史
 )
 ```
+
+启用会话压缩后，`Session` 还会维护 `summary` 和 `offset` 两个内部状态，用于在不删除原始消息的前提下压缩后续请求上下文。
 
 ## Message（消息）
 

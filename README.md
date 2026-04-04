@@ -108,7 +108,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 - **Profile (配置)**: 定义了 Agent 行为的配置模板，包括：
   - **系统提示词 (Prompt)**: 设定 Agent 的角色和行为准则。
   - **工具集 (Tools)**: 从本地工具和MCP工具中选择 Agent 可以使用的工具。
-  - **模型参数**: 如 `temperature`, `max_tokens` 等，用于控制模型的生成行为。
+  - **模型参数**: 如 `temperature`, `max_tokens` 等，用于控制模型的生成行为。需要注意的是，部分模型会固定使用 `1.0` 或忽略自定义温度。
 
 **两种方式来自定义 Agent:**
 
