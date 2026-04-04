@@ -149,6 +149,8 @@ You › /retry
 python -m vnag.cli --task "用 Python 写一个冒泡排序函数"
 ```
 
+如果当前 Profile 启用了 `interaction-tools_ask-user`，则 `--task` 模式不适合在无人值守脚本、CI 或无交互终端环境中使用。此类场景下请改用普通交互模式，或切换到不包含交互工具的 Profile。
+
 **与其他命令组合使用**：
 
 ```bash

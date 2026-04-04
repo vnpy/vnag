@@ -309,6 +309,14 @@ VNAG 提供了多类内置工具：
 "search-tools_jina-search"    # Jina Search API
 ```
 
+### terminal_tools
+
+终端工具用于执行本地命令并返回输出，适合网络诊断、环境检查等场景。
+
+```python
+"terminal-tools_execute-command"  # 执行终端命令
+```
+
 ### todo_tools
 
 进程内待办工具，适合在单轮任务中维护简短的步骤状态。
@@ -318,6 +326,21 @@ VNAG 提供了多类内置工具：
 "todo-tools_update-todos"  # 标记指定步骤为已完成
 "todo-tools_read-todos"    # 读取当前待办状态
 ```
+
+### interaction_tools
+
+交互工具允许模型在工具执行阶段主动向用户提问，并等待用户返回一段文本答案。
+
+```python
+"interaction-tools_ask-user"  # 向用户提问并等待回答
+```
+
+说明：
+
+- `ask-user` 支持开放式、选项式和允许自定义输入的混合式提问。
+- 工具返回值始终为字符串；选项式场景下返回选中项原文，而不是编号。
+- 该工具依赖前端注册交互处理器，通常在 GUI 或交互式 CLI 中可用。
+- 在无人值守脚本或无交互终端环境中，不建议为 Profile 启用该工具。
 
 ## 工具权限配置
 

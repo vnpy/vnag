@@ -14,6 +14,7 @@
 - 新增 MoonshotGateway、ZhipuGateway、VolcengineGateway
 - 增加终端工具模块 terminal_tools
 - 增加进程内待办工具模块 todo_tools
+- 增加交互工具模块 interaction_tools，支持模型主动向用户提问
 - 新增 CLI 交互模式
 
 ### 改进
@@ -26,6 +27,7 @@
 - 当前会话返回结束前禁止发送新的请求
 - 优化 TaskAgent 的 ReAct 执行
 - 优化日志追踪模块
+- GUI 和 CLI 增加对交互式工具提问的前端支持
 
 ### 修复
 

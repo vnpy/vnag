@@ -93,20 +93,19 @@ def main() -> None:
     renderer: Renderer = Renderer()
     bridge: StreamBridge = StreamBridge(agent, renderer)
 
-    # 非交互模式：执行单次任务后退出
-    if args.task:
-        bridge.run(args.task)
-        return
-
     # 用 list 包装 agent 引用，使 toolbar 和主循环能同步更新
     agent_ref: list[TaskAgent] = [agent]
 
-    # 交互模式
     session: PromptSession = PromptSession(
         history=FileHistory(str(HISTORY_FILE)),
         completer=CliCompleter(),
         bottom_toolbar=_make_toolbar(agent_ref),
     )
+
+    # 非交互模式：执行单次任务后退出
+    if args.task:
+        bridge.run(args.task, session)
+        return
 
     renderer.show_welcome(agent)
 
@@ -125,7 +124,7 @@ def main() -> None:
         if user_input.startswith("/"):
             try:
                 agent, bridge = handle_command(
-                    user_input, engine, agent, bridge, renderer,
+                    user_input, engine, agent, bridge, renderer, session,
                 )
                 agent_ref[0] = agent
             except EOFError:
@@ -133,6 +132,6 @@ def main() -> None:
             continue
 
         # 普通对话
-        bridge.run(user_input)
+        bridge.run(user_input, session)
 
     renderer.show_goodbye()

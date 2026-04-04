@@ -1,5 +1,7 @@
 """CLI 渲染器：将结构化 Delta 渲染为终端输出"""
 
+from typing import Any
+
 from rich.console import Console
 from rich.rule import Rule
 
@@ -76,6 +78,26 @@ class Renderer:
         elif delta.event == DeltaEvent.ERROR:
             msg = delta.payload["message"]
             self.console.print(f"\n  ✗ {msg}", style="bold red")
+
+    def render_ask_prompt(self, payload: dict[str, Any]) -> None:
+        """渲染 ask_user 提问。"""
+        question: str = payload["question"]
+        choices: list[str] | None = payload.get("choices")
+        allow_other: bool = bool(payload.get("allow_other", False))
+
+        self.console.print()
+        self.console.print("  模型提问:", style="bold cyan")
+        self.console.print(f"  {question}")
+
+        if choices:
+            for index, choice in enumerate(choices, start=1):
+                self.console.print(f"    {index}. {choice}", style="cyan")
+
+        if allow_other:
+            self.console.print(
+                "  可输入编号、选项原文，或直接输入其他内容。",
+                style="dim",
+            )
 
     def finish_stream(self) -> None:
         """流式输出结束"""

@@ -203,7 +203,7 @@ vnag/
 │   ├── engine.py        # 智能体引擎
 │   ├── skill.py         # 技能系统
 │   ├── gateways/        # 大模型网关（15 种）
-│   ├── tools/           # 内置本地工具（8 类）
+│   ├── tools/           # 内置本地工具（9 类）
 │   ├── segmenters/      # RAG 分段器
 │   ├── embedders/       # RAG 嵌入器
 │   ├── vectors/         # RAG 向量库
@@ -218,7 +218,7 @@ vnag/
 
 ### 内置工具
 
-vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索、待办管理等 8 类本地工具，开箱即用。其中文件系统工具支持全文读取、带行号分段读取、字符串替换与按行块替换，适合代码编辑与自动化修订场景。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
+vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索、待办管理、交互提问等 9 类本地工具，开箱即用。其中文件系统工具支持全文读取、带行号分段读取、字符串替换与按行块替换，适合代码编辑与自动化修订场景；交互工具支持模型在 GUI 或 CLI 中主动向用户提问并等待回答。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
 
 ## 功能概览
 
@@ -226,10 +226,10 @@ vnag 内置了日期时间、文件系统、网络、终端与系统、代码执
 |------|------|
 | **Agent 引擎** | ReAct 循环编排、多轮对话、Profile 配置、技能系统、执行追踪 |
 | **LLM 网关** | OpenAI、Anthropic、Dashscope、Ollama、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM、Bedrock、Gemini，支持流式输出和思维链 |
-| **工具系统** | 本地函数工具、MCP 远程工具、8 类内置工具 |
+| **工具系统** | 本地函数工具、MCP 远程工具、9 类内置工具，支持交互式提问工具 |
 | **RAG** | 4 种分段器（Simple / Markdown / Python / C++）、3 种嵌入器（OpenAI / Dashscope / SentenceTransformers）、3 种向量库（ChromaDB / Qdrant / DuckDB） |
-| **图形界面** | 基于 PySide6 的聊天 UI，支持 Profile 管理、多智能体切换、Markdown 渲染、Thinking 显示 |
-| **命令行界面** | 基于 Prompt Toolkit 的 CLI，支持自动补全和 Markdown 终端渲染 |
+| **图形界面** | 基于 PySide6 的聊天 UI，支持 Profile 管理、多智能体切换、Markdown 渲染、Thinking 显示和交互式工具提问 |
+| **命令行界面** | 基于 Prompt Toolkit 的 CLI，支持自动补全、Markdown 终端渲染和交互式工具提问 |
 
 详细的功能更新记录请参考 [CHANGELOG](CHANGELOG.md)。
 
