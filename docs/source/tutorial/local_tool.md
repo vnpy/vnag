@@ -21,14 +21,20 @@ VNAG 提供了多类内置工具：
 |----------|------|
 | `file-tools_list-directory` | 列出目录内容 |
 | `file-tools_read-file` | 读取文件内容 |
+| `file-tools_read-file-snippet` | 按范围读取文件片段，并返回带行号的内容 |
 | `file-tools_write-file` | 写入文件内容 |
 | `file-tools_delete-file` | 删除文件 |
 | `file-tools_glob-files` | 按模式匹配文件 |
 | `file-tools_search-content` | 搜索文件内容 |
-| `file-tools_replace-content` | 替换文件内容 |
+| `file-tools_replace-content` | 按字符串替换文件内容，支持匹配次数校验与仅首处替换 |
+| `file-tools_replace-line-block` | 按 1-based 行号闭区间替换文件块 |
 
 :::{warning}
 文件系统工具需要配置权限。请在 `.vnag/tool_filesystem.json` 中设置允许访问的路径。
+:::
+
+:::{tip}
+`replace-content` 适合基于唯一文本片段做精确替换；`replace-line-block` 适合先用 `read-file-snippet` 获取行号，再按行区间稳定修改代码。
 :::
 
 ### 网络工具 (network_tools)
@@ -223,6 +229,8 @@ calories_tool = LocalTool(calculate_calories)
 1. **类型注解**：参数和返回值应有类型注解
 2. **文档字符串**：描述工具功能，AI 会根据描述决定何时使用
 3. **返回字符串**：返回值应为字符串类型
+
+对于可选参数，`LocalTool` 会自动从类型注解生成 schema。例如 `int | None`、`Optional[int]` 会被识别为 `integer` 且带 `nullable` 标记。
 
 ```python
 def example_tool(

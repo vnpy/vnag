@@ -218,7 +218,7 @@ vnag/
 
 ### 内置工具
 
-vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索、待办管理等 8 类本地工具，开箱即用。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
+vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索、待办管理等 8 类本地工具，开箱即用。其中文件系统工具支持全文读取、带行号分段读取、字符串替换与按行块替换，适合代码编辑与自动化修订场景。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
 
 ## 功能概览
 
@@ -262,6 +262,9 @@ ruff check .
 
 # 类型检查
 mypy vnag
+
+# 运行测试
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ### 问题反馈
