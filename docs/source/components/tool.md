@@ -148,6 +148,30 @@ schema = ToolSchema(
 | `list` | `array` |
 | `dict` | `object` |
 
+对于 `Optional[T]` 或 `T | None` 这类可选类型，VNAG 会自动生成对应的基础类型，并附带 `nullable: true`。例如：
+
+```python
+def replace_content(
+    path: str,
+    old_content: str,
+    new_content: str,
+    *,
+    expected_occurrences: int | None = None,
+) -> str:
+    ...
+```
+
+生成的参数片段类似：
+
+```python
+{
+    "expected_occurrences": {
+        "type": "integer",
+        "nullable": True
+    }
+}
+```
+
 ## ToolCall 工具调用
 
 当模型需要调用工具时，会返回 `ToolCall` 对象：
@@ -237,13 +261,15 @@ VNAG 提供了多类内置工具：
 ### file_tools
 
 ```python
-"file-tools_list-directory"   # 列出目录
-"file-tools_read-file"        # 读取文件
-"file-tools_write-file"       # 写入文件
-"file-tools_delete-file"      # 删除文件
-"file-tools_glob-files"       # 匹配文件
-"file-tools_search-content"   # 搜索内容
-"file-tools_replace-content"  # 替换内容
+"file-tools_list-directory"     # 列出目录
+"file-tools_read-file"          # 读取文件
+"file-tools_read-file-snippet"  # 按范围读取文件片段（带行号）
+"file-tools_write-file"         # 写入文件
+"file-tools_delete-file"        # 删除文件
+"file-tools_glob-files"         # 匹配文件
+"file-tools_search-content"     # 搜索内容
+"file-tools_replace-content"    # 按文本替换内容
+"file-tools_replace-line-block" # 按行号替换内容块
 ```
 
 ### network_tools
@@ -310,6 +336,12 @@ VNAG 提供了多类内置工具：
     ]
 }
 ```
+
+说明：
+
+- `write_allowed` 中的路径同时具备读写权限
+- `read-file-snippet` 会拒绝明显的二进制文件，并以 `1-based` 行号返回内容
+- `replace-line-block` 使用 `1-based` 闭区间行号，内部会按统一换行重组内容，写回后可能改变原文件的换行风格
 
 ## 最佳实践
 
