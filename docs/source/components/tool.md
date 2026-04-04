@@ -283,6 +283,16 @@ VNAG 提供了多类内置工具：
 "search-tools_jina-search"    # Jina Search API
 ```
 
+### todo_tools
+
+进程内待办工具，适合在单轮任务中维护简短的步骤状态。
+
+```python
+"todo-tools_init-todos"    # 初始化待办列表并返回 list_id
+"todo-tools_update-todos"  # 标记指定步骤为已完成
+"todo-tools_read-todos"    # 读取当前待办状态
+```
+
 ## 工具权限配置
 
 文件系统工具需要权限配置：
