@@ -78,6 +78,18 @@ VNAG 提供了多类内置工具：
 联网搜索工具需要在 `.vnag/tool_search.json` 中配置 API 密钥。Jina Search 可以不配置密钥直接使用，但可能有请求限制。
 :::
 
+### 待办工具 (todo_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `todo-tools_init-todos` | 初始化待办列表并返回 `list_id` |
+| `todo-tools_update-todos` | 根据 `list_id` 将指定步骤标记为已完成 |
+| `todo-tools_read-todos` | 根据 `list_id` 读取当前待办状态 |
+
+::::{note}
+`init-todos` 返回的 `list_id` 需要在后续 `update-todos` 和 `read-todos` 调用中重复使用。
+::::
+
 ## 使用内置工具
 
 ### 示例：日期助手

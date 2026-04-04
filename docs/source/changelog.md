@@ -13,6 +13,7 @@
 - 新增 Agent Skill 的支持
 - 新增 MoonshotGateway、ZhipuGateway、VolcengineGateway
 - 增加终端工具模块 terminal_tools
+- 增加进程内待办工具模块 todo_tools
 - 新增 CLI 交互模式
 
 ### 改进
@@ -113,6 +114,7 @@
 - web_tools: Web 工具
 - search_tools: 联网搜索工具
 - terminal_tools: 终端命令工具
+- todo_tools: 进程内待办工具
 
 ---
 
