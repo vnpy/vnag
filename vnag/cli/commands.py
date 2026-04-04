@@ -1,5 +1,7 @@
 """CLI 斜杠命令处理"""
 
+from prompt_toolkit import PromptSession
+
 from ..agent import TaskAgent
 from ..engine import AgentEngine
 from ..object import Profile
@@ -14,6 +16,7 @@ def handle_command(
     agent: TaskAgent,
     bridge: StreamBridge,
     renderer: Renderer,
+    session: PromptSession,
 ) -> tuple[TaskAgent, StreamBridge]:
     """
     处理斜杠命令，返回 (agent, bridge) 元组。
@@ -66,7 +69,7 @@ def handle_command(
     elif cmd == "/retry":
         prompt: str = agent.pop_round()
         if prompt:
-            bridge.run(prompt)
+            bridge.run(prompt, session)
         else:
             renderer.show_info("没有可重发的对话")
 

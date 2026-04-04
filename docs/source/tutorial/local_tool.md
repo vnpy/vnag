@@ -84,6 +84,16 @@ VNAG 提供了多类内置工具：
 联网搜索工具需要在 `.vnag/tool_search.json` 中配置 API 密钥。Jina Search 可以不配置密钥直接使用，但可能有请求限制。
 :::
 
+### 终端工具 (terminal_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `terminal-tools_execute-command` | 执行本地终端命令并返回输出 |
+
+::::{warning}
+终端工具会直接执行本地命令，请仅在可信环境中使用，并为 Agent 提供明确的使用边界。
+::::
+
 ### 待办工具 (todo_tools)
 
 | 工具名称 | 说明 |
@@ -94,6 +104,20 @@ VNAG 提供了多类内置工具：
 
 ::::{note}
 `init-todos` 返回的 `list_id` 需要在后续 `update-todos` 和 `read-todos` 调用中重复使用。
+::::
+
+### 交互工具 (interaction_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `interaction-tools_ask-user` | 向用户提问并同步等待文本回答 |
+
+::::{note}
+`ask-user` 支持开放式、选项式和混合式提问。选项式返回选中项原文，而不是编号。
+::::
+
+::::{warning}
+交互工具依赖 GUI 或交互式 CLI 提供输入能力。在无人值守脚本、CI 或无交互终端环境中，不建议启用。
 ::::
 
 ## 使用内置工具

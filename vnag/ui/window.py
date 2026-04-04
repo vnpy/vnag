@@ -2,6 +2,7 @@ import re
 from typing import cast
 
 from ..engine import AgentEngine
+from ..interaction import AskPayload, set_ask_handler
 from ..utility import WORKING_DIR, write_text_file
 from ..agent import Profile, TaskAgent
 from .. import __version__
@@ -15,6 +16,46 @@ from .widget import (
 )
 from .setting import get_setting
 from .qt import QtWidgets, QtGui, QtCore
+
+
+class AskInvoker(QtCore.QObject):
+    """在 GUI 主线程中执行 ask_user 弹窗。"""
+
+    def __init__(self, window: "MainWindow") -> None:
+        """构造函数。"""
+        super().__init__(window)
+
+        self.window: MainWindow = window
+        self.payload: AskPayload | None = None
+        self.answer: str = ""
+
+    @QtCore.Slot()
+    def ask(self) -> None:
+        """在主线程中弹出输入框。"""
+        payload: AskPayload | None = self.payload
+        if payload is None:
+            self.answer = ""
+            return
+
+        if not payload.choices:
+            text, ok = QtWidgets.QInputDialog.getText(
+                self.window,
+                "模型提问",
+                payload.question,
+            )
+            self.answer = text.strip() if ok else ""
+            return
+
+        editable: bool = payload.allow_other
+        text, ok = QtWidgets.QInputDialog.getItem(
+            self.window,
+            "模型提问",
+            payload.question,
+            payload.choices,
+            0,
+            editable,
+        )
+        self.answer = text.strip() if ok else ""
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -33,9 +74,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.models: list[str] = self.engine.list_models()
 
         self.first_show: bool = True
+        self.ask_invoker: AskInvoker = AskInvoker(self)
 
         self.init_ui()
         self.load_data()
+
+        self.init_ask_handler()
 
     def init_ui(self) -> None:
         """初始化UI"""
@@ -48,6 +92,22 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_label: QtWidgets.QLabel = QtWidgets.QLabel()
         self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.statusBar().addWidget(self.status_label, 1)
+
+    def init_ask_handler(self) -> None:
+        """注册 GUI 环境下的 ask_user 处理函数。"""
+        set_ask_handler(self._ask)
+
+    def _ask(self, payload: AskPayload) -> str:
+        """在主线程中同步向用户提问。"""
+        self.ask_invoker.payload = payload
+        self.ask_invoker.answer = ""
+
+        QtCore.QMetaObject.invokeMethod(        # type: ignore
+            self.ask_invoker,
+            "ask",
+            QtCore.Qt.ConnectionType.BlockingQueuedConnection,
+        )
+        return self.ask_invoker.answer
 
     def init_widgets(self) -> None:
         """初始化中央控件"""
@@ -469,6 +529,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def quit_application(self) -> None:
         """退出应用程序"""
+        set_ask_handler(None)
+
         self.tray_icon.hide()
         QtWidgets.QApplication.quit()
 
