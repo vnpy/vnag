@@ -397,6 +397,31 @@ class AgentWidget(QtWidgets.QWidget):
 
         self.update_buttons()
 
+    def build_markdown_text(self) -> str:
+        """生成会话的 Markdown 纯文本（仅用户与助手的正文 content，不含思考与工具信息）"""
+        parts: list[str] = [f"# {self.agent.name}\n\n"]
+        assistant_content: str = ""
+
+        for message in self.agent.messages:
+            if message.role is Role.SYSTEM:
+                continue
+            elif message.role is Role.USER:
+                if message.content:
+                    if assistant_content:
+                        parts.append(f"## 助手\n\n{assistant_content}\n\n")
+                        assistant_content = ""
+                    parts.append(f"## 用户\n\n{message.content}\n\n")
+                else:
+                    continue
+            elif message.role is Role.ASSISTANT:
+                if message.content:
+                    assistant_content += message.content
+
+        if assistant_content:
+            parts.append(f"## 助手\n\n{assistant_content}\n\n")
+
+        return "".join(parts).rstrip() + "\n"
+
     def send_message(self) -> None:
         """发送消息"""
         # 检查是否已配置 AI Gateway
@@ -670,6 +695,17 @@ class ProfileDialog(QtWidgets.QDialog):
         self.iterations_spin.setValue(20)
         self.iterations_spin.setToolTip("智能体连续调用工具的最大轮数，建议保持默认值")
 
+        self.compaction_threshold_line: QtWidgets.QLineEdit = QtWidgets.QLineEdit()
+        compaction_threshold_validator: QtGui.QIntValidator = QtGui.QIntValidator(0, 10_000_000)
+        self.compaction_threshold_line.setValidator(compaction_threshold_validator)
+        self.compaction_threshold_line.setPlaceholderText("可选，按最近一次请求的输入 token 触发会话压缩，0 表示关闭")
+
+        self.compaction_turns_spin: QtWidgets.QSpinBox = QtWidgets.QSpinBox()
+        self.compaction_turns_spin.setRange(1, 50)
+        self.compaction_turns_spin.setSingleStep(1)
+        self.compaction_turns_spin.setValue(3)
+        self.compaction_turns_spin.setToolTip("压缩后保留最近多少轮完整对话")
+
         # 技能开关
         self.skills_check: QtWidgets.QCheckBox = QtWidgets.QCheckBox("允许调用")
         self.skills_check.setToolTip("启用后，智能体可调用 skills/ 目录下的技能脚本")
@@ -686,6 +722,8 @@ class ProfileDialog(QtWidgets.QDialog):
         settings_form.addRow("温度", self.temperature_line)
         settings_form.addRow("Token", self.tokens_line)
         settings_form.addRow("迭代", self.iterations_spin)
+        settings_form.addRow("压缩阈值", self.compaction_threshold_line)
+        settings_form.addRow("保留轮数", self.compaction_turns_spin)
         settings_form.addRow("技能", self.skills_check)
 
         middle_widget: QtWidgets.QWidget = QtWidgets.QWidget()
@@ -797,6 +835,8 @@ class ProfileDialog(QtWidgets.QDialog):
         self.temperature_line.clear()
         self.tokens_line.clear()
         self.iterations_spin.setValue(10)
+        self.compaction_threshold_line.clear()
+        self.compaction_turns_spin.setValue(3)
         self.skills_check.setChecked(False)
 
         iterator = QtWidgets.QTreeWidgetItemIterator(self.tool_tree)
@@ -830,6 +870,12 @@ class ProfileDialog(QtWidgets.QDialog):
         max_tokens: int | None = int(max_tokens_text) if max_tokens_text else None
 
         max_iterations: int = self.iterations_spin.value()
+
+        compaction_threshold_text: str = self.compaction_threshold_line.text()
+        compaction_threshold: int = int(compaction_threshold_text) if compaction_threshold_text else 0
+
+        compaction_turns: int = self.compaction_turns_spin.value()
+
         use_skills: bool = self.skills_check.isChecked()
 
         selected_tools: list[str] = []
@@ -852,6 +898,8 @@ class ProfileDialog(QtWidgets.QDialog):
             profile.temperature = temperature
             profile.max_tokens = max_tokens
             profile.max_iterations = max_iterations
+            profile.compaction_threshold = compaction_threshold
+            profile.compaction_turns = compaction_turns
 
             self.engine.update_profile(profile)
         # 创建新配置
@@ -864,6 +912,8 @@ class ProfileDialog(QtWidgets.QDialog):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 max_iterations=max_iterations,
+                compaction_threshold=compaction_threshold,
+                compaction_turns=compaction_turns,
             )
             self.engine.add_profile(profile)
 
@@ -926,6 +976,8 @@ class ProfileDialog(QtWidgets.QDialog):
             self.tokens_line.clear()
 
         self.iterations_spin.setValue(profile.max_iterations)
+        self.compaction_threshold_line.setText(str(profile.compaction_threshold))
+        self.compaction_turns_spin.setValue(profile.compaction_turns)
         self.skills_check.setChecked(profile.use_skills)
 
         # 只操作叶子节点（工具项），让AutoTristate自动更新父节点

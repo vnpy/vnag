@@ -21,14 +21,20 @@ VNAG 提供了多类内置工具：
 |----------|------|
 | `file-tools_list-directory` | 列出目录内容 |
 | `file-tools_read-file` | 读取文件内容 |
+| `file-tools_read-file-snippet` | 按范围读取文件片段，并返回带行号的内容 |
 | `file-tools_write-file` | 写入文件内容 |
 | `file-tools_delete-file` | 删除文件 |
 | `file-tools_glob-files` | 按模式匹配文件 |
 | `file-tools_search-content` | 搜索文件内容 |
-| `file-tools_replace-content` | 替换文件内容 |
+| `file-tools_replace-content` | 按字符串替换文件内容，支持匹配次数校验与仅首处替换 |
+| `file-tools_replace-line-block` | 按 1-based 行号闭区间替换文件块 |
 
 :::{warning}
 文件系统工具需要配置权限。请在 `.vnag/tool_filesystem.json` 中设置允许访问的路径。
+:::
+
+:::{tip}
+`replace-content` 适合基于唯一文本片段做精确替换；`replace-line-block` 适合先用 `read-file-snippet` 获取行号，再按行区间稳定修改代码。
 :::
 
 ### 网络工具 (network_tools)
@@ -78,13 +84,49 @@ VNAG 提供了多类内置工具：
 联网搜索工具需要在 `.vnag/tool_search.json` 中配置 API 密钥。Jina Search 可以不配置密钥直接使用，但可能有请求限制。
 :::
 
+### 终端工具 (terminal_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `terminal-tools_execute-command` | 执行本地终端命令并返回输出 |
+
+::::{warning}
+终端工具会直接执行本地命令，请仅在可信环境中使用，并为 Agent 提供明确的使用边界。
+::::
+
+### 待办工具 (todo_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `todo-tools_init-todos` | 初始化待办列表并返回 `list_id` |
+| `todo-tools_update-todos` | 根据 `list_id` 将指定步骤标记为已完成 |
+| `todo-tools_read-todos` | 根据 `list_id` 读取当前待办状态 |
+
+::::{note}
+`init-todos` 返回的 `list_id` 需要在后续 `update-todos` 和 `read-todos` 调用中重复使用。
+::::
+
+### 交互工具 (interaction_tools)
+
+| 工具名称 | 说明 |
+|----------|------|
+| `interaction-tools_ask-user` | 向用户提问并同步等待文本回答 |
+
+::::{note}
+`ask-user` 支持开放式、选项式和混合式提问。选项式返回选中项原文，而不是编号。
+::::
+
+::::{warning}
+交互工具依赖 GUI 或交互式 CLI 提供输入能力。在无人值守脚本、CI 或无交互终端环境中，不建议启用。
+::::
+
 ## 使用内置工具
 
 ### 示例：日期助手
 
 ```python
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 
@@ -92,7 +134,7 @@ from vnag.object import Profile
 def main():
     # 初始化
     setting = load_json("connect_openai.json")
-    gateway = OpenaiGateway()
+    gateway = CompletionGateway()
     gateway.init(setting)
     
     engine = AgentEngine(gateway)
@@ -211,6 +253,8 @@ calories_tool = LocalTool(calculate_calories)
 1. **类型注解**：参数和返回值应有类型注解
 2. **文档字符串**：描述工具功能，AI 会根据描述决定何时使用
 3. **返回字符串**：返回值应为字符串类型
+
+对于可选参数，`LocalTool` 会自动从类型注解生成 schema。例如 `int | None`、`Optional[int]` 会被识别为 `integer` 且带 `nullable` 标记。
 
 ```python
 def example_tool(

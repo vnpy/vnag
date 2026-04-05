@@ -47,13 +47,13 @@ python examples/ui/run_chat_ui.py
 
 ```python
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 
 # 1. 加载配置并初始化网关
 setting = load_json("connect_openai.json")
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init(setting)
 
 # 2. 初始化引擎
@@ -65,7 +65,7 @@ profile = Profile(
     name="我的助手",
     prompt="你是一个乐于助人的 AI 助手。",
     tools=["datetime-tools_current-date"],  # 工具列表，不需要工具时传空列表 []
-    temperature=0.7
+    temperature=1.0
 )
 
 # 4. 创建 Agent 并对话
@@ -121,7 +121,7 @@ MCP 工具需要在 `.vnag/mcp_config.json` 中配置：
 
 ```bash
 # 测试 Gateway
-python examples/gateway/run_openai_gateway.py
+python examples/gateway/run_completion_gateway.py
 
 # 测试本地工具
 python examples/tool/run_local_tool.py

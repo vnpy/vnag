@@ -13,7 +13,7 @@
 
 ```python
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
 from vnag.object import Profile
 
@@ -23,7 +23,7 @@ def main():
     setting = load_json("connect_openai.json")
     
     # 2. 创建并初始化网关
-    gateway = OpenaiGateway()
+    gateway = CompletionGateway()
     gateway.init(setting)
     
     # 3. 创建并初始化引擎
@@ -35,7 +35,7 @@ def main():
         name="我的第一个助手",
         prompt="你是一个友好、乐于助人的 AI 助手。请用简洁清晰的语言回答用户的问题。",
         tools=[],  # 暂不使用工具
-        temperature=0.7
+        temperature=1.0
     )
     
     # 5. 创建 Agent
@@ -79,17 +79,18 @@ setting = load_json("connect_openai.json")
 ### 第二步：初始化网关
 
 ```python
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init(setting)
 ```
 
 网关（Gateway）负责与大模型 API 通信。VNAG 支持多种网关：
 
-- `OpenaiGateway` - OpenAI 及兼容接口
+- `CompletionGateway` - OpenAI Chat Completions 及兼容接口
 - `AnthropicGateway` - Anthropic Claude
 - `DashscopeGateway` - 阿里云 Dashscope
+- `OllamaGateway` - Ollama 本地或云端模型
 - `DeepseekGateway` - DeepSeek
 - `MinimaxGateway` - MiniMax
 - `BailianGateway` - 阿里云百炼
@@ -118,7 +119,7 @@ profile = Profile(
     name="我的第一个助手",
     prompt="你是一个友好、乐于助人的 AI 助手...",
     tools=[],
-    temperature=0.7
+    temperature=1.0
 )
 ```
 
@@ -126,7 +127,7 @@ Profile 定义了 Agent 的行为特征：
 - `name` - 配置名称
 - `prompt` - 系统提示词，定义 Agent 的角色和行为
 - `tools` - 可用的工具列表
-- `temperature` - 生成温度（0-2，越高越随机）
+- `temperature` - 生成温度。部分模型支持 0-2 范围调节，部分模型会固定为 `1.0` 或忽略该参数
 
 ### 第五步：创建 Agent
 

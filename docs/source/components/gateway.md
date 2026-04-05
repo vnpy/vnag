@@ -38,14 +38,14 @@ class BaseGateway(ABC):
 
 ## 支持的网关
 
-### OpenaiGateway
+### CompletionGateway
 
 OpenAI API 及兼容接口。
 
 ```python
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 
-gateway = OpenaiGateway()
+gateway = CompletionGateway()
 gateway.init({
     "api_key": "sk-xxx",
     "base_url": "https://api.openai.com/v1"
@@ -98,6 +98,40 @@ gateway.init({
 ```
 
 **配置文件**：`.vnag/connect_dashscope.json`
+
+### OllamaGateway
+
+Ollama 原生 SDK，本地或云端 Ollama 服务均可使用。
+
+```python
+from vnag.gateways.ollama_gateway import OllamaGateway
+
+gateway = OllamaGateway()
+gateway.init({
+    "host": "http://localhost:11434",
+    "thinking_mode": "auto",
+    "thinking_level": "medium"
+})
+```
+
+**特点**：
+- 使用 `ollama` 官方 Python SDK
+- 支持 `thinking` 思考输出和流式显示
+- 支持交错思维链回传，适配工具调用场景
+- 支持查询本地或云端可用模型列表
+
+**配置说明**：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `host` | str | Ollama 服务地址 |
+| `api_key` | str | Ollama Cloud API 密钥，可选 |
+| `proxy` | str | 网络代理地址，可选 |
+| `thinking_mode` | str | 思考模式（auto/on/off） |
+| `thinking_level` | str | GPT-OSS 等模型的思考强度（low/medium/high） |
+| `keep_alive` | str | 模型保活时长，默认 `5m` |
+
+**配置文件**：`.vnag/connect_ollama.json`
 
 ### DeepseekGateway
 
@@ -223,7 +257,7 @@ messages = [
 request = Request(
     model="gpt-4o",
     messages=messages,
-    temperature=0.7
+    temperature=1.0
 )
 
 # 流式调用
@@ -285,7 +319,7 @@ request = Request(
     model="gpt-4o",           # 模型名称
     messages=[...],           # 消息列表
     tool_schemas=[...],       # 工具定义列表
-    temperature=0.7,          # 生成温度 (0-2)
+    temperature=1.0,          # 生成温度；部分模型会固定为 1.0 或忽略该参数
     top_p=0.9,               # 核采样参数
     max_tokens=4096          # 最大输出 token
 )

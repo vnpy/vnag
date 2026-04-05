@@ -41,6 +41,20 @@ TITLE_PROMPT: str = """
 5. 如果对话涉及多个话题，提取最主要的主题
 """
 
+COMPACTION_MAX_TOKENS: int = 1024
+COMPACTION_PROMPT: str = f"""
+请将以上对话压缩为一段供后续继续对话使用的上下文摘要。
+
+要求：
+1. 保留用户目标、已确认事实、重要结论、未完成事项和关键约束。
+2. 记录重要的文件名、工具结果结论、术语或实体名称。
+3. 忽略寒暄、重复表达和冗长工具输出细节。
+4. 使用简洁、连续的中文表述，直接返回摘要正文，不要附加说明。
+5. 必须在不超过{COMPACTION_MAX_TOKENS}个 token 的输出预算内完整写完摘要，不要输出半句或未完成列表。
+"""
+
+SUMMARY_PREFIX: str = "[vnag:session_summary]"
+
 
 class TaskAgent:
     """
@@ -75,23 +89,11 @@ class TaskAgent:
         self.round_prompt: str = ""
         self.round_start: int = 0
 
-        # 新会话自动添加系统提示词并保存
-        if not self.session.messages:
-            system_content: str = self.profile.prompt
+        # 确保会话始终以 system 消息开头，后续逻辑都依赖这个约定。
+        self._ensure_system_message()
 
-            # 如果启用了技能，追加 Level 1 技能目录
-            if self.profile.use_skills:
-                skill_catalog: str = self.engine.get_skill_catalog()
-                if skill_catalog:
-                    system_content += "\n\n" + skill_catalog
-
-            system_message: Message = Message(
-                role=Role.SYSTEM,
-                content=system_content
-            )
-            self.session.messages.append(system_message)
-
-            self._save_session()
+        # 更新摘要偏移量
+        self._normalize_offset()
 
         # 从已有消息推导最后一轮状态
         self._init_round()
@@ -109,6 +111,47 @@ class TaskAgent:
 
         self.round_prompt = ""
         self.round_start = len(self.session.messages)
+
+    def _ensure_system_message(self) -> None:
+        """确保会话首条消息始终为 system"""
+        if self.session.messages and self.session.messages[0].role == Role.SYSTEM:
+            return
+
+        system_content: str = self.profile.prompt
+
+        # 如果启用了技能，追加 Level 1 技能目录
+        if self.profile.use_skills:
+            skill_catalog: str = self.engine.get_skill_catalog()
+            if skill_catalog:
+                system_content += "\n\n" + skill_catalog
+
+        system_message: Message = Message(
+            role=Role.SYSTEM,
+            content=system_content
+        )
+
+        if self.session.messages:
+            self.session.messages.insert(0, system_message)
+        else:
+            self.session.messages.append(system_message)
+
+        self._save_session()
+
+    def _normalize_offset(self) -> None:
+        """规范化摘要偏移量，避免请求窗口越界"""
+        # 会话首条始终为 system，因此 offset 至少应跳过它
+        min_offset: int = 1
+
+        # 没有摘要时，不需要跳过任何普通消息，直接回到首条普通消息边界
+        if not self.session.summary:
+            self.session.offset = min_offset
+            return
+
+        # 已有摘要时，offset 不能小于最小边界，也不能超过当前消息列表长度
+        self.session.offset = min(
+            max(self.session.offset, min_offset),
+            len(self.session.messages),
+        )
 
     def _save_session(self) -> None:
         """保存会话状态到文件"""
@@ -157,6 +200,128 @@ class TaskAgent:
             else:
                 # 不存在则追加
                 collected.append(new_item)
+
+    def _get_last_input_tokens(self) -> int:
+        """返回最近一次模型请求的输入 token 数。"""
+        for message in reversed(self.session.messages):
+            if message.role == Role.ASSISTANT:
+                return message.usage.input_tokens
+
+        return 0
+
+    def _get_request_messages(self) -> list[Message]:
+        """构造发送给模型的请求消息"""
+        messages: list[Message] = list(self.session.messages)
+
+        if not self.session.summary:
+            return messages
+
+        self._normalize_offset()
+
+        summary_message: Message = Message(
+            role=Role.USER,
+            content=f"{SUMMARY_PREFIX}\n{self.session.summary}",
+        )
+
+        return [messages[0], summary_message, *messages[self.session.offset:]]
+
+    def _get_compaction_target(self) -> tuple[list[Message], int] | None:
+        """返回可压缩的旧消息及保留区间起点"""
+        self._normalize_offset()
+
+        keep_turns: int = max(1, self.profile.compaction_turns)
+        user_turns: int = 0
+        preserve_start: int | None = None
+
+        # 从后向前遍历消息列表，找到保留区间的起点
+        for index in range(len(self.session.messages) - 1, 0, -1):
+            message: Message = self.session.messages[index]
+
+            # 以用户消息为分界点，计算保留区间的长度
+            if message.role == Role.USER and message.content:
+                user_turns += 1
+                if user_turns >= keep_turns:
+                    preserve_start = index
+                    break
+
+        if preserve_start is None or preserve_start <= self.session.offset:
+            return None
+
+        messages_to_compact: list[Message] = self.session.messages[
+            self.session.offset:preserve_start
+        ]
+        if not messages_to_compact:
+            return None
+
+        return messages_to_compact, preserve_start
+
+    def _request_text(self, request: Request) -> str:
+        """聚合流式响应中的纯文本内容"""
+        full_content: str = ""
+
+        for delta in self.engine.stream(request):
+            if delta.content:
+                full_content += delta.content
+
+        return full_content.strip()
+
+    def _generate_summary(self, messages_to_compact: list[Message]) -> str:
+        """为待压缩的旧消息生成滚动摘要"""
+        summary_messages: list[Message] = [self.session.messages[0]]
+
+        if self.session.summary:
+            summary_messages.append(
+                Message(
+                    role=Role.USER,
+                    content=(
+                        f"{SUMMARY_PREFIX}\n"
+                        f"{self.session.summary}"
+                    ),
+                )
+            )
+
+        summary_messages.extend(messages_to_compact)
+        summary_messages.append(Message(role=Role.USER, content=COMPACTION_PROMPT))
+
+        request: Request = Request(
+            model=self.session.model,
+            messages=summary_messages,
+            tool_schemas=[],
+            temperature=1.0,
+            max_tokens=self.profile.max_tokens,
+        )
+
+        summary: str = self._request_text(request)
+        return summary
+
+    def _maybe_compact_session(self) -> None:
+        """在请求发送前按需压缩旧消息"""
+        threshold: int = self.profile.compaction_threshold
+        if threshold <= 0:
+            return
+
+        last_input_tokens: int = self._get_last_input_tokens()
+        if last_input_tokens <= threshold:
+            return
+
+        compaction_target = self._get_compaction_target()
+        if not compaction_target:
+            return
+
+        messages_to_compact, preserve_start = compaction_target
+
+        try:
+            summary: str = self._generate_summary(messages_to_compact)
+        except Exception:
+            return
+
+        if not summary:
+            return
+
+        self.session.summary = summary
+        self.session.offset = preserve_start
+
+        self._save_session()
 
     def _execute_tool(self, tool_call: ToolCall) -> ToolResult:
         """执行单个工具调用（含异常隔离）"""
@@ -281,17 +446,24 @@ class TaskAgent:
         # 当 LLM 不再请求工具调用时退出循环
         try:
             while iteration < self.profile.max_iterations:
-                # 更新回滚点，检查中止标志
-                checkpoint = len(self.session.messages)
+                # 检查中止标志
                 if self.aborted:
                     break
 
                 iteration += 1
 
+                # 在发送请求前按需压缩旧消息
+                self._maybe_compact_session()
+
+                # 更新回滚点
+                checkpoint = len(self.session.messages)
+
+                request_messages: list[Message] = self._get_request_messages()
+
                 # 构造 LLM 请求
                 request: Request = Request(
                     model=self.session.model,
-                    messages=self.session.messages,
+                    messages=request_messages,
                     tool_schemas=tool_schemas,
                     temperature=self.profile.temperature,
                     max_tokens=self.profile.max_tokens
@@ -357,15 +529,10 @@ class TaskAgent:
                 # 调用追踪器：记录响应接收
                 self.tracer.on_llm_end(assistant_msg)
 
-                # 正常结束（LLM 不再需要工具），退出循环
-                if step.finish_reason == FinishReason.STOP:
-                    break
-
-                # Action: 逐一执行工具调用
-                if (
-                    step.finish_reason == FinishReason.TOOL_CALLS
-                    and step.tool_calls
-                ):
+                # Action: 优先依据"事实上存在的工具调用"驱动控制流。
+                # 不以 finish_reason 作为是否执行工具的唯一依据，
+                # 避免 OpenAI 兼容网关将工具调用轮误标为 "stop" 时 Agent 提前终止。
+                if step.tool_calls:
                     rid: str = response_id or str(uuid4())
                     tool_results: list[ToolResult] = []
 
@@ -408,15 +575,38 @@ class TaskAgent:
                     # 继续下一次 ReAct 迭代
                     continue
 
-                # 其他结束原因（如 length），直接退出
+                # 正常结束（LLM 不再需要工具），退出循环
+                if step.finish_reason == FinishReason.STOP:
+                    break
+
+                # 输出被 token 长度限制截断
+                if step.finish_reason == FinishReason.LENGTH:
+                    yield Delta(
+                        id=response_id or str(uuid4()),
+                        event=DeltaEvent.WARNING,
+                        payload={"message": "模型输出因长度限制被截断"},
+                    )
+                    break
+
+                # 其他非预期结束原因（unknown / error / None）
+                if step.finish_reason in {
+                    FinishReason.UNKNOWN, FinishReason.ERROR, None
+                }:
+                    yield Delta(
+                        id=response_id or str(uuid4()),
+                        event=DeltaEvent.WARNING,
+                        payload={"message": "模型以非预期结束原因结束"},
+                    )
+                    break
+
                 break
 
-            # 迭代次数达到上限，发送警告事件
+            # 仅当循环因达到迭代上限而退出（非正常 STOP / break）时才发出警告
             if not self.aborted and iteration >= self.profile.max_iterations:
                 yield Delta(
                     id=response_id or str(uuid4()),
                     event=DeltaEvent.WARNING,
-                    payload={"message": "达到最大工具调用次数限制"},
+                    payload={"message": "达到最大迭代次数限制"},
                 )
 
         except Exception:
@@ -470,6 +660,7 @@ class TaskAgent:
             return
 
         del self.session.messages[self.round_start:]
+        self._normalize_offset()
         self._init_round()
         self._save_session()
 
@@ -488,7 +679,7 @@ class TaskAgent:
     def generate_title(self, max_length: int = 20) -> str:
         """生成会话标题"""
         # 复制会话消息并添加总结请求
-        messages: list[Message] = self.session.messages.copy()
+        messages: list[Message] = self._get_request_messages()
         messages.append(Message(role=Role.USER, content=TITLE_PROMPT.format(max_length=max_length)))
 
         # 构造请求（固定温度，避免上游 API 拒绝 null temperature）
@@ -501,10 +692,7 @@ class TaskAgent:
         )
 
         # 调用 LLM 生成标题
-        full_content: str = ""
-        for delta in self.engine.stream(request):
-            if delta.content:
-                full_content += delta.content
+        full_content: str = self._request_text(request)
 
         # 返回生成的标题（去除首尾空白和可能的引号）
         title: str = full_content.strip()

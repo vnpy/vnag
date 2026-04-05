@@ -1,13 +1,13 @@
 from typing import Any
 
-from .openai_gateway import OpenaiGateway
+from .completion_gateway import CompletionGateway
 
 
-class BailianGateway(OpenaiGateway):
+class BailianGateway(CompletionGateway):
     """
     阿里云百炼网关
 
-    继承自 OpenaiGateway，覆盖钩子方法以支持：
+    继承自 CompletionGateway，覆盖钩子方法以支持：
     - reasoning_content 格式的 thinking 提取（Qwen3/QwQ 等模型）
     - 请求中启用 enable_thinking 参数
     - 回传 thinking 内容到后续请求

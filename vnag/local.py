@@ -1,7 +1,7 @@
 from collections.abc import Callable
-from typing import Any, get_type_hints
+from typing import Any, Union, get_args, get_origin, get_type_hints
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, UnionType
 from glob import glob
 import inspect
 import importlib
@@ -116,8 +116,8 @@ class LocalManager:
             return f"Error executing tool [{tool_name}]: {traceback.format_exc()}"
 
 
-def convert_python_type(python_type: type[Any]) -> str:
-    """将Python类型转换为JSON Schema类型"""
+def convert_python_type(python_type: Any) -> dict[str, Any]:
+    """将 Python 类型转换为基础 JSON Schema 属性。"""
     type_mapping: dict[type[Any], str] = {
         str: "string",
         int: "integer",
@@ -127,12 +127,46 @@ def convert_python_type(python_type: type[Any]) -> str:
         dict: "object",
     }
 
-    # 处理泛型类型（如 list[str]）
-    origin: type[Any] | None = getattr(python_type, "__origin__", None)
+    origin: Any = get_origin(python_type)
     if origin is not None:
         python_type = origin
 
-    return type_mapping.get(python_type, "string")
+    json_type: str = type_mapping.get(python_type, "string")
+    return {"type": json_type}
+
+
+def _split_optional(annotation: Any) -> tuple[Any, bool]:
+    """拆分 Optional[T] 或 T | None。"""
+    origin: Any = get_origin(annotation)
+    if origin not in (Union, UnionType):
+        return annotation, False
+
+    args: tuple[Any, ...] = get_args(annotation)
+    non_none_args: list[Any] = [
+        arg for arg in args if arg is not type(None)
+    ]
+    is_nullable: bool = len(non_none_args) == 1 and len(non_none_args) != len(args)
+    if not is_nullable:
+        return annotation, False
+
+    return non_none_args[0], True
+
+
+def _get_param_schema(annotation: Any) -> dict[str, Any]:
+    """根据类型注解生成参数 schema。"""
+    base_type, nullable = _split_optional(annotation)
+
+    if base_type is Any:
+        schema: dict[str, Any] = {"type": "string"}
+    elif get_origin(base_type) in (Union, UnionType):
+        schema = {"type": "string"}
+    else:
+        schema = convert_python_type(base_type)
+
+    if nullable:
+        schema["nullable"] = True
+
+    return schema
 
 
 def generate_function_schema(func: Callable[..., Any]) -> dict[str, Any]:
@@ -148,11 +182,8 @@ def generate_function_schema(func: Callable[..., Any]) -> dict[str, Any]:
             continue
 
         # 获取类型
-        param_type: type[Any] = type_hints.get(param_name, Any)
-        json_type: str = convert_python_type(param_type)
-
-        # 构建属性定义
-        prop: dict[str, Any] = {"type": json_type}
+        param_type: Any = type_hints.get(param_name, Any)
+        prop: dict[str, Any] = _get_param_schema(param_type)
 
         # 从默认值判断是否必需
         if param.default == inspect.Parameter.empty:

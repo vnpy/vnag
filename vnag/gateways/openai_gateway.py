@@ -3,29 +3,26 @@ from collections.abc import Generator
 import json
 
 import httpx
-from openai import OpenAI, Stream
-from openai.types.chat import ChatCompletion, ChatCompletionChunk
-from openai.types.chat.chat_completion import Choice
-from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
+from openai import OpenAI
+from openai.types.responses import Response as OAIResponse
+from openai.types.responses.response_stream_event import ResponseStreamEvent
 
 from vnag.gateway import BaseGateway
 from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ToolCall
-from vnag.object import Role
-
-
-FINISH_REASON_MAP = {
-    "stop": FinishReason.STOP,
-    "length": FinishReason.LENGTH,
-    "tool_calls": FinishReason.TOOL_CALLS,
-}
+from vnag.constant import Role
 
 
 class OpenaiGateway(BaseGateway):
     """
-    OpenAI 兼容的 AI 大模型网关基类
+    OpenAI Responses API 网关
 
-    标准 OpenAI API 不返回 thinking/reasoning 内容。
-    如需支持 thinking，请继承此类并覆盖相关钩子方法。
+    调用 OpenAI /v1/responses 端点，支持纯文本、function calling、
+    流式输出及 reasoning summary 透传。
+
+    reasoning 策略：
+    - 请求时显式启用 reasoning，获取 summary 文本
+    - thinking 字段存放 summary 供 UI 展示
+    - 不回传 reasoning items（避免触发 OpenAI 对 item 邻接关系的严格校验）
     """
 
     default_name: str = "OpenAI"
@@ -34,6 +31,7 @@ class OpenaiGateway(BaseGateway):
         "base_url": "",
         "api_key": "",
         "proxy": "",
+        "reasoning_effort": ["high", "medium", "low", "minimal"]
     }
 
     def __init__(self, gateway_name: str = "") -> None:
@@ -43,102 +41,125 @@ class OpenaiGateway(BaseGateway):
         self.gateway_name = gateway_name
 
         self.client: OpenAI | None = None
+        self.reasoning_effort: str = "medium"
 
-    def _extract_thinking(self, message: Any) -> str:
+    def _convert_input(
+        self, messages: list[Message]
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """
-        从消息对象中提取 thinking 内容（子类可覆盖）
+        将内部 Message 列表转换为 Responses API 的 input 列表和 instructions。
 
-        标准 OpenAI API 不返回 thinking 内容，返回空字符串。
+        返回 (input_items, instructions)。
         """
-        return ""
-
-    def _extract_reasoning(self, message: Any) -> list[dict[str, Any]]:
-        """
-        从消息对象中提取 reasoning 数据（子类可覆盖）
-
-        标准 OpenAI API 不返回 reasoning_details，返回空列表。
-        """
-        return []
-
-    def _extract_thinking_delta(self, delta: Any) -> str:
-        """
-        从流式 delta 对象中提取 thinking 增量（子类可覆盖）
-
-        标准 OpenAI API 不返回 thinking 内容，返回空字符串。
-        """
-        return ""
-
-    def _extract_reasoning_delta(self, delta: Any) -> list[dict[str, Any]]:
-        """
-        从流式 delta 对象中提取 reasoning 增量数据（子类可覆盖）
-
-        标准 OpenAI API 不返回 reasoning 内容，返回空列表。
-        """
-        return []
-
-    def _get_extra_body(self) -> dict[str, Any] | None:
-        """
-        获取请求的额外参数（子类可覆盖）
-
-        标准 OpenAI API 不需要额外参数，返回 None。
-        """
-        return None
-
-    def _convert_thinking_for_request(self, thinking: str) -> dict[str, Any] | None:
-        """
-        将 thinking 转换为请求格式（子类可覆盖）
-
-        标准 OpenAI API 不支持回传 thinking，返回 None。
-        """
-        return None
-
-    def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        """
-        将内部 Message 格式转换为 OpenAI API 格式
-
-        内部格式支持 tool_results，需要拆分为多条 tool 角色消息
-        """
-        openai_messages: list[dict[str, Any]] = []
+        input_items: list[dict[str, Any]] = []
+        instructions: str | None = None
 
         for msg in messages:
-            # 处理工具结果：拆分为多条 tool 消息
+            if msg.role == Role.SYSTEM:
+                instructions = msg.content
+                continue
+
             if msg.tool_results:
-                for tool_result in msg.tool_results:
-                    openai_messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_result.id,
-                        "content": tool_result.content
+                for tr in msg.tool_results:
+                    input_items.append({
+                        "type": "function_call_output",
+                        "call_id": tr.id,
+                        "output": tr.content,
                     })
+                continue
 
-            # 处理普通消息或带 tool_calls 的消息
-            else:
-                message_dict: dict[str, Any] = {"role": msg.role.value}
-
+            if msg.tool_calls:
+                for tc in msg.tool_calls:
+                    input_items.append({
+                        "type": "function_call",
+                        "call_id": tc.id,
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    })
                 if msg.content:
-                    message_dict["content"] = msg.content
+                    input_items.append({
+                        "role": msg.role.value,
+                        "content": msg.content,
+                    })
+                continue
 
-                if msg.tool_calls:
-                    # 转换 tool_calls 为 OpenAI 格式
-                    message_dict["tool_calls"] = [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.name,
-                                "arguments": json.dumps(tc.arguments)
-                            }
-                        }
-                        for tc in msg.tool_calls
-                    ]
+            input_items.append({
+                "role": msg.role.value,
+                "content": msg.content,
+            })
 
-                # 回传 thinking 内容（通过钩子方法，子类可定制）
-                thinking_data: dict[str, Any] | None = self._convert_thinking_for_request(msg.thinking)
-                if thinking_data:
-                    message_dict.update(thinking_data)
+        return input_items, instructions
 
-                openai_messages.append(message_dict)
+    def _build_tools(self, request: Request) -> list[dict[str, Any]]:
+        """将 ToolSchema 列表转换为 Responses API 工具格式。"""
+        tools: list[dict[str, Any]] = []
+        for ts in request.tool_schemas:
+            tools.append({
+                "type": "function",
+                "name": ts.name,
+                "description": ts.description,
+                "parameters": ts.parameters,
+            })
+        return tools
 
-        return openai_messages
+    def _parse_response(self, oai_resp: OAIResponse) -> Response:
+        """将 OAI Responses API 返回值解析为内部 Response 对象。"""
+        content: str = ""
+        thinking: str = ""
+        tool_calls: list[ToolCall] = []
+
+        for item in oai_resp.output:
+            if item.type == "message":
+                for part in item.content:
+                    if part.type == "output_text":
+                        content += part.text
+
+            elif item.type == "function_call":
+                try:
+                    arguments: dict[str, Any] = json.loads(item.arguments)
+                except json.JSONDecodeError:
+                    arguments = {}
+                tool_calls.append(ToolCall(
+                    id=item.call_id,
+                    name=item.name,
+                    arguments=arguments,
+                ))
+
+            elif item.type == "reasoning":
+                parts: list[str] = [s.text for s in item.summary if s.text]
+                if parts:
+                    thinking = "\n".join(parts)
+
+        status = oai_resp.status or ""
+        if status == "incomplete":
+            finish_reason: FinishReason = FinishReason.LENGTH
+        elif tool_calls:
+            finish_reason = FinishReason.TOOL_CALLS
+        elif status == "completed":
+            finish_reason = FinishReason.STOP
+        else:
+            finish_reason = FinishReason.UNKNOWN
+
+        usage: Usage = Usage()
+        if oai_resp.usage:
+            usage.input_tokens = oai_resp.usage.input_tokens
+            usage.output_tokens = oai_resp.usage.output_tokens
+
+        message = Message(
+            role=Role.ASSISTANT,
+            content=content,
+            thinking=thinking,
+            tool_calls=tool_calls,
+        )
+
+        return Response(
+            id=oai_resp.id,
+            content=content,
+            thinking=thinking,
+            usage=usage,
+            finish_reason=finish_reason,
+            message=message,
+        )
 
     def init(self, setting: dict[str, Any]) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
@@ -154,7 +175,8 @@ class OpenaiGateway(BaseGateway):
                 self.write_log("  - api_key: API密钥未设置")
             return False
 
-        # 如果设置了代理，则构建 httpx 客户端
+        self.reasoning_effort = setting.get("reasoning_effort", "medium")
+
         http_client: httpx.Client | None = httpx.Client(proxy=proxy) if proxy else None
 
         self.client = OpenAI(
@@ -166,88 +188,37 @@ class OpenaiGateway(BaseGateway):
         return True
 
     def invoke(self, request: Request) -> Response:
-        """常规调用接口：将已准备好的消息发送给模型并一次性产出文本。"""
+        """常规调用接口：发送消息并一次性返回结果。"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
             return Response(id="", content="", usage=Usage())
 
-        # 转换消息格式
-        openai_messages: list[dict[str, Any]] = self._convert_messages(request.messages)
+        input_items, instructions = self._convert_input(request.messages)
 
-        # 准备请求参数
         create_params: dict[str, Any] = {
             "model": request.model,
-            "messages": openai_messages,
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
+            "input": input_items,
+            "reasoning": {
+                "effort": self.reasoning_effort,
+                "summary": "detailed",
+            },
         }
 
-        # 添加额外参数（通过钩子方法，子类可定制）
-        extra_body: dict[str, Any] | None = self._get_extra_body()
-        if extra_body:
-            create_params["extra_body"] = extra_body
+        if instructions:
+            create_params["instructions"] = instructions
 
-        # 添加工具定义（如果有）
+        if request.temperature is not None:
+            create_params["temperature"] = request.temperature
+
+        if request.max_tokens is not None:
+            create_params["max_output_tokens"] = request.max_tokens
+
         if request.tool_schemas:
-            create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
+            create_params["tools"] = self._build_tools(request)
 
-        # 发起请求并获取响应
-        response: ChatCompletion = self.client.chat.completions.create(**create_params)
+        oai_resp: OAIResponse = self.client.responses.create(**create_params)
 
-        if not response.choices:
-            self.write_log("API 返回的响应中没有 choices，返回空响应")
-            return Response(id=response.id or "", content="", usage=Usage())
-
-        # 提取用量信息
-        usage: Usage = Usage()
-        if response.usage:
-            usage.input_tokens = response.usage.prompt_tokens
-            usage.output_tokens = response.usage.completion_tokens
-
-        # 提取响应内容和结束原因
-        choice: Choice = response.choices[0]
-        finish_reason: FinishReason = FINISH_REASON_MAP.get(
-            choice.finish_reason, FinishReason.UNKNOWN
-        )
-
-        # 提取 thinking 内容（通过钩子方法，子类可定制）
-        thinking: str = self._extract_thinking(choice.message)
-
-        # 提取 reasoning 数据（通过钩子方法，子类可定制）
-        reasoning: list[dict[str, Any]] = self._extract_reasoning(choice.message)
-
-        # 提取工具调用
-        tool_calls: list[ToolCall] = []
-        if choice.message.tool_calls:
-            for tc in choice.message.tool_calls:
-                try:
-                    if hasattr(tc, "function"):
-                        arguments: dict[str, Any] = json.loads(tc.function.arguments)
-                        tool_calls.append(ToolCall(
-                            id=tc.id,
-                            name=tc.function.name,
-                            arguments=arguments
-                        ))
-                except json.JSONDecodeError:
-                    pass
-
-        # 构建返回的消息对象
-        message = Message(
-            role=Role.ASSISTANT,
-            content=choice.message.content or "",
-            thinking=thinking,
-            reasoning=reasoning,
-            tool_calls=tool_calls
-        )
-
-        return Response(
-            id=response.id,
-            content=choice.message.content or "",
-            thinking=thinking,
-            usage=usage,
-            finish_reason=finish_reason,
-            message=message
-        )
+        return self._parse_response(oai_resp)
 
     def stream(self, request: Request) -> Generator[Delta, None, None]:
         """流式调用接口"""
@@ -255,124 +226,87 @@ class OpenaiGateway(BaseGateway):
             self.write_log("LLM客户端未初始化，请检查配置")
             return
 
-        # 转换消息格式
-        openai_messages: list[dict[str, Any]] = self._convert_messages(request.messages)
+        input_items, instructions = self._convert_input(request.messages)
 
-        # 准备请求参数
         create_params: dict[str, Any] = {
             "model": request.model,
-            "messages": openai_messages,
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
+            "input": input_items,
             "stream": True,
-            "stream_options": {"include_usage": True},
+            "reasoning": {
+                "effort": self.reasoning_effort,
+                "summary": "detailed",
+            },
         }
 
-        # 添加额外参数（通过钩子方法，子类可定制）
-        extra_body: dict[str, Any] | None = self._get_extra_body()
-        if extra_body:
-            create_params["extra_body"] = extra_body
+        if instructions:
+            create_params["instructions"] = instructions
 
-        # 添加工具定义（如果有）
+        if request.temperature is not None:
+            create_params["temperature"] = request.temperature
+
+        if request.max_tokens is not None:
+            create_params["max_output_tokens"] = request.max_tokens
+
         if request.tool_schemas:
-            create_params["tools"] = [t.get_schema() for t in request.tool_schemas]
-
-        stream: Stream[ChatCompletionChunk] = self.client.chat.completions.create(**create_params)
+            create_params["tools"] = self._build_tools(request)
 
         response_id: str = ""
-        # 用于累积 tool_calls（OpenAI 流式返回时可能分多次）
-        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
 
-        for chuck in stream:
-            if not response_id:
-                response_id = chuck.id
+        event: ResponseStreamEvent
+        with self.client.responses.create(**create_params) as stream:
+            for event in stream:
+                if event.type == "response.created":
+                    response_id = event.response.id
+                    continue
 
-            delta: Delta = Delta(id=response_id)
-            should_yield: bool = False
+                if event.type == "response.output_text.delta":
+                    yield Delta(id=response_id, content=event.delta)
 
-            # 检查用量信息（流式尾事件可能只带 usage、不带 choices）
-            if chuck.usage:
-                delta.usage = Usage(
-                    input_tokens=chuck.usage.prompt_tokens or 0,
-                    output_tokens=chuck.usage.completion_tokens or 0,
-                )
-                should_yield = True
+                elif event.type == "response.reasoning_summary_text.delta":
+                    yield Delta(id=response_id, thinking=event.delta)
 
-            if not chuck.choices:
-                if should_yield:
-                    yield delta
-                continue
-
-            choice: ChunkChoice = chuck.choices[0]
-
-            # 检查 thinking 增量（通过钩子方法，子类可定制）
-            thinking_delta: str = self._extract_thinking_delta(choice.delta)
-            if thinking_delta:
-                delta.thinking = thinking_delta
-                should_yield = True
-
-            # 检查 reasoning 增量（通过钩子方法，子类可定制）
-            reasoning_data: list[dict[str, Any]] = self._extract_reasoning_delta(choice.delta)
-            if reasoning_data:
-                delta.reasoning = reasoning_data
-                should_yield = True
-
-            # 检查内容增量
-            delta_content: str | None = choice.delta.content
-            if delta_content:
-                delta.content = delta_content
-                should_yield = True
-
-            # 检查 tool_calls 增量
-            if choice.delta.tool_calls:
-                for tc_chunk in choice.delta.tool_calls:
-                    idx: int = tc_chunk.index
-
-                    # 初始化或更新累积的 tool_call
-                    if idx not in accumulated_tool_calls:
-                        accumulated_tool_calls[idx] = {
-                            "id": "",
-                            "name": "",
-                            "arguments": ""
-                        }
-
-                    if tc_chunk.id:
-                        accumulated_tool_calls[idx]["id"] = tc_chunk.id
-
-                    if tc_chunk.function:
-                        if tc_chunk.function.name:
-                            accumulated_tool_calls[idx]["name"] = tc_chunk.function.name
-                        if tc_chunk.function.arguments:
-                            accumulated_tool_calls[idx]["arguments"] += tc_chunk.function.arguments
-
-            # 检查结束原因
-            openai_finish_reason = choice.finish_reason
-            if openai_finish_reason:
-                vnag_finish_reason: FinishReason = FINISH_REASON_MAP.get(
-                    openai_finish_reason, FinishReason.UNKNOWN
-                )
-                delta.finish_reason = vnag_finish_reason
-                should_yield = True
-
-                # 如果是 tool_calls 结束，转换累积的 tool_calls
-                if vnag_finish_reason == FinishReason.TOOL_CALLS and accumulated_tool_calls:
-                    tool_calls: list[ToolCall] = []
-                    for tc_data in accumulated_tool_calls.values():
+                elif event.type == "response.output_item.done":
+                    item = event.item
+                    if item.type == "function_call":
                         try:
-                            arguments: dict[str, Any] = json.loads(tc_data["arguments"])
+                            arguments: dict[str, Any] = json.loads(item.arguments)
                         except json.JSONDecodeError:
                             arguments = {}
+                        tc = ToolCall(
+                            id=item.call_id,
+                            name=item.name,
+                            arguments=arguments,
+                        )
+                        yield Delta(
+                            id=response_id,
+                            tool_calls=[tc],
+                            finish_reason=FinishReason.TOOL_CALLS,
+                        )
 
-                        tool_calls.append(ToolCall(
-                            id=tc_data["id"],
-                            name=tc_data["name"],
-                            arguments=arguments
-                        ))
+                elif event.type == "response.completed":
+                    oai_resp: OAIResponse = event.response
+                    status: str = oai_resp.status or ""
+                    has_function_calls: bool = any(
+                        item.type == "function_call" for item in oai_resp.output
+                    )
 
-                    delta.tool_calls = tool_calls
+                    if status == "incomplete":
+                        finish_reason: FinishReason = FinishReason.LENGTH
+                    elif has_function_calls:
+                        finish_reason = FinishReason.TOOL_CALLS
+                    else:
+                        finish_reason = FinishReason.STOP
 
-            if should_yield:
-                yield delta
+                    usage: Usage = Usage()
+                    if oai_resp.usage:
+                        usage.input_tokens = oai_resp.usage.input_tokens
+                        usage.output_tokens = oai_resp.usage.output_tokens
+
+                    yield Delta(
+                        id=response_id,
+                        finish_reason=finish_reason,
+                        usage=usage,
+                    )
 
     def list_models(self) -> list[str]:
         """查询可用模型列表"""

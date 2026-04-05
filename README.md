@@ -1,7 +1,7 @@
 # VNAG - Your Agent, Your Data.
 
 <p align="center">
-    <img src ="https://img.shields.io/badge/version-0.8.0-blueviolet.svg"/>
+    <img src ="https://img.shields.io/badge/version-0.9.0-blueviolet.svg"/>
     <img src ="https://img.shields.io/badge/platform-windows|linux|macos-yellow.svg"/>
     <img src ="https://img.shields.io/badge/python-3.10|3.11|3.12|3.13-blue.svg" />
     <img src ="https://img.shields.io/github/license/vnpy/vnag.svg?color=orange"/>
@@ -108,7 +108,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 - **Profile (配置)**: 定义了 Agent 行为的配置模板，包括：
   - **系统提示词 (Prompt)**: 设定 Agent 的角色和行为准则。
   - **工具集 (Tools)**: 从本地工具和MCP工具中选择 Agent 可以使用的工具。
-  - **模型参数**: 如 `temperature`, `max_tokens` 等，用于控制模型的生成行为。
+  - **模型参数**: 如 `temperature`, `max_tokens` 等，用于控制模型的生成行为。需要注意的是，部分模型会固定使用 `1.0` 或忽略自定义温度。
 
 **两种方式来自定义 Agent:**
 
@@ -124,7 +124,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 
 | 功能模块 | 示例脚本 | 说明 |
 |---------|---------|------|
-| **Gateway<br/>网关** | `run_openai_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py` | 测试与不同大模型提供商的 API 连接 |
+| **Gateway<br/>网关** | `run_completion_gateway.py`<br/>`run_anthropic_gateway.py`<br/>`run_dashscope_gateway.py`<br/>`run_ollama_gateway.py` | 测试与不同大模型提供商的 API 连接 |
 | **Segmenter<br/>分段器** | `run_simple_segmenter.py`<br/>`run_markdown_segmenter.py`<br/>`run_python_segmenter.py`<br/>`run_cpp_segmenter.py` | 将不同类型的文档切分为结构化数据段 |
 | **Vector<br/>向量库** | `run_chromadb_demo.py`<br/>`run_qdrant_demo.py`<br/>`run_duckdb_demo.py` | 文本向量化存储和相似度搜索 |
 | **RAG** | `run_ctp_rag.py` | 完整的 RAG 流程：分段、入库、检索生成 |
@@ -136,7 +136,7 @@ vnag 0.2.0 引入了 `TaskAgent` 和 `Profile` 的概念，让您可以轻松定
 
 ```bash
 # 示例：测试 OpenAI Gateway
-python examples/gateway/run_openai_gateway.py
+python examples/gateway/run_completion_gateway.py
 
 # 示例：运行聊天 UI
 python examples/ui/run_chat_ui.py
@@ -177,7 +177,7 @@ vnag 采用统一的配置文件管理机制，所有配置文件都存放在名
 }
 ```
 
-支持的网关：OpenAI、Anthropic、Dashscope、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM。各网关的完整配置示例请参考 [Gateway 文档](docs/source/components/gateway.md)。
+支持的网关：OpenAI、Anthropic、Dashscope、Ollama、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM、Bedrock、Gemini。各网关的完整配置示例请参考 [Gateway 文档](docs/source/components/gateway.md)。
 
 #### MCP 配置
 
@@ -202,8 +202,8 @@ vnag/
 │   ├── agent.py         # 智能体（TaskAgent / AgentTool）
 │   ├── engine.py        # 智能体引擎
 │   ├── skill.py         # 技能系统
-│   ├── gateways/        # 大模型网关（11 种）
-│   ├── tools/           # 内置本地工具（7 类）
+│   ├── gateways/        # 大模型网关（15 种）
+│   ├── tools/           # 内置本地工具（9 类）
 │   ├── segmenters/      # RAG 分段器
 │   ├── embedders/       # RAG 嵌入器
 │   ├── vectors/         # RAG 向量库
@@ -218,18 +218,18 @@ vnag/
 
 ### 内置工具
 
-vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索等 7 类本地工具，开箱即用。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
+vnag 内置了日期时间、文件系统、网络、终端与系统、代码执行、Web、联网搜索、待办管理、交互提问等 9 类本地工具，开箱即用。其中文件系统工具支持全文读取、带行号分段读取、字符串替换与按行块替换，适合代码编辑与自动化修订场景；交互工具支持模型在 GUI 或 CLI 中主动向用户提问并等待回答。完整的工具列表和使用说明请参考 [Tool 文档](docs/source/components/tool.md)。
 
 ## 功能概览
 
 | 模块 | 说明 |
 |------|------|
 | **Agent 引擎** | ReAct 循环编排、多轮对话、Profile 配置、技能系统、执行追踪 |
-| **LLM 网关** | OpenAI、Anthropic、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、Dashscope、OpenRouter、LiteLLM，支持流式输出和思维链 |
-| **工具系统** | 本地函数工具、MCP 远程工具、7 类内置工具 |
+| **LLM 网关** | OpenAI、Anthropic、Dashscope、Ollama、DeepSeek、智谱、火山引擎、Moonshot、MiniMax、百炼、OpenRouter、LiteLLM、Bedrock、Gemini，支持流式输出和思维链 |
+| **工具系统** | 本地函数工具、MCP 远程工具、9 类内置工具，支持交互式提问工具 |
 | **RAG** | 4 种分段器（Simple / Markdown / Python / C++）、3 种嵌入器（OpenAI / Dashscope / SentenceTransformers）、3 种向量库（ChromaDB / Qdrant / DuckDB） |
-| **图形界面** | 基于 PySide6 的聊天 UI，支持 Profile 管理、多智能体切换、Markdown 渲染、Thinking 显示 |
-| **命令行界面** | 基于 Prompt Toolkit 的 CLI，支持自动补全和 Markdown 终端渲染 |
+| **图形界面** | 基于 PySide6 的聊天 UI，支持 Profile 管理、多智能体切换、Markdown 渲染、Thinking 显示和交互式工具提问 |
+| **命令行界面** | 基于 Prompt Toolkit 的 CLI，支持自动补全、Markdown 终端渲染和交互式工具提问 |
 
 详细的功能更新记录请参考 [CHANGELOG](CHANGELOG.md)。
 
@@ -262,6 +262,9 @@ ruff check .
 
 # 类型检查
 mypy vnag
+
+# 运行测试
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ### 问题反馈

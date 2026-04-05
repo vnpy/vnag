@@ -21,5 +21,6 @@ class DeltaEvent(str, Enum):
     """流式响应结构化事件"""
     TOOL_START = "tool_start"
     TOOL_END = "tool_end"
+    ASK_USER = "ask_user"
     WARNING = "warning"
     ERROR = "error"

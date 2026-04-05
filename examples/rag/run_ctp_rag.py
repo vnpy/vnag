@@ -3,7 +3,7 @@ from pathlib import Path
 from vnag.embedders.sentence_embedder import SentenceEmbedder
 from vnag.object import Message, Request, Role, Segment
 from vnag.utility import load_json
-from vnag.gateways.openai_gateway import OpenaiGateway
+from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.segmenters.cpp_segmenter import CppSegmenter
 from vnag.vectors.chromadb_vector import ChromadbVector
 
@@ -77,7 +77,7 @@ def query_vector(vector: ChromadbVector, question: str, k: int = 5) -> list[Segm
 
 
 def generate_answer(
-    gateway: OpenaiGateway,
+    gateway: CompletionGateway,
     vector: ChromadbVector,
     question: str,
     model: str = "gpt-4o",
@@ -90,7 +90,7 @@ def generate_answer(
     的语言模型生成最终的回答。
 
     Args:
-        gateway (OpenaiGateway): AI 模型的调用接口。
+        gateway (CompletionGateway): AI 模型的调用接口。
         vector (ChromadbVector): 向量数据库的实例。
         question (str): 用户提出的问题。
         model (str): 希望使用的 AI 模型名称。
@@ -152,7 +152,7 @@ def main() -> None:
     # 3. 初始化AI网关
     setting: dict = load_json("connect_openai.json")
 
-    gateway: OpenaiGateway = OpenaiGateway()
+    gateway: CompletionGateway = CompletionGateway()
     gateway.init(setting)
     print("\nAI 网关初始化成功。")
 
