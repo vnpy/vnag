@@ -1,7 +1,6 @@
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-import profile
 from uuid import uuid4
 from typing import TYPE_CHECKING, Any
 from collections.abc import Generator
