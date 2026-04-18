@@ -15,7 +15,7 @@ class Segment(BaseModel):
 class Message(BaseModel):
     """标准化的消息对象"""
     role: Role
-    content: str = ""
+    content: str | list[dict[str, Any]] = ""
     thinking: str = ""
     reasoning: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list["ToolCall"] = Field(default_factory=list)
