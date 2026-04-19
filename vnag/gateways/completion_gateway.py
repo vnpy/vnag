@@ -1,6 +1,9 @@
 from typing import Any
+from pathlib import Path
 from collections.abc import Generator
+import base64
 import json
+import mimetypes
 
 import httpx
 from openai import OpenAI, Stream
@@ -9,8 +12,17 @@ from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
 
 from vnag.gateway import BaseGateway
-from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ToolCall
-from vnag.object import Role
+from vnag.object import (
+    FinishReason,
+    Request,
+    Response,
+    Delta,
+    Usage,
+    Message,
+    ToolCall,
+    Attachment,
+)
+from vnag.constant import Role, AttachmentKind
 
 
 FINISH_REASON_MAP = {
@@ -92,6 +104,67 @@ class CompletionGateway(BaseGateway):
         """
         return None
 
+    def _resolve_attachment_path(self, attachment: Attachment) -> tuple[str, str]:
+        """读取本地附件并转换为 data URL。"""
+        file_path: Path = Path(attachment.path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+        mime: str = attachment.mime or mimetypes.guess_type(file_path.name)[0] or ""
+        if not mime:
+            raise ValueError(f"无法推断附件 MIME 类型: {attachment.path}")
+
+        data: str = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}", mime
+
+    def _build_image_block(self, attachment: Attachment) -> dict[str, Any]:
+        """将图片附件转换为 OpenAI-compatible 内容块。"""
+        if attachment.url and attachment.path:
+            raise ValueError("附件 url 和 path 不能同时设置")
+
+        if not attachment.url and not attachment.path:
+            raise ValueError("附件必须设置 url 或 path")
+
+        if attachment.url:
+            if attachment.mime and not attachment.mime.startswith("image/"):
+                raise ValueError(f"不支持的图片 MIME 类型: {attachment.mime}")
+            return {
+                "type": "image_url",
+                "image_url": {"url": attachment.url},
+            }
+
+        data_url, mime = self._resolve_attachment_path(attachment)
+        if not mime.startswith("image/"):
+            raise ValueError(f"不支持的图片 MIME 类型: {mime}")
+        return {
+            "type": "image_url",
+            "image_url": {"url": data_url},
+        }
+
+    def _build_chat_content(self, msg: Message) -> str | list[dict[str, Any]]:
+        """构造 Chat Completions 兼容格式的 content 字段。"""
+        if not msg.attachments:
+            return msg.content
+
+        if msg.role != Role.USER:
+            raise ValueError("当前仅支持用户消息携带附件")
+
+        content_parts: list[dict[str, Any]] = []
+        if msg.content:
+            content_parts.append({
+                "type": "text",
+                "text": msg.content,
+            })
+
+        for attachment in msg.attachments:
+            if attachment.kind == AttachmentKind.IMAGE:
+                content_parts.append(self._build_image_block(attachment))
+                continue
+
+            raise ValueError(f"当前网关暂不支持附件类型: {attachment.kind.value}")
+
+        return content_parts
+
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """
         将内部 Message 格式转换为 OpenAI API 格式
@@ -114,8 +187,9 @@ class CompletionGateway(BaseGateway):
             else:
                 message_dict: dict[str, Any] = {"role": msg.role.value}
 
-                if msg.content:
-                    message_dict["content"] = msg.content
+                content: str | list[dict[str, Any]] = self._build_chat_content(msg)
+                if content:
+                    message_dict["content"] = content
 
                 if msg.tool_calls:
                     # 转换 tool_calls 为 OpenAI 格式

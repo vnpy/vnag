@@ -103,11 +103,23 @@ session = Session(
 Message 是对话中的单条消息，支持多种角色和内容类型。
 
 ```python
-from vnag.object import Message
-from vnag.constant import Role
+from vnag.object import Attachment, Message
+from vnag.constant import AttachmentKind, Role
 
 # 用户消息
 user_msg = Message(role=Role.USER, content="你好")
+
+# 带图片附件的用户消息
+image_msg = Message(
+    role=Role.USER,
+    content="请描述这张图片",
+    attachments=[
+        Attachment(
+            kind=AttachmentKind.IMAGE,
+            path="D:/images/chart.png"
+        )
+    ]
+)
 
 # 系统消息
 system_msg = Message(role=Role.SYSTEM, content="你是一个助手")
@@ -119,6 +131,8 @@ assistant_msg = Message(
     tool_calls=[...]  # 工具调用请求
 )
 ```
+
+其中，`content` 始终表示文本内容；图片等非文本输入放在 `attachments` 中。
 
 ### 角色类型
 

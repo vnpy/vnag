@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .constant import Role, FinishReason, DeltaEvent
+from .constant import Role, FinishReason, DeltaEvent, AttachmentKind
 
 
 class Segment(BaseModel):
@@ -20,6 +20,7 @@ class Message(BaseModel):
     reasoning: list[dict[str, Any]] = Field(default_factory=list)
     tool_calls: list["ToolCall"] = Field(default_factory=list)
     tool_results: list["ToolResult"] = Field(default_factory=list)
+    attachments: list["Attachment"] = Field(default_factory=list)
     usage: "Usage" = Field(default_factory=lambda: Usage())
 
 
@@ -118,3 +119,11 @@ class Session(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     summary: str = ""
     offset: int = 1
+
+
+class Attachment(BaseModel):
+    """标准化的附件对象"""
+    kind: AttachmentKind
+    mime: str = ""
+    url: str = ""
+    path: str = ""

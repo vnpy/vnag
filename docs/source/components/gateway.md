@@ -42,6 +42,8 @@ class BaseGateway(ABC):
 
 OpenAI API 及兼容接口。
 
+当前支持文本消息；当 `Message.attachments` 中包含图片附件时，会自动转换为 OpenAI-compatible 多模态 `content` 数组。
+
 ```python
 from vnag.gateways.completion_gateway import CompletionGateway
 
@@ -188,6 +190,8 @@ gateway.init({
 ### OpenrouterGateway
 
 OpenRouter 多模型平台。
+
+继承自 `CompletionGateway`，当前同样支持用户消息中的图片附件输入，并保留原有的 reasoning / thinking 兼容逻辑。
 
 ```python
 from vnag.gateways.openrouter_gateway import OpenrouterGateway

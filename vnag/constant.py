@@ -24,3 +24,9 @@ class DeltaEvent(str, Enum):
     ASK_USER = "ask_user"
     WARNING = "warning"
     ERROR = "error"
+
+
+class AttachmentKind(str, Enum):
+    """附件类型"""
+    IMAGE = "image"
+    FILE = "file"

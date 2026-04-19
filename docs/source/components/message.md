@@ -6,11 +6,12 @@ Message 是对话系统中的基本单元，表示一条消息。
 
 ```python
 from vnag.object import Message
-from vnag.constant import Role
+from vnag.constant import Role, AttachmentKind
 
 message = Message(
     role=Role.USER,                    # 消息角色
     content="你好",                     # 文本内容
+    attachments=[],                    # 附件列表
     thinking="",                       # 思考过程
     reasoning=[],                      # 推理数据
     tool_calls=[],                     # 工具调用请求
@@ -24,10 +25,40 @@ message = Message(
 |------|------|------|
 | `role` | Role | 消息角色 |
 | `content` | str | 文本内容 |
+| `attachments` | list[Attachment] | 非文本附件输入 |
 | `thinking` | str | 模型思考过程 |
 | `reasoning` | list[dict] | 推理数据（特定模型） |
 | `tool_calls` | list[ToolCall] | 工具调用请求 |
 | `tool_results` | list[ToolResult] | 工具执行结果 |
+
+## Attachment 附件
+
+`attachments` 用于承载图片等非文本输入，`content` 仍然只表示文本正文。
+
+```python
+from vnag.object import Attachment, Message
+from vnag.constant import AttachmentKind, Role
+
+message = Message(
+    role=Role.USER,
+    content="请描述这张图片",
+    attachments=[
+        Attachment(
+            kind=AttachmentKind.IMAGE,
+            path="D:/images/chart.png"
+        )
+    ]
+)
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `kind` | AttachmentKind | 附件类型，如 `image` |
+| `mime` | str | MIME 类型，如 `image/png` |
+| `url` | str | 远程资源地址 |
+| `path` | str | 本地文件路径 |
 
 ## 消息角色
 
@@ -65,6 +96,18 @@ system_msg = Message(
 user_msg = Message(
     role=Role.USER,
     content="请帮我写一个冒泡排序"
+)
+
+# 带图片附件的消息
+user_msg = Message(
+    role=Role.USER,
+    content="请分析这张走势图",
+    attachments=[
+        Attachment(
+            kind=AttachmentKind.IMAGE,
+            path="D:/images/chart.png"
+        )
+    ]
 )
 
 # 带工具结果的消息

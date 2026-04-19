@@ -118,8 +118,10 @@ class OpenrouterGateway(CompletionGateway):
                             "text": msg.content
                         })
                     message_dict["content"] = content_parts
-            elif msg.content:
-                message_dict["content"] = msg.content
+            else:
+                content: str | list[dict[str, Any]] = self._build_chat_content(msg)
+                if content:
+                    message_dict["content"] = content
 
             # 处理 tool_calls
             if msg.tool_calls:

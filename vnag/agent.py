@@ -98,13 +98,17 @@ class TaskAgent:
         # 从已有消息推导最后一轮状态
         self._init_round()
 
+    def _has_user_input(self, msg: Message) -> bool:
+        """判断消息是否构成有效的用户输入轮次。"""
+        return msg.role == Role.USER and bool(msg.content or msg.attachments)
+
     def _init_round(self) -> None:
         """从已有消息推导最后一轮的轮次状态"""
         for i in range(len(self.session.messages) - 1, -1, -1):
             msg: Message = self.session.messages[i]
             if msg.role == Role.SYSTEM:
                 break
-            if msg.role == Role.USER and msg.content:
+            if self._has_user_input(msg):
                 self.round_prompt = msg.content
                 self.round_start = i
                 return
@@ -238,7 +242,7 @@ class TaskAgent:
             message: Message = self.session.messages[index]
 
             # 以用户消息为分界点，计算保留区间的长度
-            if message.role == Role.USER and message.content:
+            if self._has_user_input(message):
                 user_turns += 1
                 if user_turns >= keep_turns:
                     preserve_start = index
@@ -656,7 +660,7 @@ class TaskAgent:
 
     def delete_round(self) -> None:
         """删除最后一轮对话，截断到轮次起始位置"""
-        if not self.round_prompt:
+        if self.round_start >= len(self.session.messages):
             return
 
         del self.session.messages[self.round_start:]
