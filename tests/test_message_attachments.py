@@ -5,10 +5,14 @@ from tempfile import TemporaryDirectory
 from vnag.agent import TaskAgent
 from vnag.constant import AttachmentKind, Role
 from vnag.gateways.completion_gateway import CompletionGateway
-from vnag.object import Attachment, Message, Profile, Session
+from vnag.gateways.openrouter_gateway import OpenrouterGateway
+from vnag.object import Attachment, Delta, Message, Profile, Request, Session
 
 
 class FakeEngine:
+    def __init__(self) -> None:
+        self.last_request: Request | None = None
+
     def get_skill_catalog(self) -> str:
         return ""
 
@@ -17,6 +21,10 @@ class FakeEngine:
 
     def get_skill_schema(self):  # type: ignore[no-untyped-def]
         return None
+
+    def stream(self, request: Request):  # type: ignore[no-untyped-def]
+        self.last_request = request
+        yield Delta(id="resp-1", content="已处理")
 
 
 class MessageAttachmentTestCase(unittest.TestCase):
@@ -53,6 +61,8 @@ class MessageAttachmentTestCase(unittest.TestCase):
 
         self.assertEqual(agent.round_start, 1)
         self.assertEqual(agent.round_prompt, "")
+        self.assertEqual(len(agent.round_attachments), 1)
+        self.assertEqual(agent.round_attachments[0].path, "demo.png")
 
         agent.delete_round()
 
@@ -60,6 +70,41 @@ class MessageAttachmentTestCase(unittest.TestCase):
             [message.role for message in agent.session.messages],
             [Role.SYSTEM],
         )
+
+    def test_agent_stream_keeps_attachments_for_resend(self) -> None:
+        engine = FakeEngine()
+        profile = Profile(name="助手", prompt="系统提示词", tools=[])
+        session = Session(
+            id="session-stream-attachments",
+            profile="助手",
+            name="默认会话",
+            messages=[Message(role=Role.SYSTEM, content="系统提示词")],
+        )
+        attachments = [
+            Attachment(
+                kind=AttachmentKind.FILE,
+                path="report.pdf",
+                name="report.pdf",
+                mime="application/pdf",
+            )
+        ]
+
+        agent = TaskAgent(engine, profile, session, save=False)  # type: ignore[arg-type]
+
+        list(agent.stream("请总结这个文件", attachments=attachments))
+
+        self.assertIsNotNone(engine.last_request)
+        assert engine.last_request is not None
+        self.assertEqual(engine.last_request.messages[-1].attachments, attachments)
+        self.assertEqual(agent.round_prompt, "请总结这个文件")
+        self.assertEqual(agent.round_attachments, attachments)
+        self.assertEqual(agent.messages[-2].attachments, attachments)
+
+        prompt, resent_attachments = agent.pop_round()
+
+        self.assertEqual(prompt, "请总结这个文件")
+        self.assertEqual(resent_attachments, attachments)
+        self.assertEqual([message.role for message in agent.messages], [Role.SYSTEM])
 
     def test_completion_gateway_uses_image_url_for_remote_attachment(self) -> None:
         gateway = CompletionGateway()
@@ -173,6 +218,33 @@ class MessageAttachmentTestCase(unittest.TestCase):
                 "data:application/pdf;base64,"
             )
         )
+
+    def test_openrouter_gateway_reuses_attachment_content_builder(self) -> None:
+        gateway = OpenrouterGateway()
+        messages = [
+            Message(
+                role=Role.USER,
+                content="分析这些附件",
+                attachments=[
+                    Attachment(
+                        kind=AttachmentKind.IMAGE,
+                        url="https://example.com/demo.png",
+                    ),
+                    Attachment(
+                        kind=AttachmentKind.FILE,
+                        name="report.pdf",
+                        url="https://example.com/report.pdf",
+                    ),
+                ],
+            )
+        ]
+
+        converted = gateway._convert_messages(messages)
+
+        self.assertEqual(converted[0]["role"], "user")
+        self.assertEqual(converted[0]["content"][0]["type"], "text")
+        self.assertEqual(converted[0]["content"][1]["type"], "image_url")
+        self.assertEqual(converted[0]["content"][2]["type"], "file")
 
 
 if __name__ == "__main__":

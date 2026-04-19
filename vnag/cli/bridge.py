@@ -11,7 +11,7 @@ from prompt_toolkit.formatted_text import HTML
 from ..agent import TaskAgent
 from ..constant import DeltaEvent
 from ..interaction import get_ask_handler, set_ask_handler
-from ..object import Delta
+from ..object import Attachment, Delta
 from .ask import AskCoordinator
 from .renderer import Renderer
 
@@ -24,7 +24,12 @@ class StreamBridge:
         self.agent: TaskAgent = agent
         self.renderer: Renderer = renderer
 
-    def run(self, prompt: str, session: PromptSession) -> None:
+    def run(
+        self,
+        prompt: str,
+        session: PromptSession,
+        attachments: list[Attachment] | None = None,
+    ) -> None:
         """
         阻塞式运行一轮对话
 
@@ -39,7 +44,7 @@ class StreamBridge:
 
         def worker() -> None:
             try:
-                for delta in self.agent.stream(prompt):
+                for delta in self.agent.stream(prompt, attachments=attachments):
                     event_queue.put(delta)
             except Exception as e:
                 event_queue.put(Delta(

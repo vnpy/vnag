@@ -65,10 +65,47 @@
                 });
             }
 
-            window.appendUserMessage = function(content) {
+            function buildUserMessageText(content, attachments) {
+                const parts = [];
+                const plainContent = content
+                    .replace(/<br\s*\/?>/gi, '\n')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&amp;/g, '&');
+
+                if (plainContent.trim()) {
+                    parts.push(plainContent.trim());
+                }
+
+                if (attachments.length) {
+                    const attachmentLines = attachments.map(item => `[${item.kind}] ${item.source}`);
+                    parts.push(`附件:\n${attachmentLines.join('\n')}`);
+                }
+
+                return parts.join('\n\n').trim();
+            }
+
+            window.appendUserMessage = function(content, attachments) {
                 const history = document.getElementById("history");
                 const messageDiv = document.createElement("div");
                 messageDiv.className = "message user";
+                attachments = attachments || [];
+
+                const attachmentHtml = attachments.length
+                    ? `
+                        <div class="attachment-list">
+                            <div class="attachment-label">附件 (${attachments.length})</div>
+                            ${attachments.map(item => `
+                                <div class="attachment-item">
+                                    <span class="attachment-kind">[${md.utils.escapeHtml(item.kind)}]</span>
+                                    <span class="attachment-source">${md.utils.escapeHtml(item.source)}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `
+                    : '';
+
+                messageDiv.dataset.rawUserContent = buildUserMessageText(content, attachments);
 
                 messageDiv.innerHTML = `
                     <div class="message-header">
@@ -78,13 +115,13 @@
                         <button class="copy-user-button" title="复制消息" aria-label="复制用户消息内容">📋</button>
                     </div>
                     <div class="message-content">${content}</div>
+                    ${attachmentHtml}
                 `;
 
                 // 添加用户消息复制按钮事件
                 const copyBtn = messageDiv.querySelector('.copy-user-button');
                 copyBtn.addEventListener('click', function() {
-                    const contentDiv = messageDiv.querySelector('.message-content');
-                    copyText(contentDiv.innerText, this, '已复制 ✓');
+                    copyText(messageDiv.dataset.rawUserContent, this, '已复制 ✓');
                 });
 
                 history.appendChild(messageDiv);

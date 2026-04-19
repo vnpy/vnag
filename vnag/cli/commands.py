@@ -67,9 +67,9 @@ def handle_command(
                 renderer.show_error(f"未找到 Profile: {arg}")
 
     elif cmd == "/retry":
-        prompt: str = agent.pop_round()
+        prompt, attachments = agent.pop_round()
         if prompt:
-            bridge.run(prompt, session)
+            bridge.run(prompt, session, attachments)
         else:
             renderer.show_info("没有可重发的对话")
 

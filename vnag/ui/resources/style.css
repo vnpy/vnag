@@ -60,6 +60,38 @@ body {
     background-color: #2563eb;
 }
 
+.attachment-list {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #3d4450;
+}
+
+.attachment-label {
+    margin-bottom: 8px;
+    color: #9ca3af;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.attachment-item {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.attachment-kind {
+    color: #60a5fa;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    white-space: nowrap;
+}
+
+.attachment-source {
+    color: #abb2bf;
+    word-break: break-all;
+}
+
 /* User message copy button */
 .copy-user-button {
     margin-left: auto;

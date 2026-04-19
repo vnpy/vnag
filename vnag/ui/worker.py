@@ -3,6 +3,7 @@ from typing import Any
 
 from ..agent import TaskAgent
 from ..constant import Role, DeltaEvent
+from ..object import Attachment
 from .qt import QtCore
 
 
@@ -42,12 +43,18 @@ class StreamWorker(QtCore.QRunnable):
     """
     在线程池中处理流式网关请求的Worker
     """
-    def __init__(self, agent: TaskAgent, prompt: str) -> None:
+    def __init__(
+        self,
+        agent: TaskAgent,
+        prompt: str,
+        attachments: list[Attachment] | None = None,
+    ) -> None:
         """构造函数"""
         super().__init__()
 
         self.agent: TaskAgent = agent
         self.prompt: str = prompt
+        self.attachments: list[Attachment] = attachments or []
         self.signals: StreamSignals = StreamSignals()
         self.stopped: bool = False
 
@@ -71,7 +78,7 @@ class StreamWorker(QtCore.QRunnable):
         total_output: int = 0
 
         try:
-            for delta in self.agent.stream(self.prompt):
+            for delta in self.agent.stream(self.prompt, self.attachments):
                 # 用户手动停止
                 if self.stopped:
                     # 中止流式生成，保存已生成的部分内容

@@ -7,7 +7,7 @@ from collections.abc import Generator
 
 from .object import (
     Session, Profile, Delta, Request, Response, Message,
-    Usage, ToolCall, ToolResult, ToolSchema
+    Usage, ToolCall, ToolResult, ToolSchema, Attachment
 )
 from .constant import Role, FinishReason, DeltaEvent
 from .utility import SESSION_DIR
@@ -85,8 +85,9 @@ class TaskAgent:
         # 中止标志
         self.aborted: bool = False
 
-        # 最后一轮对话状态：用户 prompt 和轮次起始索引
+        # 最后一轮对话状态：用户 prompt、附件和轮次起始索引
         self.round_prompt: str = ""
+        self.round_attachments: list[Attachment] = []
         self.round_start: int = 0
 
         # 确保会话始终以 system 消息开头，后续逻辑都依赖这个约定。
@@ -110,10 +111,12 @@ class TaskAgent:
                 break
             if self._has_user_input(msg):
                 self.round_prompt = msg.content
+                self.round_attachments = msg.attachments
                 self.round_start = i
                 return
 
         self.round_prompt = ""
+        self.round_attachments = []
         self.round_start = len(self.session.messages)
 
     def _ensure_system_message(self) -> None:
@@ -406,7 +409,11 @@ class TaskAgent:
         """会话消息"""
         return self.session.messages
 
-    def stream(self, prompt: str) -> Generator[Delta, None, None]:
+    def stream(
+        self,
+        prompt: str,
+        attachments: list[Attachment] | None = None,
+    ) -> Generator[Delta, None, None]:
         """
         流式生成（ReAct 编排器）
 
@@ -427,14 +434,18 @@ class TaskAgent:
         # 重置中止标志
         self.aborted = False
 
+        user_attachments: list[Attachment] = attachments or []
+
         # 记录轮次起点（用于 UI 层定位本轮消息范围）
         self.round_prompt = prompt
+        self.round_attachments = user_attachments
         self.round_start = len(self.session.messages)
 
         # 将用户输入添加到会话
         user_message: Message = Message(
             role=Role.USER,
-            content=prompt
+            content=prompt,
+            attachments=user_attachments,
         )
         self.session.messages.append(user_message)
 
@@ -625,14 +636,18 @@ class TaskAgent:
         """中止流式生成"""
         self.aborted = True
 
-    def invoke(self, prompt: str) -> Response:
+    def invoke(
+        self,
+        prompt: str,
+        attachments: list[Attachment] | None = None,
+    ) -> Response:
         """阻塞式生成"""
         full_content: str = ""
         response_id: str = ""
         total_usage: Usage = Usage()
 
         # 遍历 stream 方法返回的生成器，消费所有 Delta 数据
-        for delta in self.stream(prompt):
+        for delta in self.stream(prompt, attachments=attachments):
             if delta.id:
                 response_id = delta.id
 
@@ -668,11 +683,12 @@ class TaskAgent:
         self._init_round()
         self._save_session()
 
-    def pop_round(self) -> str:
-        """删除最后一轮对话并返回用户 prompt（用于重发）"""
+    def pop_round(self) -> tuple[str, list[Attachment]]:
+        """删除最后一轮对话并返回用户 prompt 和附件（用于重发）"""
         prompt: str = self.round_prompt
+        attachments: list[Attachment] = list(self.round_attachments)
         self.delete_round()
-        return prompt
+        return prompt, attachments
 
     def set_model(self, model: str) -> None:
         """设置模型"""

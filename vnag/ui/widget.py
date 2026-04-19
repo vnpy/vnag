@@ -1,4 +1,5 @@
 import json
+import mimetypes
 import os
 import re
 import uuid
@@ -7,11 +8,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast, NamedTuple
 
-from ..constant import Role
+from ..constant import Role, AttachmentKind
 from ..engine import AgentEngine, default_profile
-from ..object import ToolSchema, Segment
+from ..object import ToolSchema, Segment, Attachment
 from ..agent import Profile, TaskAgent
-from ..utility import read_text_file
+from ..utility import get_folder_path, read_text_file
 from ..gateways import GATEWAY_CLASSES, get_gateway_class
 from ..embedders import get_embedder_names, get_embedder_class
 from ..embedder import BaseEmbedder
@@ -44,8 +45,241 @@ class QueuedMessage(NamedTuple):
     role: Role
     content: str
     thinking: str
+    attachments: list[Attachment]
     input_tokens: int
     output_tokens: int
+
+
+def get_attachment_source(attachment: Attachment) -> str:
+    """获取附件来源文本"""
+    if attachment.path:
+        return os.path.normpath(attachment.path)
+    return attachment.url or attachment.name
+
+
+def format_attachment_text(attachment: Attachment) -> str:
+    """格式化附件摘要文本"""
+    return f"[{attachment.kind.value}] {get_attachment_source(attachment)}"
+
+
+def get_attachment_display_name(attachment: Attachment) -> str:
+    """获取适合界面展示的附件名称"""
+    if attachment.name:
+        return attachment.name
+
+    source: str = get_attachment_source(attachment)
+    if not source:
+        return "未命名附件"
+
+    return Path(source).name or source
+
+
+class AttachmentInputWidget(QtWidgets.QTextEdit):
+    """支持拖拽与粘贴附件的输入框"""
+
+    attachment_paths_added: QtCore.Signal = QtCore.Signal(list)
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        """处理拖拽进入事件"""
+        if self._extract_local_paths(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event: QtGui.QDragMoveEvent) -> None:
+        """处理拖拽移动事件"""
+        if self._extract_local_paths(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        """处理拖拽释放事件"""
+        paths: list[str] = self._extract_local_paths(event.mimeData())
+        if paths:
+            self.attachment_paths_added.emit(paths)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
+
+    def canInsertFromMimeData(self, source: QtCore.QMimeData) -> bool:
+        """判断是否支持当前剪贴板数据"""
+        return (
+            bool(self._extract_local_paths(source))
+            or source.hasImage()
+            or super().canInsertFromMimeData(source)
+        )
+
+    def insertFromMimeData(self, source: QtCore.QMimeData) -> None:
+        """处理拖拽或粘贴进来的数据"""
+        paths: list[str] = self._extract_local_paths(source)
+        if paths:
+            self.attachment_paths_added.emit(paths)
+            return
+
+        image_path: str | None = self._save_image_from_mime_data(source)
+        if image_path:
+            self.attachment_paths_added.emit([image_path])
+            return
+
+        super().insertFromMimeData(source)
+
+    @staticmethod
+    def _extract_local_paths(source: QtCore.QMimeData) -> list[str]:
+        """从 MimeData 中提取本地文件路径"""
+        if not source.hasUrls():
+            return []
+
+        paths: list[str] = []
+        for url in source.urls():
+            if not url.isLocalFile():
+                continue
+            local_path: str = url.toLocalFile()
+            if local_path:
+                paths.append(local_path)
+        return paths
+
+    @staticmethod
+    def _save_image_from_mime_data(source: QtCore.QMimeData) -> str | None:
+        """将剪贴板图片保存为临时文件"""
+        if not source.hasImage():
+            return None
+
+        image_data = source.imageData()
+        image: QtGui.QImage | None = None
+
+        if isinstance(image_data, QtGui.QImage):
+            image = image_data
+        elif isinstance(image_data, QtGui.QPixmap):
+            image = image_data.toImage()
+
+        if image is None or image.isNull():
+            return None
+
+        attachment_folder: Path = get_folder_path("pasted_attachments")
+        image_path: Path = attachment_folder.joinpath(f"pasted_{uuid.uuid4().hex}.png")
+        if image.save(str(image_path), b"PNG"):
+            return str(image_path)
+        return None
+
+
+class AttachmentChip(QtWidgets.QFrame):
+    """单个附件的轻量预览标签"""
+
+    remove_requested: QtCore.Signal = QtCore.Signal(int)
+
+    def __init__(
+        self,
+        attachment: Attachment,
+        index: int,
+        parent: QtWidgets.QWidget | None = None
+    ) -> None:
+        """构造函数"""
+        super().__init__(parent)
+        self.attachment: Attachment = attachment
+        self.index: int = index
+
+        self.setObjectName("attachmentChip")
+        self.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.setStyleSheet("""
+            QFrame#attachmentChip {
+                background: transparent;
+                border: none;
+            }
+            QLabel#attachmentTitle {
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+            QToolButton {
+                background: transparent;
+                border: none;
+                padding: 0;
+            }
+        """)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 2, 2)
+        layout.setSpacing(4)
+
+        name_label = QtWidgets.QLabel(self._elide_text(get_attachment_display_name(attachment), 180))
+        name_label.setObjectName("attachmentTitle")
+        name_label.setToolTip(get_attachment_source(attachment))
+
+        remove_button = QtWidgets.QToolButton()
+        remove_button.setText("×")
+        remove_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        remove_button.setToolTip("移除此附件")
+        remove_button.clicked.connect(lambda: self.remove_requested.emit(self.index))
+
+        layout.addWidget(name_label)
+        layout.addWidget(remove_button)
+
+    def _elide_text(self, text: str, max_width: int) -> str:
+        """将长文本裁剪为单行展示"""
+        metrics: QtGui.QFontMetrics = self.fontMetrics()
+        return metrics.elidedText(text, QtCore.Qt.TextElideMode.ElideRight, max_width)
+
+
+class AttachmentPreviewWidget(QtWidgets.QWidget):
+    """待发送附件预览区"""
+
+    attachment_removed: QtCore.Signal = QtCore.Signal(int)
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        """构造函数"""
+        super().__init__(parent)
+
+        self.setVisible(False)
+
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.scroll_area.setMaximumHeight(48)
+
+        self.content_widget = QtWidgets.QWidget()
+        self.content_layout = QtWidgets.QHBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(8)
+        self.scroll_area.setWidget(self.content_widget)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.scroll_area)
+
+    def set_attachments(self, attachments: list[Attachment]) -> None:
+        """刷新附件预览卡片"""
+        self._clear_content()
+        if not attachments:
+            self.setVisible(False)
+            return
+
+        for index, attachment in enumerate(attachments):
+            chip = AttachmentChip(attachment, index, self.content_widget)
+            chip.remove_requested.connect(self.attachment_removed)
+            self.content_layout.addWidget(chip)
+
+        self.content_layout.addStretch()
+        self.setVisible(True)
+
+    def _clear_content(self) -> None:
+        """清空当前卡片内容"""
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
 
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
@@ -116,6 +350,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
                 msg.role,
                 msg.content,
                 msg.thinking,
+                msg.attachments,
                 msg.input_tokens,
                 msg.output_tokens
             )
@@ -141,16 +376,20 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         role: Role,
         content: str,
         thinking: str = "",
+        attachments: list[Attachment] | None = None,
         input_tokens: int = 0,
         output_tokens: int = 0
     ) -> None:
         """在会话历史组件中添加消息"""
+        attachments = list(attachments or [])
+
         # 如果页面未加载完成，则将消息添加到消息队列
         if not self.page_loaded:
             self.message_queue.append(QueuedMessage(
                 role=role,
                 content=content,
                 thinking=thinking,
+                attachments=attachments,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens
             ))
@@ -166,8 +405,19 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
             )
 
             js_content: str = json.dumps(escaped_content)
+            js_attachments: str = json.dumps([
+                {
+                    "kind": attachment.kind.value,
+                    "name": attachment.name,
+                    "mime": attachment.mime,
+                    "source": get_attachment_source(attachment),
+                }
+                for attachment in attachments
+            ], ensure_ascii=False)
 
-            self.page().runJavaScript(f"appendUserMessage({js_content})")
+            self.page().runJavaScript(
+                f"appendUserMessage({js_content}, {js_attachments})"
+            )
         # AI消息，需要被渲染
         elif role is Role.ASSISTANT:
             js_content = json.dumps(content)
@@ -260,6 +510,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.agent: TaskAgent = agent
         self.worker: StreamWorker | None = None
         self.update_list: Callable[[], None] = update_list
+        self.pending_attachments: list[Attachment] = []
 
         self.init_ui()
         self.load_favorite_models()
@@ -269,16 +520,24 @@ class AgentWidget(QtWidgets.QWidget):
         """初始化UI"""
         desktop: QtCore.QRect = QtWidgets.QApplication.primaryScreen().availableGeometry()
 
-        self.input_widget: QtWidgets.QTextEdit = QtWidgets.QTextEdit()
+        button_width: int = 80
+        button_height: int = 50
+
+        self.input_widget: AttachmentInputWidget = AttachmentInputWidget()
         self.input_widget.setMaximumHeight(desktop.height() // 4)
         self.input_widget.setPlaceholderText("在这里输入消息，按下回车或者点击按钮发送")
         self.input_widget.setAcceptRichText(False)
         self.input_widget.installEventFilter(self)
+        self.input_widget.attachment_paths_added.connect(self.add_attachment_paths)
+
+        self.attach_button: QtWidgets.QPushButton = QtWidgets.QPushButton("+ 附件")
+        self.attach_button.clicked.connect(self.select_attachments)
+        self.attach_button.setFixedHeight(button_height)
+
+        self.attachment_preview_widget: AttachmentPreviewWidget = AttachmentPreviewWidget()
+        self.attachment_preview_widget.attachment_removed.connect(self.remove_attachment)
 
         self.history_widget: HistoryWidget = HistoryWidget(profile_name=self.agent.profile.name)
-
-        button_width: int = 80
-        button_height: int = 50
 
         self.send_button: QtWidgets.QPushButton = QtWidgets.QPushButton("发送")
         self.send_button.clicked.connect(self.send_message)
@@ -309,6 +568,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
 
         hbox = QtWidgets.QHBoxLayout()
+        hbox.addWidget(self.attach_button)
         hbox.addStretch()
         hbox.addWidget(self.model_combo)
         hbox.addWidget(self.delete_button)
@@ -316,10 +576,16 @@ class AgentWidget(QtWidgets.QWidget):
         hbox.addWidget(self.stop_button)
         hbox.addWidget(self.send_button)
 
+        composer_vbox = QtWidgets.QVBoxLayout()
+        composer_vbox.setContentsMargins(0, 0, 0, 0)
+        composer_vbox.setSpacing(8)
+        composer_vbox.addWidget(self.attachment_preview_widget)
+        composer_vbox.addWidget(self.input_widget)
+        composer_vbox.addLayout(hbox)
+
         vbox = QtWidgets.QVBoxLayout(self)
         vbox.addWidget(self.history_widget)
-        vbox.addWidget(self.input_widget)
-        vbox.addLayout(hbox)
+        vbox.addLayout(composer_vbox)
 
     def display_history(self) -> None:
         """显示当前会话的聊天记录"""
@@ -337,14 +603,14 @@ class AgentWidget(QtWidgets.QWidget):
                 continue
             # 用户消息
             elif message.role is Role.USER:
-                # 有内容
-                if message.content:
+                if message.content or message.attachments:
                     # 如果助手内容不为空，则先显示助手内容（包含之前的工具调用记录）
                     if assistant_content:
                         self.history_widget.append_message(
                             Role.ASSISTANT,
                             assistant_content,
                             assistant_thinking,
+                            None,
                             assistant_input_tokens,
                             assistant_output_tokens
                         )
@@ -355,7 +621,11 @@ class AgentWidget(QtWidgets.QWidget):
                         last_type = ""
 
                     # 显示用户内容
-                    self.history_widget.append_message(Role.USER, message.content)
+                    self.history_widget.append_message(
+                        Role.USER,
+                        message.content,
+                        attachments=message.attachments
+                    )
                 # 没有内容（工具调用结果返回），则跳过
                 else:
                     continue
@@ -391,6 +661,7 @@ class AgentWidget(QtWidgets.QWidget):
                 Role.ASSISTANT,
                 assistant_content,
                 assistant_thinking,
+                None,
                 assistant_input_tokens,
                 assistant_output_tokens
             )
@@ -398,7 +669,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.update_buttons()
 
     def build_markdown_text(self) -> str:
-        """生成会话的 Markdown 纯文本（仅用户与助手的正文 content，不含思考与工具信息）"""
+        """生成会话的 Markdown 纯文本（包含用户附件摘要，不含思考与工具信息）"""
         parts: list[str] = [f"# {self.agent.name}\n\n"]
         assistant_content: str = ""
 
@@ -406,11 +677,21 @@ class AgentWidget(QtWidgets.QWidget):
             if message.role is Role.SYSTEM:
                 continue
             elif message.role is Role.USER:
-                if message.content:
+                if message.content or message.attachments:
                     if assistant_content:
                         parts.append(f"## 助手\n\n{assistant_content}\n\n")
                         assistant_content = ""
-                    parts.append(f"## 用户\n\n{message.content}\n\n")
+                    body_parts: list[str] = []
+                    if message.content:
+                        body_parts.append(message.content)
+                    if message.attachments:
+                        attachment_lines: str = "\n".join(
+                            f"- {format_attachment_text(attachment)}"
+                            for attachment in message.attachments
+                        )
+                        body_parts.append(f"附件:\n{attachment_lines}")
+                    user_body: str = "\n\n".join(body_parts)
+                    parts.append(f"## 用户\n\n{user_body}\n\n")
                 else:
                     continue
             elif message.role is Role.ASSISTANT:
@@ -444,12 +725,14 @@ class AgentWidget(QtWidgets.QWidget):
             return
 
         text: str = self.input_widget.toPlainText().strip()
-        if not text:
+        attachments: list[Attachment] = list(self.pending_attachments)
+        if not text and not attachments:
             return
         self.input_widget.clear()
 
         # 将用户输入添加到UI历史
-        self.history_widget.append_message(Role.USER, text)
+        self.history_widget.append_message(Role.USER, text, attachments=attachments)
+        self.clear_attachments()
         self.history_widget.start_stream()
 
         self.send_button.setVisible(False)
@@ -457,7 +740,7 @@ class AgentWidget(QtWidgets.QWidget):
         self.resend_button.setEnabled(False)
         self.delete_button.setEnabled(False)
 
-        worker: StreamWorker = StreamWorker(self.agent, text)
+        worker: StreamWorker = StreamWorker(self.agent, text, attachments)
         worker.signals.content.connect(self.on_stream_content)
         worker.signals.thinking.connect(self.on_stream_thinking)
         worker.signals.usage.connect(self.on_stream_usage)
@@ -483,18 +766,79 @@ class AgentWidget(QtWidgets.QWidget):
 
     def resend_round(self) -> None:
         """重新发送最后一轮对话"""
-        prompt: str = self.agent.pop_round()
+        prompt, attachments = self.agent.pop_round()
 
-        if prompt:
-            self.input_widget.setText(prompt)
+        self.input_widget.setText(prompt)
+        self.pending_attachments = list(attachments)
+        self.refresh_attachment_preview()
 
         self.display_history()
 
     def update_buttons(self) -> None:
         """更新功能按钮状态"""
-        enabled: bool = bool(self.agent.round_prompt)
+        enabled: bool = bool(self.agent.round_prompt or self.agent.round_attachments)
         self.resend_button.setEnabled(enabled)
         self.delete_button.setEnabled(enabled)
+
+    def select_attachments(self) -> None:
+        """选择附件"""
+        paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
+            self,
+            "选择附件",
+            "",
+            "Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp);;All files (*)",
+        )
+        if not paths:
+            return
+
+        self.add_attachment_paths(paths)
+
+    def add_attachment_paths(self, paths: list[str]) -> None:
+        """将路径列表转换为附件并添加到待发送列表"""
+        existing_paths: set[str] = {
+            attachment.path
+            for attachment in self.pending_attachments
+            if attachment.path
+        }
+        for path in paths:
+            if path in existing_paths:
+                continue
+
+            mime: str = mimetypes.guess_type(path)[0] or ""
+            kind: AttachmentKind = (
+                AttachmentKind.IMAGE if mime.startswith("image/") else AttachmentKind.FILE
+            )
+            self.pending_attachments.append(Attachment(
+                kind=kind,
+                name=Path(path).name,
+                mime=mime,
+                path=path,
+            ))
+            existing_paths.add(path)
+
+        self.refresh_attachment_preview()
+
+    def clear_attachments(self) -> None:
+        """清空待发送附件"""
+        self.pending_attachments.clear()
+        self.refresh_attachment_preview()
+
+    def remove_attachment(self, index: int) -> None:
+        """移除单个附件"""
+        if index < 0 or index >= len(self.pending_attachments):
+            return
+
+        del self.pending_attachments[index]
+        self.refresh_attachment_preview()
+
+    def refresh_attachment_preview(self) -> None:
+        """刷新附件预览区"""
+        self.attachment_preview_widget.set_attachments(self.pending_attachments)
+        attachment_count: int = len(self.pending_attachments)
+        if attachment_count:
+            self.attach_button.setToolTip(f"已添加 {attachment_count} 个附件")
+        else:
+            self.attach_button.setToolTip("添加图片或文件")
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """事件过滤器"""
