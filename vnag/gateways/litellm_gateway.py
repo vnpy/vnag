@@ -130,8 +130,15 @@ class LitellmGateway(CompletionGateway):
 
             message_dict: dict[str, Any] = {"role": msg.role.value}
 
-            # 处理内容
-            message_dict["content"] = msg.content or ""
+            # assistant 消息保留原始内容与 thinking_blocks 回传格式，
+            # 其余消息复用 CompletionGateway 的附件内容构造逻辑。
+            if msg.role == Role.ASSISTANT:
+                if msg.content:
+                    message_dict["content"] = msg.content
+            else:
+                content: str | list[dict[str, Any]] = self._build_chat_content(msg)
+                if content:
+                    message_dict["content"] = content
 
             # 处理 tool_calls
             if msg.tool_calls:

@@ -1,15 +1,17 @@
 import base64
 import json
 from typing import Any
+from pathlib import Path
 from uuid import uuid4
 from collections.abc import Generator
+import mimetypes
 
 from google import genai
 from google.genai import types
 
-from vnag.constant import FinishReason, Role
+from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
 
 
 GEMINI_STATIC_MODELS: list[str] = [
@@ -51,6 +53,50 @@ class GeminiGateway(BaseGateway):
             gateway_name = self.default_name
         self.gateway_name = gateway_name
         self.client: genai.Client | None = None
+
+    def _read_attachment_bytes(self, attachment: Attachment) -> tuple[bytes, str]:
+        """读取 Gemini 本地附件并返回 (bytes, mime)。"""
+        if attachment.url:
+            raise ValueError("Gemini 网关当前仅支持本地 path 附件")
+        if not attachment.path:
+            raise ValueError("附件必须设置 path")
+
+        file_path: Path = Path(attachment.path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+        mime: str = attachment.mime or mimetypes.guess_type(file_path.name)[0] or ""
+        if not mime:
+            raise ValueError(f"无法推断附件 MIME 类型: {attachment.path}")
+
+        return file_path.read_bytes(), mime
+
+    def _build_user_parts(self, msg: Message) -> list[types.Part]:
+        """构造 Gemini user parts。"""
+        parts: list[types.Part] = []
+        if msg.content:
+            parts.append(types.Part.from_text(text=msg.content))
+
+        for attachment in msg.attachments:
+            raw_bytes, mime = self._read_attachment_bytes(attachment)
+
+            if attachment.kind == AttachmentKind.IMAGE:
+                if not mime.startswith("image/"):
+                    raise ValueError(f"Gemini 不支持的图片 MIME 类型: {mime}")
+            elif attachment.kind == AttachmentKind.FILE:
+                if mime != "application/pdf":
+                    raise ValueError("Gemini 网关当前仅支持 PDF 文件附件")
+            else:
+                raise ValueError(
+                    f"当前网关暂不支持附件类型: {attachment.kind.value}"
+                )
+
+            parts.append(types.Part.from_bytes(
+                data=raw_bytes,
+                mime_type=mime,
+            ))
+
+        return parts
 
     def _convert_messages(
         self, messages: list[Message]
@@ -96,10 +142,11 @@ class GeminiGateway(BaseGateway):
                 continue
 
             # user 消息
-            if msg.content:
+            parts = self._build_user_parts(msg)
+            if parts:
                 contents.append(types.Content(
                     role="user",
-                    parts=[types.Part.from_text(text=msg.content)],
+                    parts=parts,
                 ))
 
         system_instruction: str = "\n\n".join(system_parts)

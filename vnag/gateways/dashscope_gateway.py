@@ -1,17 +1,19 @@
 from typing import Any
+from pathlib import Path
 from collections.abc import Generator
 
 import dashscope
-from dashscope import Generation, Models
+from dashscope import Generation, Models, MultiModalConversation
 from dashscope.api_entities.dashscope_response import (
     DashScopeAPIResponse,
-    GenerationResponse,
-    Choice
+    Choice,
+    MultiModalConversationResponse,
 )
 
 from vnag.gateway import BaseGateway
 from vnag.object import FinishReason, Request, Response, Delta, Usage, Message
 from vnag.object import Role
+from vnag.constant import AttachmentKind
 
 
 FINISH_REASON_MAP = {
@@ -36,6 +38,60 @@ class DashscopeGateway(BaseGateway):
         self.gateway_name = gateway_name
 
         self.api_key: str = ""
+
+    def _use_multimodal_api(self, messages: list[Message]) -> bool:
+        """判断是否需要切换到多模态 API。"""
+        return any(msg.attachments for msg in messages)
+
+    def _extract_text_content(self, content: Any) -> str:
+        """从 DashScope content 中提取文本。"""
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            text_parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict) and item.get("text"):
+                    text_parts.append(str(item["text"]))
+            return "".join(text_parts)
+
+        return ""
+
+    def _convert_multimodal_messages(
+        self, messages: list[Message]
+    ) -> list[dict[str, Any]]:
+        """将内部格式转换为 DashScope 多模态消息格式。"""
+        dashscope_messages: list[dict[str, Any]] = []
+
+        for msg in messages:
+            if msg.attachments and msg.role != Role.USER:
+                raise ValueError("DashScope 网关当前仅支持用户消息携带附件")
+
+            content_parts: list[dict[str, Any]] = []
+            if msg.content:
+                content_parts.append({"text": msg.content})
+
+            for attachment in msg.attachments:
+                if attachment.kind != AttachmentKind.IMAGE:
+                    raise ValueError("DashScope 网关当前仅支持图片附件")
+
+                if attachment.url:
+                    content_parts.append({"image": attachment.url})
+                    continue
+
+                if not attachment.path:
+                    raise ValueError("附件必须设置 url 或 path")
+
+                image_uri: str = Path(attachment.path).resolve().as_uri()
+                content_parts.append({"image": image_uri})
+
+            if content_parts:
+                dashscope_messages.append({
+                    "role": msg.role.value,
+                    "content": content_parts,
+                })
+
+        return dashscope_messages
 
     def _convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """将内部格式转换为 Dashscope (OpenAI兼容) 格式"""
@@ -73,16 +129,33 @@ class DashscopeGateway(BaseGateway):
         dashscope_messages = self._convert_messages(request.messages)
 
         # 准备请求参数
-        call_params: dict[str, Any] = {
-            "model": request.model,
-            "messages": dashscope_messages,
-            "result_format": "message",
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-            "top_p": request.top_p,
-        }
+        if self._use_multimodal_api(request.messages):
+            call_params: dict[str, Any] = {
+                "model": request.model,
+                "messages": self._convert_multimodal_messages(request.messages),
+                "stream": False,
+            }
+            if request.temperature is not None:
+                call_params["temperature"] = request.temperature
+            if request.max_tokens is not None:
+                call_params["max_length"] = request.max_tokens
+            if request.top_p is not None:
+                call_params["top_p"] = request.top_p
 
-        response: GenerationResponse = Generation.call(**call_params)
+            response: MultiModalConversationResponse = (
+                MultiModalConversation.call(**call_params)
+            )
+        else:
+            call_params = {
+                "model": request.model,
+                "messages": dashscope_messages,
+                "result_format": "message",
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+                "top_p": request.top_p,
+            }
+
+            response = Generation.call(**call_params)
 
         if response.status_code != 200:
             return Response(
@@ -95,12 +168,11 @@ class DashscopeGateway(BaseGateway):
             input_tokens=response.usage.input_tokens,
             output_tokens=response.usage.output_tokens,
         )
-        print(response)
         choice: Choice = response.output.choices[0]
         finish_reason: FinishReason = FINISH_REASON_MAP.get(
             choice.finish_reason, FinishReason.UNKNOWN
         )
-        content: str = choice.message.content or ""
+        content: str = self._extract_text_content(choice.message.content)
 
         # 构建返回的消息对象
         message: Message = Message(
@@ -126,17 +198,34 @@ class DashscopeGateway(BaseGateway):
         dashscope_messages = self._convert_messages(request.messages)
 
         # 准备请求参数
-        call_params: dict[str, Any] = {
-            "model": request.model,
-            "messages": dashscope_messages,
-            "result_format": "message",
-            "stream": True,
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-            "top_p": request.top_p,
-        }
+        if self._use_multimodal_api(request.messages):
+            call_params: dict[str, Any] = {
+                "model": request.model,
+                "messages": self._convert_multimodal_messages(request.messages),
+                "stream": True,
+            }
+            if request.temperature is not None:
+                call_params["temperature"] = request.temperature
+            if request.max_tokens is not None:
+                call_params["max_length"] = request.max_tokens
+            if request.top_p is not None:
+                call_params["top_p"] = request.top_p
 
-        stream: Generator[GenerationResponse, None, None] = Generation.call(**call_params)
+            stream: Generator[MultiModalConversationResponse, None, None] = (
+                MultiModalConversation.call(**call_params)
+            )
+        else:
+            call_params = {
+                "model": request.model,
+                "messages": dashscope_messages,
+                "result_format": "message",
+                "stream": True,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+                "top_p": request.top_p,
+            }
+
+            stream = Generation.call(**call_params)
 
         response_id: str = ""
         full_content: str = ""
@@ -159,7 +248,7 @@ class DashscopeGateway(BaseGateway):
             choice: Choice = response.output.choices[0]
 
             # 检查内容增量
-            new_content = choice.message.content or ""
+            new_content = self._extract_text_content(choice.message.content)
             delta_content = new_content[len(full_content):]
             if delta_content:
                 full_content = new_content
@@ -199,8 +288,6 @@ class DashscopeGateway(BaseGateway):
         if response.status_code != 200:
             self.write_log(f"查询模型列表失败: {response.message}")
             return []
-
-        print(response)
 
         model_names: list[str] = [d["name"] for d in response.output["models"]]
         return model_names

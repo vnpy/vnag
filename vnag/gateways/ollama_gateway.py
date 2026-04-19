@@ -1,10 +1,11 @@
 from typing import Any
+from pathlib import Path
 from uuid import uuid4
 from collections.abc import Generator
 
 from ollama import Client
 
-from vnag.constant import FinishReason, Role
+from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
 from vnag.object import Request, Response, Delta, Usage, Message, ToolCall
 
@@ -86,6 +87,29 @@ class OllamaGateway(BaseGateway):
             "text": thinking,
         }]
 
+    def _build_user_images(self, msg: Message) -> list[str]:
+        """构造 Ollama user images 列表。"""
+        images: list[str] = []
+
+        for attachment in msg.attachments:
+            if attachment.kind == AttachmentKind.FILE:
+                raise ValueError("Ollama 网关暂不支持文件附件")
+            if attachment.kind != AttachmentKind.IMAGE:
+                raise ValueError(f"当前网关暂不支持附件类型: {attachment.kind.value}")
+
+            if attachment.url:
+                raise ValueError("Ollama 网关当前仅支持本地 path 图片附件")
+            if not attachment.path:
+                raise ValueError("附件必须设置 path")
+
+            file_path: Path = Path(attachment.path)
+            if not file_path.is_file():
+                raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+            images.append(str(file_path))
+
+        return images
+
     def _convert_tool_calls(
         self, tool_calls: list[ToolCall]
     ) -> list[dict[str, Any]]:
@@ -136,8 +160,11 @@ class OllamaGateway(BaseGateway):
                     ollama_messages.append(message_dict)
                 continue
 
-            if msg.content:
+            images: list[str] = self._build_user_images(msg)
+            if msg.content or images:
                 message_dict["content"] = msg.content
+                if images:
+                    message_dict["images"] = images
                 ollama_messages.append(message_dict)
 
         return ollama_messages

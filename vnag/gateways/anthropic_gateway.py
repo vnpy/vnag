@@ -1,14 +1,17 @@
 import json
 from typing import Any
+from pathlib import Path
 from collections.abc import Generator
+import base64
+import mimetypes
 
 import httpx
 from anthropic import Anthropic, Stream
 from anthropic.types import Message as AnthropicMessage, MessageStreamEvent
 
-from vnag.constant import FinishReason, Role
+from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
 
 
 ANTHROPIC_FINISH_REASON_MAP = {
@@ -36,6 +39,69 @@ class AnthropicGateway(BaseGateway):
             gateway_name = self.default_name
         self.gateway_name = gateway_name
         self.client: Anthropic | None = None
+
+    def _read_attachment_bytes(self, attachment: Attachment) -> tuple[bytes, str]:
+        """读取本地附件内容并返回 (bytes, mime)。"""
+        if attachment.url:
+            raise ValueError("Anthropic 网关当前仅支持本地 path 附件")
+        if not attachment.path:
+            raise ValueError("附件必须设置 path")
+
+        file_path: Path = Path(attachment.path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+        mime: str = attachment.mime or mimetypes.guess_type(file_path.name)[0] or ""
+        if not mime:
+            raise ValueError(f"无法推断附件 MIME 类型: {attachment.path}")
+
+        return file_path.read_bytes(), mime
+
+    def _build_user_content(self, msg: Message) -> str | list[dict[str, Any]]:
+        """构造 Anthropic user content。"""
+        if not msg.attachments:
+            return msg.content
+
+        content_blocks: list[dict[str, Any]] = []
+        if msg.content:
+            content_blocks.append({
+                "type": "text",
+                "text": msg.content,
+            })
+
+        for attachment in msg.attachments:
+            raw_bytes, mime = self._read_attachment_bytes(attachment)
+            data: str = base64.b64encode(raw_bytes).decode("ascii")
+
+            if attachment.kind == AttachmentKind.IMAGE:
+                if not mime.startswith("image/"):
+                    raise ValueError(f"Anthropic 不支持的图片 MIME 类型: {mime}")
+                content_blocks.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": data,
+                    },
+                })
+                continue
+
+            if attachment.kind == AttachmentKind.FILE:
+                if mime != "application/pdf":
+                    raise ValueError("Anthropic 网关当前仅支持 PDF 文件附件")
+                content_blocks.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": mime,
+                        "data": data,
+                    },
+                })
+                continue
+
+            raise ValueError(f"当前网关暂不支持附件类型: {attachment.kind.value}")
+
+        return content_blocks
 
     def _convert_messages(self, messages: list[Message]) -> tuple[str, list[dict[str, Any]]]:
         """将内部格式转换为 Anthropic 格式"""
@@ -93,7 +159,7 @@ class AnthropicGateway(BaseGateway):
             else:
                 anthropic_messages.append({
                     "role": msg.role.value,
-                    "content": msg.content
+                    "content": self._build_user_content(msg)
                 })
 
         return system_prompt, anthropic_messages

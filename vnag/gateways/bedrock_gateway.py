@@ -1,14 +1,16 @@
 import os
 import json
 from typing import Any
+from pathlib import Path
 from collections.abc import Generator
+import mimetypes
 
 import boto3
 from botocore.config import Config as BotoConfig
 
-from vnag.constant import FinishReason, Role
+from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
 
 
 BEDROCK_FINISH_REASON_MAP: dict[str, FinishReason] = {
@@ -37,6 +39,72 @@ class BedrockGateway(BaseGateway):
         self.gateway_name = gateway_name
         self.client: Any | None = None
         self.meta_client: Any | None = None
+
+    def _read_attachment_bytes(self, attachment: Attachment) -> tuple[bytes, str]:
+        """读取 Bedrock 本地附件并返回 (bytes, mime)。"""
+        if attachment.url:
+            raise ValueError("Bedrock 网关当前仅支持本地 path 附件")
+        if not attachment.path:
+            raise ValueError("附件必须设置 path")
+
+        file_path: Path = Path(attachment.path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+        mime: str = attachment.mime or mimetypes.guess_type(file_path.name)[0] or ""
+        if not mime:
+            raise ValueError(f"无法推断附件 MIME 类型: {attachment.path}")
+
+        return file_path.read_bytes(), mime
+
+    def _resolve_attachment_name(self, attachment: Attachment) -> str:
+        """推断 Bedrock 文档名称。"""
+        if attachment.name:
+            return attachment.name
+        if attachment.path:
+            return Path(attachment.path).stem or "attachment"
+        return "attachment"
+
+    def _build_user_content(self, msg: Message) -> list[dict[str, Any]]:
+        """构造 Bedrock user content blocks。"""
+        content_blocks: list[dict[str, Any]] = []
+        if msg.content:
+            content_blocks.append({"text": msg.content})
+
+        has_document: bool = False
+        for attachment in msg.attachments:
+            raw_bytes, mime = self._read_attachment_bytes(attachment)
+
+            if attachment.kind == AttachmentKind.IMAGE:
+                if not mime.startswith("image/"):
+                    raise ValueError(f"Bedrock 不支持的图片 MIME 类型: {mime}")
+                content_blocks.append({
+                    "image": {
+                        "format": mime.split("/", maxsplit=1)[1],
+                        "source": {"bytes": raw_bytes},
+                    }
+                })
+                continue
+
+            if attachment.kind == AttachmentKind.FILE:
+                if mime != "application/pdf":
+                    raise ValueError("Bedrock 网关当前仅支持 PDF 文件附件")
+                has_document = True
+                content_blocks.append({
+                    "document": {
+                        "format": "pdf",
+                        "name": self._resolve_attachment_name(attachment),
+                        "source": {"bytes": raw_bytes},
+                    }
+                })
+                continue
+
+            raise ValueError(f"当前网关暂不支持附件类型: {attachment.kind.value}")
+
+        if has_document and not any("text" in block for block in content_blocks):
+            content_blocks.insert(0, {"text": "请分析该文档。"})
+
+        return content_blocks
 
     def _convert_messages(
         self, messages: list[Message]
@@ -122,7 +190,7 @@ class BedrockGateway(BaseGateway):
             # user 消息
             bedrock_messages.append({
                 "role": msg.role.value,
-                "content": [{"text": msg.content}],
+                "content": self._build_user_content(msg),
             })
 
         return system_prompts, bedrock_messages

@@ -1,6 +1,9 @@
 from typing import Any
+from pathlib import Path
 from collections.abc import Generator
+import base64
 import json
+import mimetypes
 
 import httpx
 from openai import OpenAI
@@ -8,8 +11,17 @@ from openai.types.responses import Response as OAIResponse
 from openai.types.responses.response_stream_event import ResponseStreamEvent
 
 from vnag.gateway import BaseGateway
-from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ToolCall
-from vnag.constant import Role
+from vnag.object import (
+    FinishReason,
+    Request,
+    Response,
+    Delta,
+    Usage,
+    Message,
+    ToolCall,
+    Attachment,
+)
+from vnag.constant import Role, AttachmentKind
 
 
 class OpenaiGateway(BaseGateway):
@@ -42,6 +54,84 @@ class OpenaiGateway(BaseGateway):
 
         self.client: OpenAI | None = None
         self.reasoning_effort: str = "medium"
+
+    def _resolve_attachment_source(self, attachment: Attachment) -> tuple[str, str]:
+        """将附件转换为 Responses API 可接受的 URL 或 data URL。"""
+        if attachment.url and attachment.path:
+            raise ValueError("附件 url 和 path 不能同时设置")
+
+        if not attachment.url and not attachment.path:
+            raise ValueError("附件必须设置 url 或 path")
+
+        if attachment.url:
+            mime: str = (
+                attachment.mime
+                or mimetypes.guess_type(attachment.url.split("?", maxsplit=1)[0])[0]
+                or ""
+            )
+            return attachment.url, mime
+
+        file_path: Path = Path(attachment.path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"附件文件不存在: {attachment.path}")
+
+        mime = attachment.mime or mimetypes.guess_type(file_path.name)[0] or ""
+        if not mime:
+            raise ValueError(f"无法推断附件 MIME 类型: {attachment.path}")
+
+        data: str = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}", mime
+
+    def _resolve_attachment_name(self, attachment: Attachment) -> str:
+        """推断文件附件的展示名称。"""
+        if attachment.name:
+            return attachment.name
+        if attachment.path:
+            return Path(attachment.path).name
+        if attachment.url:
+            return Path(attachment.url.split("?", maxsplit=1)[0]).name or "attachment"
+        return "attachment"
+
+    def _build_user_content(
+        self, msg: Message
+    ) -> str | list[dict[str, Any]]:
+        """构造 Responses API 的 user content。"""
+        if not msg.attachments:
+            return msg.content
+
+        if msg.role != Role.USER:
+            raise ValueError("当前仅支持用户消息携带附件")
+
+        content_parts: list[dict[str, Any]] = []
+        if msg.content:
+            content_parts.append({
+                "type": "input_text",
+                "text": msg.content,
+            })
+
+        for attachment in msg.attachments:
+            source, mime = self._resolve_attachment_source(attachment)
+
+            if attachment.kind == AttachmentKind.IMAGE:
+                if mime and not mime.startswith("image/"):
+                    raise ValueError(f"不支持的图片 MIME 类型: {mime}")
+                content_parts.append({
+                    "type": "input_image",
+                    "image_url": source,
+                })
+                continue
+
+            if attachment.kind == AttachmentKind.FILE:
+                content_parts.append({
+                    "type": "input_file",
+                    "filename": self._resolve_attachment_name(attachment),
+                    "file_data": source,
+                })
+                continue
+
+            raise ValueError(f"当前网关暂不支持附件类型: {attachment.kind.value}")
+
+        return content_parts
 
     def _convert_input(
         self, messages: list[Message]
@@ -83,9 +173,10 @@ class OpenaiGateway(BaseGateway):
                     })
                 continue
 
+            content: str | list[dict[str, Any]] = self._build_user_content(msg)
             input_items.append({
                 "role": msg.role.value,
-                "content": msg.content,
+                "content": content,
             })
 
         return input_items, instructions
