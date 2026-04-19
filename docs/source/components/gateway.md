@@ -42,7 +42,7 @@ class BaseGateway(ABC):
 
 OpenAI API 及兼容接口。
 
-当前支持文本消息；当 `Message.attachments` 中包含图片附件时，会自动转换为 OpenAI-compatible 多模态 `content` 数组。
+当前支持文本消息；当 `Message.attachments` 中包含图片或文件附件时，会自动转换为 OpenAI-compatible 多模态 `content` 数组。
 
 ```python
 from vnag.gateways.completion_gateway import CompletionGateway

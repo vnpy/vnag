@@ -132,7 +132,7 @@ assistant_msg = Message(
 )
 ```
 
-其中，`content` 始终表示文本内容；图片等非文本输入放在 `attachments` 中。
+其中，`content` 始终表示文本内容；图片、文件等非文本输入放在 `attachments` 中。
 
 ### 角色类型
 

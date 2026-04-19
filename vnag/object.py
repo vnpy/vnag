@@ -124,6 +124,7 @@ class Session(BaseModel):
 class Attachment(BaseModel):
     """标准化的附件对象"""
     kind: AttachmentKind
+    name: str = ""
     mime: str = ""
     url: str = ""
     path: str = ""

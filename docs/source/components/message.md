@@ -33,7 +33,7 @@ message = Message(
 
 ## Attachment 附件
 
-`attachments` 用于承载图片等非文本输入，`content` 仍然只表示文本正文。
+`attachments` 用于承载图片、文件等非文本输入，`content` 仍然只表示文本正文。
 
 ```python
 from vnag.object import Attachment, Message
@@ -55,8 +55,9 @@ message = Message(
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `kind` | AttachmentKind | 附件类型，如 `image` |
+| `kind` | AttachmentKind | 附件类型，如 `image`、`file` |
 | `mime` | str | MIME 类型，如 `image/png` |
+| `name` | str | 附件名称，文件类型可用于指定文件名 |
 | `url` | str | 远程资源地址 |
 | `path` | str | 本地文件路径 |
 

@@ -38,7 +38,12 @@ class MessageAttachmentTestCase(unittest.TestCase):
                 Message(role=Role.SYSTEM, content="系统提示词"),
                 Message(
                     role=Role.USER,
-                    attachments=[Attachment(path="demo.png")],
+                    attachments=[
+                        Attachment(
+                            kind=AttachmentKind.IMAGE,
+                            path="demo.png",
+                        )
+                    ],
                 ),
                 Message(role=Role.ASSISTANT, content="已分析图片"),
             ],
@@ -91,7 +96,12 @@ class MessageAttachmentTestCase(unittest.TestCase):
             messages = [
                 Message(
                     role=Role.USER,
-                    attachments=[Attachment(path=str(image_path))],
+                    attachments=[
+                        Attachment(
+                            kind=AttachmentKind.IMAGE,
+                            path=str(image_path),
+                        )
+                    ],
                 )
             ]
 
@@ -105,17 +115,64 @@ class MessageAttachmentTestCase(unittest.TestCase):
             )
         )
 
-    def test_completion_gateway_rejects_unsupported_attachment_kind(self) -> None:
+    def test_completion_gateway_uses_file_block_for_remote_attachment(self) -> None:
         gateway = CompletionGateway()
         messages = [
             Message(
                 role=Role.USER,
-                attachments=[Attachment(kind=AttachmentKind.FILE, path="report.pdf")],
+                attachments=[
+                    Attachment(
+                        kind=AttachmentKind.FILE,
+                        name="report.pdf",
+                        url="https://example.com/report.pdf",
+                    )
+                ],
             )
         ]
 
-        with self.assertRaises(ValueError):
-            gateway._convert_messages(messages)
+        converted = gateway._convert_messages(messages)
+
+        self.assertEqual(converted[0]["content"][0]["type"], "file")
+        self.assertEqual(
+            converted[0]["content"][0]["file"]["filename"],
+            "report.pdf",
+        )
+        self.assertEqual(
+            converted[0]["content"][0]["file"]["file_data"],
+            "https://example.com/report.pdf",
+        )
+
+    def test_completion_gateway_reads_local_file_attachment(self) -> None:
+        gateway = CompletionGateway()
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir).joinpath("report.pdf")
+            file_path.write_bytes(b"%PDF-1.4 fake data")
+
+            messages = [
+                Message(
+                    role=Role.USER,
+                    attachments=[
+                        Attachment(
+                            kind=AttachmentKind.FILE,
+                            path=str(file_path),
+                        )
+                    ],
+                )
+            ]
+
+            converted = gateway._convert_messages(messages)
+
+        self.assertEqual(converted[0]["content"][0]["type"], "file")
+        self.assertEqual(
+            converted[0]["content"][0]["file"]["filename"],
+            "report.pdf",
+        )
+        self.assertTrue(
+            converted[0]["content"][0]["file"]["file_data"].startswith(
+                "data:application/pdf;base64,"
+            )
+        )
 
 
 if __name__ == "__main__":
