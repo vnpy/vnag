@@ -6,7 +6,7 @@ from vnag.agent import (
     TaskAgent,
 )
 from vnag.constant import Role
-from vnag.object import Delta, Message, Profile, Session, ToolResult, Usage
+from vnag.object import Delta, Message, Profile, Session, ToolCall, ToolResult, Usage
 
 
 class FakeEngine:
@@ -402,6 +402,117 @@ class CompactionTestCase(unittest.TestCase):
         self.assertEqual(
             [message.content for message in engine.requests[-1].messages],
             ["系统提示词", f"{SUMMARY_PREFIX}\n较长历史摘要", "新问题"],
+        )
+
+    def test_generate_title_strips_tool_blocks_from_history(self) -> None:
+        engine = FakeEngine()
+        profile = Profile(name="助手", prompt="系统提示词", tools=[])
+        session = Session(
+            id="session-11",
+            profile="助手",
+            name="默认会话",
+            model="test-model",
+            messages=[
+                Message(role=Role.SYSTEM, content="系统提示词"),
+                Message(role=Role.USER, content="请帮我分析报错"),
+                Message(
+                    role=Role.ASSISTANT,
+                    content="我先查看配置",
+                    tool_calls=[
+                        ToolCall(
+                            id="tool-call-1",
+                            name="read_config",
+                            arguments={"path": "config.yaml"},
+                        )
+                    ],
+                ),
+                Message(
+                    role=Role.USER,
+                    tool_results=[
+                        ToolResult(
+                            id="tool-call-1",
+                            name="read_config",
+                            content="配置缺少 region_name",
+                        )
+                    ],
+                ),
+            ],
+        )
+        agent = TaskAgent(engine, profile, session, save=False)
+
+        title = agent.generate_title(max_length=10)
+
+        self.assertEqual(title, "最终回答")
+        self.assertEqual(len(engine.requests), 1)
+        self.assertTrue(
+            all(
+                not message.tool_calls and not message.tool_results
+                for message in engine.requests[0].messages
+            )
+        )
+        self.assertEqual(
+            [message.content for message in engine.requests[0].messages[:-1]],
+            [
+                "系统提示词",
+                "请帮我分析报错",
+                "我先查看配置",
+                "[工具结果:read_config] 配置缺少 region_name",
+            ],
+        )
+
+    def test_generate_summary_strips_tool_blocks_from_compacted_history(self) -> None:
+        engine = FakeEngine(summary_text="新的历史摘要")
+        profile = Profile(name="助手", prompt="系统提示词", tools=[])
+        session = Session(
+            id="session-12",
+            profile="助手",
+            name="默认会话",
+            model="test-model",
+            messages=[Message(role=Role.SYSTEM, content="系统提示词")],
+        )
+        agent = TaskAgent(engine, profile, session, save=False)
+
+        summary = agent._generate_summary([
+            Message(role=Role.USER, content="用户先提了一个问题"),
+            Message(
+                role=Role.ASSISTANT,
+                content="我调用工具查看",
+                tool_calls=[
+                    ToolCall(
+                        id="tool-call-2",
+                        name="search_docs",
+                        arguments={"query": "Bedrock toolConfig"},
+                    )
+                ],
+            ),
+            Message(
+                role=Role.USER,
+                tool_results=[
+                    ToolResult(
+                        id="tool-call-2",
+                        name="search_docs",
+                        content="文档说明必须配置 toolConfig",
+                    )
+                ],
+            ),
+        ])
+
+        self.assertEqual(summary, "新的历史摘要")
+        self.assertEqual(len(engine.requests), 1)
+        self.assertTrue(
+            all(
+                not message.tool_calls and not message.tool_results
+                for message in engine.requests[0].messages
+            )
+        )
+        self.assertEqual(
+            [message.content for message in engine.requests[0].messages[:-1]],
+            [
+                "系统提示词",
+                "用户先提了一个问题",
+                "我调用工具查看",
+                "[工具结果:search_docs] 文档说明必须配置 toolConfig",
+            ],
         )
 
     def test_session_roundtrip_preserves_summary_and_offset(self) -> None:

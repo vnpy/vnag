@@ -232,6 +232,39 @@ class TaskAgent:
 
         return [messages[0], summary_message, *messages[self.session.offset:]]
 
+    def _build_plaintext_messages(self, messages: list[Message]) -> list[Message]:
+        """构造仅含纯文本上下文的消息列表，供标题/摘要等派生请求使用。"""
+        plaintext_messages: list[Message] = []
+
+        for msg in messages:
+            plain_msg: Message = msg.model_copy(deep=True)
+            tool_result_lines: list[str] = []
+
+            for tool_result in plain_msg.tool_results:
+                prefix: str = "工具错误" if tool_result.is_error else "工具结果"
+                suffix: str = f":{tool_result.name}" if tool_result.name else ""
+                tool_result_lines.append(f"[{prefix}{suffix}] {tool_result.content}")
+
+            plain_msg.tool_calls = []
+            plain_msg.tool_results = []
+            plain_msg.thinking = ""
+            plain_msg.reasoning = []
+
+            if tool_result_lines:
+                extra_text: str = "\n".join(tool_result_lines)
+                plain_msg.content = "\n\n".join(part for part in [plain_msg.content, extra_text] if part)
+
+            if (
+                plain_msg.role != Role.SYSTEM
+                and not plain_msg.content
+                and not plain_msg.attachments
+            ):
+                continue
+
+            plaintext_messages.append(plain_msg)
+
+        return plaintext_messages
+
     def _get_compaction_target(self) -> tuple[list[Message], int] | None:
         """返回可压缩的旧消息及保留区间起点"""
         self._normalize_offset()
@@ -289,6 +322,7 @@ class TaskAgent:
 
         summary_messages.extend(messages_to_compact)
         summary_messages.append(Message(role=Role.USER, content=COMPACTION_PROMPT))
+        summary_messages = self._build_plaintext_messages(summary_messages)
 
         request: Request = Request(
             model=self.session.model,
@@ -699,7 +733,9 @@ class TaskAgent:
     def generate_title(self, max_length: int = 20) -> str:
         """生成会话标题"""
         # 复制会话消息并添加总结请求
-        messages: list[Message] = self._get_request_messages()
+        messages: list[Message] = self._build_plaintext_messages(
+            self._get_request_messages()
+        )
         messages.append(Message(role=Role.USER, content=TITLE_PROMPT.format(max_length=max_length)))
 
         # 构造请求（固定温度，避免上游 API 拒绝 null temperature）
