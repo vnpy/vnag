@@ -30,6 +30,9 @@ class BedrockGateway(BaseGateway):
         "region_name": "us-east-1",
         "api_key": "",
         "proxy": "",
+        "thinking_mode": ["adaptive", "enabled", "disabled"],
+        "thinking_effort": ["high", "medium", "low"],
+        "thinking_budget_tokens": 2000,
     }
 
     def __init__(self, gateway_name: str = "") -> None:
@@ -39,6 +42,9 @@ class BedrockGateway(BaseGateway):
         self.gateway_name = gateway_name
         self.client: Any | None = None
         self.meta_client: Any | None = None
+        self.thinking_mode: str = "adaptive"
+        self.thinking_effort: str = "medium"
+        self.thinking_budget_tokens: int = 2000
 
     def _read_attachment_bytes(self, attachment: Attachment) -> tuple[bytes, str]:
         """读取 Bedrock 本地附件并返回 (bytes, mime)。"""
@@ -233,11 +239,50 @@ class BedrockGateway(BaseGateway):
 
         return thinking, reasoning
 
+    def _supports_adaptive_thinking(self, model_id: str) -> bool:
+        """判断模型是否支持 Claude adaptive thinking。"""
+        normalized_model_id: str = model_id.lower()
+        return (
+            "anthropic.claude-sonnet-4-6" in normalized_model_id
+            or "anthropic.claude-opus-4-6" in normalized_model_id
+        )
+
+    def _get_additional_model_request_fields(
+        self, model_id: str
+    ) -> dict[str, Any] | None:
+        """按模型能力构造 Bedrock 的 thinking 配置。"""
+        normalized_model_id: str = model_id.lower()
+        if "anthropic" not in normalized_model_id:
+            return None
+
+        if self.thinking_mode == "disabled":
+            return None
+
+        if (
+            self.thinking_mode == "adaptive"
+            and self._supports_adaptive_thinking(normalized_model_id)
+        ):
+            return {
+                "thinking": {
+                    "type": "adaptive",
+                }
+            }
+
+        return {
+            "thinking": {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget_tokens,
+            }
+        }
+
     def init(self, setting: dict[str, Any]) -> bool:
         """初始化连接和内部服务组件，返回是否成功。"""
         region_name: str = setting.get("region_name", "us-east-1")
         api_key: str = setting.get("api_key", "")
         proxy: str = setting.get("proxy", "")
+        self.thinking_mode = setting.get("thinking_mode", "adaptive")
+        self.thinking_effort = setting.get("thinking_effort", "medium")
+        self.thinking_budget_tokens = int(setting.get("thinking_budget_tokens", 2000))
 
         if not region_name:
             self.write_log("配置不完整，请检查以下配置项：")
@@ -287,6 +332,12 @@ class BedrockGateway(BaseGateway):
 
         if system_prompts:
             converse_params["system"] = system_prompts
+
+        additional_fields: dict[str, Any] | None = (
+            self._get_additional_model_request_fields(request.model)
+        )
+        if additional_fields:
+            converse_params["additionalModelRequestFields"] = additional_fields
 
         # 推理参数
         inference_config: dict[str, Any] = {}
@@ -399,6 +450,12 @@ class BedrockGateway(BaseGateway):
         if system_prompts:
             converse_params["system"] = system_prompts
 
+        additional_fields: dict[str, Any] | None = (
+            self._get_additional_model_request_fields(request.model)
+        )
+        if additional_fields:
+            converse_params["additionalModelRequestFields"] = additional_fields
+
         # 推理参数
         inference_config: dict[str, Any] = {}
         if request.max_tokens:
@@ -436,10 +493,8 @@ class BedrockGateway(BaseGateway):
             "ResponseMetadata", {}
         ).get("RequestId", "")
 
-        # 按 contentBlockIndex 累积工具调用和 reasoning
+        # 按 contentBlockIndex 累积工具调用
         accumulated_tool_calls: dict[int, dict[str, Any]] = {}
-        # 跟踪哪些 block index 是 reasoning 类型
-        reasoning_block_indices: set[int] = set()
 
         event_stream: Any = response.get("stream", [])
 
@@ -473,7 +528,6 @@ class BedrockGateway(BaseGateway):
 
                 # reasoning 增量
                 elif "reasoningContent" in delta_block:
-                    reasoning_block_indices.add(block_index)
                     rc_delta: dict[str, Any] = delta_block[
                         "reasoningContent"
                     ]
@@ -481,37 +535,30 @@ class BedrockGateway(BaseGateway):
 
                     delta = Delta(id=response_id)
                     should_yield: bool = False
+                    reasoning_item: dict[str, Any] = {
+                        "index": block_index,
+                        "type": "reasoning",
+                    }
 
                     if reasoning_text:
                         delta.thinking = reasoning_text
-                        delta.reasoning = [{
-                            "index": block_index,
-                            "type": "reasoning",
-                            "text": reasoning_text,
-                        }]
+                        reasoning_item["text"] = reasoning_text
                         should_yield = True
 
                     # signature 通过 reasoning 结构保留
                     signature: str = rc_delta.get("signature", "")
                     if signature:
-                        delta.reasoning = [{
-                            "index": block_index,
-                            "type": "reasoning",
-                            "signature": signature,
-                        }]
+                        reasoning_item["signature"] = signature
                         should_yield = True
 
                     # redactedContent 原样保留
                     redacted: Any = rc_delta.get("redactedContent")
                     if redacted:
-                        delta.reasoning = [{
-                            "index": block_index,
-                            "type": "reasoning",
-                            "redacted_content": redacted,
-                        }]
+                        reasoning_item["redacted_content"] = redacted
                         should_yield = True
 
                     if should_yield:
+                        delta.reasoning = [reasoning_item]
                         yield delta
 
                 # 工具调用输入增量

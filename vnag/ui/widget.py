@@ -1839,6 +1839,9 @@ class GatewayDialog(QtWidgets.QDialog):
             "base_url": "API 地址",
             "api_key": "API 密钥",
             "reasoning_effort": "推理强度",
+            "thinking_mode": "思考模式",
+            "thinking_effort": "思考强度",
+            "thinking_budget_tokens": "思考预算",
             "proxy": "代理地址",
             "region_name": "区域",
         }
