@@ -136,6 +136,8 @@ content = manager.execute_tool("create-api")
 
 `SkillManager` 在 `AgentEngine.init()` 时自动完成加载，通常不需要手动调用。
 
+技能目录固定从工作目录下的 `skills/` 加载。若希望项目级技能随当前项目生效，应确保项目根目录存在 `.vnag/`，使该目录成为 `WORKING_DIR`。
+
 ### 技能目录输出示例
 
 `get_skill_catalog()` 返回的文本会被追加到系统提示词末尾：
@@ -156,6 +158,22 @@ content = manager.execute_tool("create-api")
 ```
 
 ## 最佳实践
+
+### 搜索工作流示例
+
+对于需要联网查询的任务，可以提供一个聚焦“先搜索，再阅读正文”的技能，例如：
+
+```markdown
+---
+name: search-then-read
+description: 采用“先搜索、再阅读正文”的联网研究流程。适用于查询最新信息、外部事实、产品公告、官方文档、新闻动态或任何需要网页来源支持的问题。
+---
+
+1. 先调用搜索工具，不要直接凭记忆回答
+2. 从结果中挑选 2 到 3 个高相关来源
+3. 使用 `web-tools_fetch-markdown` 阅读正文
+4. 对重要结论进行交叉验证
+```
 
 ### 1. 聚焦具体任务
 
@@ -201,6 +219,26 @@ description: 创建 React 组件
 2. 读取 `reference.md` 了解项目组件规范
 3. 根据用户需求修改模板
 ```
+
+### 4. 写清前置工具和降级策略
+
+如果某个技能强依赖特定工具，建议在正文中显式写出：
+
+- 这个技能通常需要哪些工具
+- 当前 Profile 若未启用这些工具时应如何处理
+
+例如：
+
+```markdown
+## 前置工具
+
+- `search-tools_serper-search`
+- `web-tools_fetch-markdown`
+
+如果当前 Profile 未启用这些工具，应先提示用户切换到包含这些工具的 Profile，或修改当前 Profile 配置后再继续。
+```
+
+这样做可以降低“技能已经加载，但当前 Agent 实际无法执行该技能流程”的概率。
 
 ## 下一步
 

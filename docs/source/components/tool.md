@@ -298,6 +298,8 @@ VNAG 提供了多类内置工具：
 "web-tools_check-link"      # 检查链接状态
 ```
 
+推荐在联网研究场景中先用搜索工具发现候选来源，再使用 `web-tools_fetch-markdown` 阅读正文，而不是只依据搜索结果中的 snippet 作答。
+
 ### search_tools
 
 联网搜索工具，需要在 `.vnag/tool_search.json` 中配置 API 密钥。
@@ -308,6 +310,8 @@ VNAG 提供了多类内置工具：
 "search-tools_serper-search"  # Serper Google 搜索 API
 "search-tools_jina-search"    # Jina Search API
 ```
+
+这些工具更适合用于发现候选来源，而不是直接充当最终证据。对事实性问题、最新信息或文档查询，建议继续调用 `web-tools_fetch-markdown` 阅读 2 到 3 个高相关页面，并在必要时交叉验证多个来源。
 
 ### terminal_tools
 
