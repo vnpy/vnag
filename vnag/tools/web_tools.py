@@ -7,7 +7,10 @@ from vnag.local import LocalTool
 
 def fetch_html(url: str) -> str:
     """
-    获取并返回指定URL的HTML内容。
+    获取并返回指定 URL 的 HTML 内容。
+
+    仅在需要原始页面结构时使用。对大多数“先搜索再阅读正文”的场景，
+    更推荐优先使用 `fetch_markdown`，因为它更适合模型阅读和提取证据。
     """
     try:
         response: requests.Response = requests.get(url, timeout=10)
@@ -19,7 +22,11 @@ def fetch_html(url: str) -> str:
 
 def fetch_json(url: str) -> Any:
     """
-    获取并解析来自URL的JSON数据。
+    获取并解析来自 URL 的 JSON 数据。
+
+    适合目标链接本身就是结构化 JSON 接口的场景。若来源是普通网页，
+    应优先使用 `fetch_markdown` 阅读正文，而不是尝试从 HTML 或 snippet
+    直接下结论。
     """
     try:
         response: requests.Response = requests.get(url, timeout=10)
@@ -40,6 +47,13 @@ def fetch_markdown(url: str) -> str:
     - 自动提取网页主要内容，过滤广告和导航等干扰信息
     - 结构化的 Markdown 格式便于语义理解
     - 减少 token 消耗，提高处理效率
+    - 适合在搜索后继续阅读正文，而不是只依赖 snippet 作答
+
+    推荐工作流：
+    1. 先用搜索工具发现候选来源
+    2. 选择 2 到 3 个高相关链接调用 `fetch_markdown`
+    3. 对重要事实交叉验证多个来源
+    4. 若不同来源冲突，明确写出冲突点和更可信的依据
 
     Args:
         url: 要获取内容的网页 URL
@@ -58,7 +72,9 @@ def fetch_markdown(url: str) -> str:
 
 def check_link(url: str) -> str:
     """
-    检查链接的HTTP状态。
+    检查链接的 HTTP 状态。
+
+    适合在阅读正文前快速确认链接是否可访问，但它不能替代正文阅读或事实验证。
     """
     try:
         response: requests.Response = requests.head(url, timeout=5, allow_redirects=True)

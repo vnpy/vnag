@@ -33,7 +33,11 @@ def bocha_search(
     freshness: str = "noLimit",
 ) -> dict[str, Any]:
     """
-    使用博查 Web Search API 进行网络搜索。
+    使用博查 Web Search API 进行网络搜索，返回候选来源列表。
+
+    这些结果主要用于发现后续要阅读的网页，不应直接视为最终证据。
+    面对事实性问题时，应优先根据结果挑选高相关来源，再继续调用
+    `web-tools_fetch-markdown` 阅读正文，并对重要结论做交叉验证。
 
     Args:
         query: 搜索关键词
@@ -77,7 +81,11 @@ def tavily_search(
     search_depth: str = "basic",
 ) -> dict[str, Any]:
     """
-    使用 Tavily Search API 进行网络搜索。
+    使用 Tavily Search API 进行网络搜索，返回候选来源列表。
+
+    搜索结果适合用于发现候选 URL，而不是直接作为最终答案依据。
+    遇到事实核查、最新信息或文档查询时，应继续使用
+    `web-tools_fetch-markdown` 阅读正文，必要时比较多个来源。
 
     Args:
         query: 搜索关键词
@@ -114,7 +122,11 @@ def serper_search(
     gl: str = "cn",
 ) -> dict[str, Any]:
     """
-    使用 Serper API 进行 Google 搜索。
+    使用 Serper API 进行 Google 搜索，返回候选来源列表。
+
+    搜索结果中的 snippet 只适合帮助筛选来源，不应直接作为最终证据。
+    对重要结论，应继续打开候选网页正文进行确认；若结果不足，
+    应尝试调整关键词后再次搜索。
 
     Args:
         query: 搜索关键词
@@ -151,7 +163,11 @@ def jina_search(
     with_content: bool = True,
 ) -> dict[str, Any]:
     """
-    使用 Jina Search API 进行网络搜索。
+    使用 Jina Search API 进行网络搜索，返回候选来源列表。
+
+    即使返回了网页内容，也应优先把它当作候选线索而不是最终证据。
+    需要严谨回答时，仍建议针对高相关来源继续调用
+    `web-tools_fetch-markdown` 阅读正文，并对关键信息交叉验证。
 
     Args:
         query: 搜索关键词
