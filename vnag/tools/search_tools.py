@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
@@ -35,6 +36,10 @@ def bocha_search(
 ) -> dict[str, Any]:
     """
     使用博查 Web Search API 进行网络搜索，返回候选来源列表。
+
+    这是 provider 原语工具，适合在需要博查特定能力（如 freshness）
+    时直接使用。普通研究场景优先使用 `search-tools_search-web`，
+    仅在需要 provider 特性、调试差异或统一入口结果不足时再直接调用本工具。
 
     这些结果主要用于发现后续要阅读的网页，不应直接视为最终证据。
     面对事实性问题时，应优先根据结果挑选高相关来源，再继续调用
@@ -84,6 +89,10 @@ def tavily_search(
     """
     使用 Tavily Search API 进行网络搜索，返回候选来源列表。
 
+    这是 provider 原语工具，适合在需要 Tavily 特定能力（如 search_depth）
+    时直接使用。普通研究场景优先使用 `search-tools_search-web`，
+    仅在需要 provider 特性、调试差异或统一入口结果不足时再直接调用本工具。
+
     搜索结果适合用于发现候选 URL，而不是直接作为最终答案依据。
     遇到事实核查、最新信息或文档查询时，应继续使用
     `web-tools_fetch-markdown` 阅读正文，必要时比较多个来源。
@@ -125,6 +134,10 @@ def serper_search(
     """
     使用 Serper API 进行 Google 搜索，返回候选来源列表。
 
+    这是 provider 原语工具，适合在需要 Serper 特定参数（如 gl）
+    时直接使用。普通研究场景优先使用 `search-tools_search-web`，
+    仅在需要 provider 特性、调试差异或统一入口结果不足时再直接调用本工具。
+
     搜索结果中的 snippet 只适合帮助筛选来源，不应直接作为最终证据。
     对重要结论，应继续打开候选网页正文进行确认；若结果不足，
     应尝试调整关键词后再次搜索。
@@ -165,6 +178,10 @@ def jina_search(
 ) -> dict[str, Any]:
     """
     使用 Jina Search API 进行网络搜索，返回候选来源列表。
+
+    这是 provider 原语工具，适合在需要 Jina 搜索特性时直接使用。
+    普通研究场景优先使用 `search-tools_search-web`，仅在需要 provider
+    特性、调试差异或统一入口结果不足时再直接调用本工具。
 
     即使返回了网页内容，也应优先把它当作候选线索而不是最终证据。
     需要严谨回答时，仍建议针对高相关来源继续调用
@@ -330,6 +347,68 @@ def _normalize_jina_results(raw: dict[str, Any], count: int) -> list[dict[str, A
     return normalized
 
 
+def get_auto_providers(freshness: str) -> list[str]:
+    """根据当前配置和查询参数返回 auto 模式下的 provider 顺序。"""
+    provider_names: list[str]
+    if freshness.strip():
+        provider_names = ["bocha", "serper", "tavily", "jina"]
+    else:
+        provider_names = ["serper", "bocha", "tavily", "jina"]
+
+    available_providers: list[str] = []
+    for provider_name in provider_names:
+        if provider_name == "serper" and setting["serper_key"]:
+            available_providers.append(provider_name)
+        elif provider_name == "bocha" and setting["bocha_key"]:
+            available_providers.append(provider_name)
+        elif provider_name == "tavily" and setting["tavily_key"]:
+            available_providers.append(provider_name)
+        elif provider_name == "jina":
+            available_providers.append(provider_name)
+
+    return available_providers
+
+
+def run_search_provider(
+    query: str,
+    count: int,
+    provider_name: str,
+    freshness: str,
+) -> tuple[dict[str, Any], Callable[[dict[str, Any], int], list[dict[str, Any]]]]:
+    """执行单个 provider 搜索并返回原始结果与规范化函数。"""
+    if provider_name == "serper":
+        return serper_search(query=query, num=count), _normalize_serper_results
+
+    if provider_name == "tavily":
+        return tavily_search(query=query, max_results=count), _normalize_tavily_results
+
+    if provider_name == "bocha":
+        effective_freshness: str = freshness or "noLimit"
+        return (
+            bocha_search(
+                query=query,
+                count=count,
+                summary=True,
+                freshness=effective_freshness,
+            ),
+            _normalize_bocha_results,
+        )
+
+    if provider_name == "jina":
+        return jina_search(query=query, with_content=False), _normalize_jina_results
+
+    raise ValueError("不支持的 provider，可选值为 auto、serper、tavily、bocha、jina")
+
+
+def get_search_results(
+    raw: dict[str, Any],
+    count: int,
+    normalize: Callable[[dict[str, Any], int], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """将 provider 原始结果规范化为统一候选来源列表。"""
+    return normalize(raw, count)
+
+
 def search_web(
     query: str,
     count: int = 5,
@@ -339,9 +418,15 @@ def search_web(
     """
     使用统一入口执行网络搜索，并返回裁剪后的结构化候选来源列表。
 
-    相比 provider 原始 JSON，本工具只保留模型最常需要的字段，适合先筛选
-    候选来源，再继续调用 `web-tools_fetch-markdown` 阅读正文。若问题依赖
-    事实、最新信息或官方文档，不应只根据 snippet 直接下结论。
+    这是普通研究型 Agent 的默认搜索入口。相比 provider 原始 JSON，
+    本工具只保留模型最常需要的字段，适合先筛选候选来源，再继续调用
+    `web-tools_fetch-markdown` 阅读正文。
+
+    `provider` 通常无需显式指定；在 `auto` 模式下，本工具会优先根据当前
+    已配置的 API key 选择可用 provider，并在必要时自动回退到其他可用
+    provider。仅在需要 provider 特性、调试差异或统一入口结果不足时，
+    才建议显式指定 provider。若问题依赖事实、最新信息或官方文档，
+    不应只根据 snippet 直接下结论。
 
     Args:
         query: 搜索关键词
@@ -353,8 +438,6 @@ def search_web(
         裁剪后的结构化搜索结果
     """
     provider_name: str = provider.strip().lower() or "auto"
-    if provider_name == "auto":
-        provider_name = "serper"
 
     if count <= 0:
         return {
@@ -364,26 +447,44 @@ def search_web(
             "error": "count 必须大于 0",
         }
 
-    raw: dict[str, Any]
-    if provider_name == "serper":
-        raw = serper_search(query=query, num=count)
-        normalize = _normalize_serper_results
-    elif provider_name == "tavily":
-        raw = tavily_search(query=query, max_results=count)
-        normalize = _normalize_tavily_results
-    elif provider_name == "bocha":
-        effective_freshness: str = freshness or "noLimit"
-        raw = bocha_search(
-            query=query,
-            count=count,
-            summary=True,
-            freshness=effective_freshness,
-        )
-        normalize = _normalize_bocha_results
-    elif provider_name == "jina":
-        raw = jina_search(query=query, with_content=False)
-        normalize = _normalize_jina_results
-    else:
+    # 自动选择搜索 provider
+    if provider_name == "auto":
+        attempted_providers: list[str] = []
+        last_error: str = "未找到可用的搜索 provider"
+
+        for auto_provider in get_auto_providers(freshness):
+            attempted_providers.append(auto_provider)
+            raw, normalize = run_search_provider(
+                query=query,
+                count=count,
+                provider_name=auto_provider,
+                freshness=freshness,
+            )
+            if "error" in raw:
+                last_error = _as_text(raw.get("error"))
+                continue
+
+            results: list[dict[str, Any]] = get_search_results(raw, count, normalize)
+            if results:
+                return {
+                    "query": query,
+                    "provider": auto_provider,
+                    "results": results,
+                    "attempted_providers": attempted_providers,
+                }
+
+            last_error = f"{auto_provider} 未返回可用结果"
+
+        return {
+            "query": query,
+            "provider": "auto",
+            "results": [],
+            "error": last_error,
+            "attempted_providers": attempted_providers,
+        }
+
+    # 如果 provider 不支持，返回错误
+    if provider_name not in {"serper", "tavily", "bocha", "jina"}:
         return {
             "query": query,
             "provider": provider_name,
@@ -392,6 +493,14 @@ def search_web(
                 "不支持的 provider，可选值为 auto、serper、tavily、bocha、jina"
             ),
         }
+
+    # 执行特定 provider 的搜索
+    raw, normalize = run_search_provider(
+        query=query,
+        count=count,
+        provider_name=provider_name,
+        freshness=freshness,
+    )
 
     if "error" in raw:
         return {
@@ -404,7 +513,7 @@ def search_web(
     return {
         "query": query,
         "provider": provider_name,
-        "results": normalize(raw, count),
+        "results": get_search_results(raw, count, normalize),
     }
 
 
@@ -424,8 +533,9 @@ def search_and_read(
     先搜索候选来源，再批量抓取前几个结果的 Markdown 正文。
 
     适合需要“先搜索再阅读正文”才能回答的问题，可减少模型自行编排多次
-    工具调用时的失败率。返回结果会同时保留搜索摘要与正文内容，便于后续
-    比较多个来源并交叉验证。
+    工具调用时的失败率。普通研究场景可优先使用本工具快速拿到候选来源
+    与正文；若后续仍需深读某个 URL，可再单独调用 `web-tools_fetch-markdown`。
+    返回结果会同时保留搜索摘要与正文内容，便于后续比较多个来源并交叉验证。
 
     Args:
         query: 搜索关键词

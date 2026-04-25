@@ -32,6 +32,8 @@ class SearchPhase1TestCase(unittest.TestCase):
         skill = manager.get_skill("search-then-read")
         self.assertIsNotNone(skill)
         assert skill is not None
+        self.assertIn("search-tools_search-web", skill.content)
+        self.assertIn("search-tools_search-and-read", skill.content)
         self.assertIn("web-tools_fetch-markdown", skill.content)
         self.assertIn("挑选 2 到 3 个高相关", skill.content)
 
@@ -59,6 +61,7 @@ class SearchPhase1TestCase(unittest.TestCase):
         unified_description = search_tools.search_web_tool.get_schema().description
         self.assertIn("结构化", unified_description)
         self.assertIn("候选来源", unified_description)
+        self.assertIn("默认搜索入口", unified_description)
 
     def test_web_tool_descriptions_encourage_search_then_read_workflow(self) -> None:
         markdown_description = web_tools.fetch_markdown_tool.get_schema().description
@@ -85,12 +88,19 @@ class SearchPhase1TestCase(unittest.TestCase):
             ]
         }
 
-        with patch.object(search_tools, "serper_search", return_value=raw_result) as mocked:
+        with (
+            patch.dict(
+                search_tools.setting,
+                {"serper_key": "enabled", "bocha_key": "", "tavily_key": "", "jina_key": ""},
+            ),
+            patch.object(search_tools, "serper_search", return_value=raw_result) as mocked,
+        ):
             result = search_tools.search_web("cursor docs", count=2)
 
         mocked.assert_called_once_with(query="cursor docs", num=2)
         self.assertEqual(result["query"], "cursor docs")
         self.assertEqual(result["provider"], "serper")
+        self.assertEqual(result["attempted_providers"], ["serper"])
         self.assertEqual(
             result["results"],
             [
@@ -110,6 +120,146 @@ class SearchPhase1TestCase(unittest.TestCase):
                 },
             ],
         )
+
+    def test_search_web_auto_falls_back_to_configured_provider(self) -> None:
+        raw_result = {
+            "data": {
+                "webPages": {
+                    "value": [
+                        {
+                            "name": "Bocha Result",
+                            "url": "https://example.com/bocha",
+                            "summary": "Fallback result.",
+                        }
+                    ]
+                }
+            }
+        }
+
+        with (
+            patch.dict(
+                search_tools.setting,
+                {"serper_key": "", "bocha_key": "enabled", "tavily_key": "", "jina_key": ""},
+            ),
+            patch.object(search_tools, "bocha_search", return_value=raw_result) as mocked_bocha,
+        ):
+            result = search_tools.search_web("fallback case", provider="auto", count=2)
+
+        mocked_bocha.assert_called_once_with(
+            query="fallback case",
+            count=2,
+            summary=True,
+            freshness="noLimit",
+        )
+        self.assertEqual(result["provider"], "bocha")
+        self.assertEqual(result["attempted_providers"], ["bocha"])
+        self.assertEqual(result["results"][0]["source"], "bocha")
+
+    def test_search_web_auto_falls_back_after_provider_error(self) -> None:
+        serper_error = {"error": "Serper 搜索请求失败: timeout"}
+        tavily_result = {
+            "results": [
+                {
+                    "title": "Tavily Result",
+                    "url": "https://example.com/tavily",
+                    "content": "Recovered after fallback.",
+                }
+            ]
+        }
+
+        with (
+            patch.dict(
+                search_tools.setting,
+                {
+                    "serper_key": "enabled",
+                    "bocha_key": "",
+                    "tavily_key": "enabled",
+                    "jina_key": "",
+                },
+            ),
+            patch.object(search_tools, "serper_search", return_value=serper_error) as mocked_serper,
+            patch.object(search_tools, "tavily_search", return_value=tavily_result) as mocked_tavily,
+        ):
+            result = search_tools.search_web("recover search", provider="auto", count=2)
+
+        mocked_serper.assert_called_once_with(query="recover search", num=2)
+        mocked_tavily.assert_called_once_with(query="recover search", max_results=2)
+        self.assertEqual(result["provider"], "tavily")
+        self.assertEqual(result["attempted_providers"], ["serper", "tavily"])
+        self.assertEqual(result["results"][0]["source"], "tavily")
+
+    def test_search_web_auto_falls_back_after_empty_results(self) -> None:
+        empty_serper = {"organic": []}
+        jina_result = {
+            "data": [
+                {
+                    "title": "Jina Result",
+                    "url": "https://example.com/jina",
+                    "description": "Recovered from empty results.",
+                }
+            ]
+        }
+
+        with (
+            patch.dict(
+                search_tools.setting,
+                {"serper_key": "enabled", "bocha_key": "", "tavily_key": "", "jina_key": ""},
+            ),
+            patch.object(search_tools, "serper_search", return_value=empty_serper) as mocked_serper,
+            patch.object(search_tools, "jina_search", return_value=jina_result) as mocked_jina,
+        ):
+            result = search_tools.search_web("empty recover", provider="auto", count=2)
+
+        mocked_serper.assert_called_once_with(query="empty recover", num=2)
+        mocked_jina.assert_called_once_with(query="empty recover", with_content=False)
+        self.assertEqual(result["provider"], "jina")
+        self.assertEqual(result["attempted_providers"], ["serper", "jina"])
+        self.assertEqual(result["results"][0]["source"], "jina")
+
+    def test_search_web_auto_prefers_bocha_when_freshness_is_set(self) -> None:
+        bocha_result = {
+            "data": {
+                "webPages": {
+                    "value": [
+                        {
+                            "name": "Fresh Result",
+                            "url": "https://example.com/fresh",
+                            "summary": "Freshness aware result.",
+                        }
+                    ]
+                }
+            }
+        }
+
+        with (
+            patch.dict(
+                search_tools.setting,
+                {
+                    "serper_key": "enabled",
+                    "bocha_key": "enabled",
+                    "tavily_key": "",
+                    "jina_key": "",
+                },
+            ),
+            patch.object(search_tools, "bocha_search", return_value=bocha_result) as mocked_bocha,
+            patch.object(search_tools, "serper_search") as mocked_serper,
+        ):
+            result = search_tools.search_web(
+                "fresh news",
+                provider="auto",
+                count=2,
+                freshness="oneWeek",
+            )
+
+        mocked_bocha.assert_called_once_with(
+            query="fresh news",
+            count=2,
+            summary=True,
+            freshness="oneWeek",
+        )
+        mocked_serper.assert_not_called()
+        self.assertEqual(result["provider"], "bocha")
+        self.assertEqual(result["attempted_providers"], ["bocha"])
 
     def test_search_web_normalizes_tavily_results(self) -> None:
         raw_result = {
@@ -152,7 +302,7 @@ class SearchPhase1TestCase(unittest.TestCase):
             "serper_search",
             return_value={"error": "Serper 搜索请求失败: timeout"},
         ):
-            result = search_tools.search_web("timeout case")
+            result = search_tools.search_web("timeout case", provider="serper")
 
         self.assertEqual(result["query"], "timeout case")
         self.assertEqual(result["provider"], "serper")
@@ -262,6 +412,20 @@ class SearchPhase1TestCase(unittest.TestCase):
         self.assertEqual(result["search_results"], [])
         self.assertEqual(result["documents"], [])
         self.assertIn("timeout", result["error"])
+
+    def test_profile_tutorial_documents_research_profiles(self) -> None:
+        repo_root: Path = Path(__file__).resolve().parents[1]
+        profile_doc = repo_root.joinpath("docs/source/tutorial/profile.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("联网研究助手", profile_doc)
+        self.assertIn("联网研究助手-调试", profile_doc)
+        self.assertIn("search-tools_search-web", profile_doc)
+        self.assertIn("search-tools_search-and-read", profile_doc)
+        self.assertIn("web-tools_fetch-markdown", profile_doc)
+        self.assertIn("search-tools_serper-search", profile_doc)
+        self.assertIn("use_skills=True", profile_doc)
 
 
 if __name__ == "__main__":

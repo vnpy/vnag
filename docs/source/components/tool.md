@@ -305,11 +305,15 @@ VNAG 提供了多类内置工具：
 联网搜索工具，需要在 `.vnag/tool_search.json` 中配置 API 密钥。
 
 ```python
+"search-tools_search-web"      # 统一搜索入口（默认推荐）
+"search-tools_search-and-read" # 搜索并读取前几个候选来源正文
 "search-tools_bocha-search"   # 博查 Web Search API
 "search-tools_tavily-search"  # Tavily Search API
 "search-tools_serper-search"  # Serper Google 搜索 API
 "search-tools_jina-search"    # Jina Search API
 ```
+
+对普通联网研究场景，推荐优先使用 `search-tools_search-web` 作为默认搜索入口；如果希望减少多步编排失败，可优先使用 `search-tools_search-and-read`。四个 raw provider 更适合作为高级/调试工具，用于 provider 差异对比、特定参数控制或统一入口不足时的手动兜底。
 
 这些工具更适合用于发现候选来源，而不是直接充当最终证据。对事实性问题、最新信息或文档查询，建议继续调用 `web-tools_fetch-markdown` 阅读 2 到 3 个高相关页面，并在必要时交叉验证多个来源。
 

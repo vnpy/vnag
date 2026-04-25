@@ -232,7 +232,7 @@ description: 创建 React 组件
 ```markdown
 ## 前置工具
 
-- `search-tools_serper-search`
+- `search-tools_search-web`
 - `web-tools_fetch-markdown`
 
 如果当前 Profile 未启用这些工具，应先提示用户切换到包含这些工具的 Profile，或修改当前 Profile 配置后再继续。
