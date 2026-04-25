@@ -4,6 +4,7 @@ from urllib.parse import quote
 import requests
 
 from vnag.local import LocalTool
+from vnag.tools.web_tools import fetch_markdown
 from vnag.utility import load_json, save_json
 
 
@@ -407,6 +408,81 @@ def search_web(
     }
 
 
+def _truncate_text(text: str, max_chars: int) -> str:
+    """按字符数截断文本，避免组合工具一次返回过长内容。"""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n\n[内容已截断]"
+
+
+def search_and_read(
+    query: str,
+    top_k: int = 3,
+    provider: str = "auto",
+) -> dict[str, Any]:
+    """
+    先搜索候选来源，再批量抓取前几个结果的 Markdown 正文。
+
+    适合需要“先搜索再阅读正文”才能回答的问题，可减少模型自行编排多次
+    工具调用时的失败率。返回结果会同时保留搜索摘要与正文内容，便于后续
+    比较多个来源并交叉验证。
+
+    Args:
+        query: 搜索关键词
+        top_k: 需要继续阅读正文的来源数量，默认 3
+        provider: 搜索提供方，可选 auto、serper、tavily、bocha、jina
+
+    Returns:
+        包含搜索结果和正文内容的结构化结果
+    """
+    provider_name: str = provider.strip().lower() or "auto"
+    if top_k <= 0:
+        return {
+            "query": query,
+            "provider": provider_name,
+            "search_results": [],
+            "documents": [],
+            "error": "top_k 必须大于 0",
+        }
+
+    search_result: dict[str, Any] = search_web(
+        query=query,
+        count=top_k,
+        provider=provider_name,
+    )
+    documents: list[dict[str, Any]] = []
+
+    if "error" in search_result:
+        return {
+            "query": query,
+            "provider": search_result.get("provider", provider_name),
+            "search_results": search_result.get("results", []),
+            "documents": documents,
+            "error": _as_text(search_result.get("error")),
+        }
+
+    for item in _as_list(search_result.get("results"))[:top_k]:
+        if not isinstance(item, dict):
+            continue
+
+        markdown: str = fetch_markdown(_as_text(item.get("url")))
+        documents.append(
+            {
+                "title": _as_text(item.get("title")),
+                "url": _as_text(item.get("url")),
+                "snippet": _as_text(item.get("snippet")),
+                "markdown": _truncate_text(markdown, max_chars=12000),
+            }
+        )
+
+    return {
+        "query": query,
+        "provider": _as_text(search_result.get("provider")),
+        "search_results": search_result.get("results", []),
+        "documents": documents,
+    }
+
+
 # 注册工具
 bocha_search_tool: LocalTool = LocalTool(bocha_search)
 
@@ -417,3 +493,5 @@ serper_search_tool: LocalTool = LocalTool(serper_search)
 jina_search_tool: LocalTool = LocalTool(jina_search)
 
 search_web_tool: LocalTool = LocalTool(search_web)
+
+search_and_read_tool: LocalTool = LocalTool(search_and_read)

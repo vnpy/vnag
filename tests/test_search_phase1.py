@@ -167,6 +167,102 @@ class SearchPhase1TestCase(unittest.TestCase):
         self.assertEqual(result["results"], [])
         self.assertIn("不支持的 provider", result["error"])
 
+    def test_search_and_read_fetches_top_k_markdown_documents(self) -> None:
+        search_result = {
+            "query": "python packaging",
+            "provider": "serper",
+            "results": [
+                {
+                    "title": "PEP 621",
+                    "url": "https://example.com/pep-621",
+                    "snippet": "Metadata for Python projects.",
+                    "source": "serper",
+                    "rank": 1,
+                },
+                {
+                    "title": "PyPA Guide",
+                    "url": "https://example.com/pypa-guide",
+                    "snippet": "Packaging tutorial.",
+                    "source": "serper",
+                    "rank": 2,
+                },
+                {
+                    "title": "Ignored",
+                    "url": "https://example.com/ignored",
+                    "snippet": "Should not be fetched.",
+                    "source": "serper",
+                    "rank": 3,
+                },
+            ],
+        }
+
+        with (
+            patch.object(search_tools, "search_web", return_value=search_result) as mocked_search,
+            patch.object(
+                search_tools,
+                "fetch_markdown",
+                side_effect=["# PEP 621", "# PyPA Guide"],
+            ) as mocked_fetch,
+        ):
+            result = search_tools.search_and_read(
+                "python packaging",
+                top_k=2,
+                provider="auto",
+            )
+
+        mocked_search.assert_called_once_with(
+            query="python packaging",
+            count=2,
+            provider="auto",
+        )
+        self.assertEqual(mocked_fetch.call_count, 2)
+        self.assertEqual(
+            [call.args[0] for call in mocked_fetch.call_args_list],
+            [
+                "https://example.com/pep-621",
+                "https://example.com/pypa-guide",
+            ],
+        )
+        self.assertEqual(result["query"], "python packaging")
+        self.assertEqual(result["provider"], "serper")
+        self.assertEqual(len(result["search_results"]), 3)
+        self.assertEqual(
+            result["documents"],
+            [
+                {
+                    "title": "PEP 621",
+                    "url": "https://example.com/pep-621",
+                    "snippet": "Metadata for Python projects.",
+                    "markdown": "# PEP 621",
+                },
+                {
+                    "title": "PyPA Guide",
+                    "url": "https://example.com/pypa-guide",
+                    "snippet": "Packaging tutorial.",
+                    "markdown": "# PyPA Guide",
+                },
+            ],
+        )
+
+    def test_search_and_read_returns_structured_error_when_search_fails(self) -> None:
+        with patch.object(
+            search_tools,
+            "search_web",
+            return_value={
+                "query": "bad case",
+                "provider": "serper",
+                "results": [],
+                "error": "Serper 搜索请求失败: timeout",
+            },
+        ):
+            result = search_tools.search_and_read("bad case")
+
+        self.assertEqual(result["query"], "bad case")
+        self.assertEqual(result["provider"], "serper")
+        self.assertEqual(result["search_results"], [])
+        self.assertEqual(result["documents"], [])
+        self.assertIn("timeout", result["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
