@@ -14,7 +14,7 @@ from .widget import (
     GatewayDialog,
     KnowledgeDialog,
 )
-from .setting import get_setting
+from .setting import get_setting, load_selected_profile, save_selected_profile
 from .qt import QtWidgets, QtGui, QtCore
 
 
@@ -231,6 +231,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # 记录当前选中项的名称
         current_name: str = self.profile_combo.currentText()
 
+        self.profile_combo.blockSignals(True)
+
         # 清空模型
         self.profile_model.clear()
 
@@ -248,6 +250,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.profile_combo.setCurrentText(current_name)
         else:
             self.profile_combo.setCurrentIndex(0)
+
+        self.profile_combo.blockSignals(False)
 
     def show_gateway_dialog(self) -> None:
         """显示 Gateway 连接配置界面"""
@@ -295,8 +299,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_data(self) -> None:
         """加载智能体配置和所有会话"""
         self.update_profile_combo()
+        self.restore_selected_profile()
 
         self.load_agent_widgets()
+
+    def restore_selected_profile(self) -> None:
+        """恢复上次保存的智能体配置选择"""
+        profile_name: str = load_selected_profile()
+        if not profile_name:
+            return
+
+        profile_names: set[str] = {p.name for p in self.engine.get_all_profiles()}
+        if profile_name in profile_names:
+            self.profile_combo.setCurrentText(profile_name)
 
     def load_agent_widgets(self) -> None:
         """加载所有会话"""
@@ -529,6 +544,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def quit_application(self) -> None:
         """退出应用程序"""
+        save_selected_profile(self.profile_combo.currentText())
         set_ask_handler(None)
 
         self.tray_icon.hide()

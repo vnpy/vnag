@@ -101,3 +101,13 @@ def load_gateway_type() -> str:
 def save_gateway_type(gateway_type: str) -> None:
     """保存当前选择的 gateway 类型"""
     set_setting("gateway_type", gateway_type)
+
+
+def load_selected_profile() -> str:
+    """加载当前选择的智能体配置名称"""
+    return cast(str, get_setting("selected_profile", ""))
+
+
+def save_selected_profile(profile_name: str) -> None:
+    """保存当前选择的智能体配置名称"""
+    set_setting("selected_profile", profile_name)
