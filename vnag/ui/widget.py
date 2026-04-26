@@ -282,6 +282,26 @@ class AttachmentPreviewWidget(QtWidgets.QWidget):
                 widget.deleteLater()
 
 
+class HistoryPage(QtWebEngineCore.QWebEnginePage):
+    """拦截历史消息中的链接点击并交给外部浏览器打开"""
+
+    def acceptNavigationRequest(
+        self,
+        url: QtCore.QUrl,
+        nav_type: QtWebEngineCore.QWebEnginePage.NavigationType,
+        is_main_frame: bool
+    ) -> bool:
+        """将网络链接点击转发给系统默认浏览器"""
+        if (
+            nav_type == QtWebEngineCore.QWebEnginePage.NavigationType.NavigationTypeLinkClicked
+            and url.scheme() in {"http", "https"}
+        ):
+            QtGui.QDesktopServices.openUrl(url)
+            return False
+
+        return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+
 class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
     """会话历史控件"""
 
@@ -290,6 +310,7 @@ class HistoryWidget(QtWebEngineWidgets.QWebEngineView):
         super().__init__(parent)
 
         self.profile_name: str = profile_name
+        self.setPage(HistoryPage(self))
 
         # 设置页面背景色为透明，避免首次加载时闪烁
         self.page().setBackgroundColor(QtGui.QColor("transparent"))
