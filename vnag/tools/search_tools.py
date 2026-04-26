@@ -18,6 +18,7 @@ setting: dict[str, str] = {
     "tavily_key": "",
     "serper_key": "",
     "jina_key": "",
+    "proxy": "",
 }
 
 # 从文件加载配置
@@ -26,6 +27,14 @@ if _setting:
     setting.update(_setting)
 else:
     save_json(SETTING_NAME, setting)
+
+
+def _get_requests_proxies() -> dict[str, str] | None:
+    """将当前代理配置转换为 requests 可接受的 proxies 参数。"""
+    proxy: str = str(setting.get("proxy", "")).strip()
+    if not proxy:
+        return None
+    return {"http": proxy, "https": proxy}
 
 
 def bocha_search(
@@ -72,7 +81,11 @@ def bocha_search(
 
     try:
         resp: requests.Response = requests.post(
-            url, headers=headers, json=payload, timeout=30
+            url,
+            headers=headers,
+            json=payload,
+            timeout=30,
+            proxies=_get_requests_proxies(),
         )
         resp.raise_for_status()
         result: dict[str, Any] = resp.json()
@@ -118,7 +131,12 @@ def tavily_search(
     }
 
     try:
-        resp: requests.Response = requests.post(url, json=payload, timeout=30)
+        resp: requests.Response = requests.post(
+            url,
+            json=payload,
+            timeout=30,
+            proxies=_get_requests_proxies(),
+        )
         resp.raise_for_status()
         result: dict[str, Any] = resp.json()
         return result
@@ -163,7 +181,11 @@ def serper_search(
 
     try:
         resp: requests.Response = requests.post(
-            url, headers=headers, json=payload, timeout=30
+            url,
+            headers=headers,
+            json=payload,
+            timeout=30,
+            proxies=_get_requests_proxies(),
         )
         resp.raise_for_status()
         result: dict[str, Any] = resp.json()
@@ -205,7 +227,12 @@ def jina_search(
         headers["X-No-Content"] = "true"
 
     try:
-        resp: requests.Response = requests.get(url, headers=headers, timeout=60)
+        resp: requests.Response = requests.get(
+            url,
+            headers=headers,
+            timeout=60,
+            proxies=_get_requests_proxies(),
+        )
         resp.raise_for_status()
         result: dict[str, Any] = resp.json()
         return result

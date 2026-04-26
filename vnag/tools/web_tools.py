@@ -3,6 +3,31 @@ from typing import Any
 import requests
 
 from vnag.local import LocalTool
+from vnag.utility import load_json, save_json
+
+
+# 配置文件名称
+SETTING_NAME: str = "tool_web.json"
+
+# 默认配置
+setting: dict[str, str] = {
+    "proxy": "",
+}
+
+# 从文件加载配置
+_setting: dict[str, Any] = load_json(SETTING_NAME)
+if _setting:
+    setting.update(_setting)
+else:
+    save_json(SETTING_NAME, setting)
+
+
+def _get_requests_proxies() -> dict[str, str] | None:
+    """将当前代理配置转换为 requests 可接受的 proxies 参数。"""
+    proxy: str = str(setting.get("proxy", "")).strip()
+    if not proxy:
+        return None
+    return {"http": proxy, "https": proxy}
 
 
 def fetch_html(url: str) -> str:
@@ -13,7 +38,11 @@ def fetch_html(url: str) -> str:
     更推荐优先使用 `fetch_markdown`，因为它更适合模型阅读和提取证据。
     """
     try:
-        response: requests.Response = requests.get(url, timeout=10)
+        response: requests.Response = requests.get(
+            url,
+            timeout=10,
+            proxies=_get_requests_proxies(),
+        )
         response.raise_for_status()
         return response.text
     except requests.exceptions.RequestException as e:
@@ -29,7 +58,11 @@ def fetch_json(url: str) -> Any:
     直接下结论。
     """
     try:
-        response: requests.Response = requests.get(url, timeout=10)
+        response: requests.Response = requests.get(
+            url,
+            timeout=10,
+            proxies=_get_requests_proxies(),
+        )
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -63,7 +96,11 @@ def fetch_markdown(url: str) -> str:
     """
     try:
         jina_url = f"https://r.jina.ai/{url}"
-        response: requests.Response = requests.get(jina_url, timeout=30)
+        response: requests.Response = requests.get(
+            jina_url,
+            timeout=30,
+            proxies=_get_requests_proxies(),
+        )
         response.raise_for_status()
         return response.text
     except requests.exceptions.RequestException as e:
@@ -77,7 +114,12 @@ def check_link(url: str) -> str:
     适合在阅读正文前快速确认链接是否可访问，但它不能替代正文阅读或事实验证。
     """
     try:
-        response: requests.Response = requests.head(url, timeout=5, allow_redirects=True)
+        response: requests.Response = requests.head(
+            url,
+            timeout=5,
+            allow_redirects=True,
+            proxies=_get_requests_proxies(),
+        )
         return f"状态码: {response.status_code} {response.reason}"
     except requests.exceptions.RequestException as e:
         return f"检查链接时出错: {e}"
