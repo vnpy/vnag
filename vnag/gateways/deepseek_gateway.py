@@ -26,7 +26,13 @@ class DeepseekGateway(CompletionGateway):
         "base_url": "https://api.deepseek.com",
         "api_key": "",
         "proxy": "",
+        "reasoning_effort": ["high", "max"],
     }
+
+    def init(self, setting: dict[str, Any]) -> bool:
+        """初始化连接和内部服务组件，返回是否成功。"""
+        self.reasoning_effort: str = setting.get("reasoning_effort", "max")
+        return super().init(setting)
 
     def _extract_thinking(self, message: Any) -> str:
         """
@@ -55,7 +61,7 @@ class DeepseekGateway(CompletionGateway):
         启用 DeepSeek 的 thinking 模式
         也可以直接使用 model="deepseek-reasoner" 启用
         """
-        return {"thinking": {"type": "enabled"}}
+        return {"thinking": {"type": "enabled", "effort": self.reasoning_effort}}
 
     def _convert_thinking_for_request(self, thinking: str) -> dict[str, Any]:
         """
