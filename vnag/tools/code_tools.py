@@ -32,7 +32,7 @@ def execute_file(path: str, timeout: int = 30) -> str:
             text=True,
             timeout=timeout,
             check=False,
-            encoding="utf-8"
+            errors="replace"
         )
 
         output: str = ""
@@ -76,7 +76,7 @@ def execute_code(code: str, timeout: int = 30) -> str:
             text=True,
             timeout=timeout,
             check=False,
-            encoding="utf-8"
+            errors="replace"
         )
 
         output: str = ""
