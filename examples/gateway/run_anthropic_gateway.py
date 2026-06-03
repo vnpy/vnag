@@ -1,5 +1,5 @@
 from vnag.utility import load_json
-from vnag.object import Message, Request, Response, Role, ToolSchema
+from vnag.object import Message, Request, Response, Role, ToolSchema, ModelInfo
 from vnag.gateways.anthropic_gateway import AnthropicGateway
 
 
@@ -21,8 +21,8 @@ def main() -> None:
     gateway.init(setting)
 
     # 列出支持模型
-    model_names: list[str] = gateway.list_models()
-    print(model_names)
+    model_infos: list[ModelInfo] = gateway.list_models()
+    print([info.id for info in model_infos])
 
     # 创建请求对象
     request: Request = Request(

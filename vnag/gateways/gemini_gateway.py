@@ -11,14 +11,20 @@ from google.genai import types
 
 from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment, ModelInfo
 
 
+# Gemini 文本 generateContent 常用模型（API id，不含 models/ 前缀）
+# 来源: https://ai.google.dev/gemini-api/docs/models
+#       https://ai.google.dev/gemini-api/docs/deprecations
 GEMINI_STATIC_MODELS: list[str] = [
+    "gemini-3.5-flash",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-pro",
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
 ]
 
 GEMINI_FINISH_REASON_MAP: dict[str, FinishReason] = {
@@ -653,11 +659,18 @@ class GeminiGateway(BaseGateway):
                 finish_reason=FinishReason.STOP,
             )
 
-    def list_models(self) -> list[str]:
+    def _to_model_infos(self, names: list[str]) -> list[ModelInfo]:
+        """将模型 ID 列表转为 ModelInfo 列表"""
+        return [
+            ModelInfo(id=name, provider="google", name=name)
+            for name in sorted(names)
+        ]
+
+    def list_models(self) -> list[ModelInfo]:
         """查询可用 Gemini 模型列表，失败时回退到静态列表"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
-            return sorted(GEMINI_STATIC_MODELS)
+            return self._to_model_infos(GEMINI_STATIC_MODELS)
 
         try:
             model_names: list[str] = []
@@ -678,9 +691,9 @@ class GeminiGateway(BaseGateway):
 
                 model_names.append(name)
 
-            return sorted(model_names) if model_names else sorted(
-                GEMINI_STATIC_MODELS
-            )
+            if model_names:
+                return self._to_model_infos(model_names)
+            return self._to_model_infos(GEMINI_STATIC_MODELS)
         except Exception as e:
             self.write_log(f"查询模型列表失败: {e}")
-            return sorted(GEMINI_STATIC_MODELS)
+            return self._to_model_infos(GEMINI_STATIC_MODELS)

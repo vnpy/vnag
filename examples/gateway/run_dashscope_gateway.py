@@ -1,5 +1,5 @@
 from vnag.utility import load_json
-from vnag.object import Message, Request, Response, Role
+from vnag.object import Message, Request, Response, Role, ModelInfo
 from vnag.gateways.dashscope_gateway import DashscopeGateway
 
 
@@ -21,10 +21,10 @@ def main() -> None:
     gateway.init(setting)
 
     # 列出支持模型
-    model_names: list[str] = gateway.list_models()
-    model_names.sort()
-    for name in model_names:
-        print(name)
+    model_infos: list[ModelInfo] = gateway.list_models()
+    model_infos.sort(key=lambda x: x.id)
+    for info in model_infos:
+        print(info.id)
 
     # 创建请求对象
     request: Request = Request(

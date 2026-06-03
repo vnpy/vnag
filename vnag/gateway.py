@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 from collections.abc import Generator
 
-from .object import Request, Response, Delta
+from .object import Request, Response, Delta, ModelInfo
 
 
 class BaseGateway(ABC):
@@ -28,7 +28,7 @@ class BaseGateway(ABC):
         pass
 
     @abstractmethod
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         pass
 

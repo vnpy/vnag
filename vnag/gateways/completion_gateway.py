@@ -7,6 +7,7 @@ import mimetypes
 
 import httpx
 from openai import OpenAI, Stream
+from openai.types import Model as OpenAIModel
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 from openai.types.chat.chat_completion import Choice
 from openai.types.chat.chat_completion_chunk import Choice as ChunkChoice
@@ -21,6 +22,7 @@ from vnag.object import (
     Message,
     ToolCall,
     Attachment,
+    ModelInfo,
 )
 from vnag.constant import Role, AttachmentKind
 
@@ -30,6 +32,20 @@ FINISH_REASON_MAP = {
     "length": FinishReason.LENGTH,
     "tool_calls": FinishReason.TOOL_CALLS,
 }
+
+
+def parse_openai_model(model: OpenAIModel) -> ModelInfo:
+    """解析 OpenAI 兼容 Models API 列表项"""
+    model_id: str = model.id
+    owned_by: str = model.owned_by or ""
+
+    # id 含 '/' 时拆分 provider
+    if "/" in model_id:
+        provider, name = model_id.split("/", 1)
+        return ModelInfo(id=model_id, provider=provider, name=name)
+    # 否则用 owned_by
+    else:
+        return ModelInfo(id=model_id, provider=owned_by, name=model_id)
 
 
 class CompletionGateway(BaseGateway):
@@ -493,11 +509,15 @@ class CompletionGateway(BaseGateway):
             if should_yield:
                 yield delta
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
             return []
 
         models = self.client.models.list()
-        return sorted([model.id for model in models])
+        infos: list[ModelInfo] = []
+        for model in models:
+            infos.append(parse_openai_model(model))
+
+        return sorted(infos, key=lambda x: x.id)

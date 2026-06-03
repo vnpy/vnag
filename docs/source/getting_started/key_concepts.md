@@ -171,7 +171,7 @@ gateway.init({
     "base_url": "https://api.openai.com/v1"
 })
 
-# 查询可用模型
+# 查询可用模型（list[ModelInfo]，调用 API 使用 model.id）
 models = gateway.list_models()
 ```
 

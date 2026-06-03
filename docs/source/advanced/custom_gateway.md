@@ -34,7 +34,7 @@ class BaseGateway(ABC):
         pass
     
     @abstractmethod
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型"""
         pass
 ```
@@ -49,7 +49,7 @@ from typing import Any
 
 from vnag.gateway import BaseGateway
 from vnag.object import (
-    Request, Response, Delta, Message, Usage, ToolCall
+    Request, Response, Delta, Message, Usage, ToolCall, ModelInfo
 )
 from vnag.constant import Role, FinishReason
 
@@ -222,12 +222,19 @@ class CustomGateway(BaseGateway):
                     finish_reason=self._parse_finish_reason(choice.get("finish_reason"))
                 )
     
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型"""
         response = self.client.get("/models")
         data = response.json()
-        
-        return [model["id"] for model in data.get("data", [])]
+
+        return [
+            ModelInfo(
+                id=model["id"],
+                provider=model.get("owned_by", ""),
+                name=model["id"],
+            )
+            for model in data.get("data", [])
+        ]
     
     def _parse_finish_reason(self, reason: str | None) -> FinishReason | None:
         """解析结束原因"""

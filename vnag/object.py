@@ -128,3 +128,10 @@ class Attachment(BaseModel):
     mime: str = ""
     url: str = ""
     path: str = ""
+
+
+class ModelInfo(BaseModel):
+    """标准化的模型信息"""
+    id: str
+    provider: str = ""
+    name: str = ""

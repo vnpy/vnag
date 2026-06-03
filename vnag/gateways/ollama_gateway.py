@@ -7,7 +7,7 @@ from ollama import Client
 
 from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, ModelInfo
 
 
 OLLAMA_FINISH_REASON_MAP: dict[str, FinishReason] = {
@@ -401,7 +401,7 @@ class OllamaGateway(BaseGateway):
             if should_yield:
                 yield delta
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
@@ -419,4 +419,10 @@ class OllamaGateway(BaseGateway):
             if model_name:
                 model_names.add(model_name)
 
-        return sorted(model_names)
+        return sorted(
+            [
+                ModelInfo(id=name, provider="ollama", name=name)
+                for name in model_names
+            ],
+            key=lambda x: x.id,
+        )

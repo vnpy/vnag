@@ -20,6 +20,7 @@ from vnag.object import (
     Message,
     ToolCall,
     Attachment,
+    ModelInfo,
 )
 from vnag.constant import Role, AttachmentKind
 
@@ -399,11 +400,20 @@ class OpenaiGateway(BaseGateway):
                         usage=usage,
                     )
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
             return []
 
         models = self.client.models.list()
-        return sorted([model.id for model in models])
+        infos: list[ModelInfo] = []
+        for model in models:
+            infos.append(
+                ModelInfo(
+                    id=model.id,
+                    provider=model.owned_by or "",
+                    name=model.id,
+                )
+            )
+        return sorted(infos, key=lambda x: x.id)

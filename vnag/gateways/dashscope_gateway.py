@@ -11,7 +11,7 @@ from dashscope.api_entities.dashscope_response import (
 )
 
 from vnag.gateway import BaseGateway
-from vnag.object import FinishReason, Request, Response, Delta, Usage, Message
+from vnag.object import FinishReason, Request, Response, Delta, Usage, Message, ModelInfo
 from vnag.object import Role
 from vnag.constant import AttachmentKind
 
@@ -270,7 +270,7 @@ class DashscopeGateway(BaseGateway):
             if should_yield:
                 yield delta
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         if not self.api_key:
             self.write_log("LLM客户端未初始化，请检查配置")
@@ -289,5 +289,9 @@ class DashscopeGateway(BaseGateway):
             self.write_log(f"查询模型列表失败: {response.message}")
             return []
 
-        model_names: list[str] = [d["name"] for d in response.output["models"]]
-        return model_names
+        infos: list[ModelInfo] = []
+        for d in response.output["models"]:
+            name: str = d["name"]
+            provider: str = "qwen" if name.startswith("qwen") else "dashscope"
+            infos.append(ModelInfo(id=name, provider=provider, name=name))
+        return infos

@@ -1,3 +1,9 @@
+# 1.0.0
+
+## Mod
+
+1. `list_models()` 返回 `list[ModelInfo]`（含 `id`/`provider`/`name`），各 Gateway 负责解析展示字段；调用与收藏仍使用 `id` 字符串
+
 # 0.9.0
 
 ## Add

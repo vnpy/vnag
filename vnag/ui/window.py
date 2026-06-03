@@ -71,8 +71,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.current_id: str = ""
 
-        self.models: list[str] = self.engine.list_models()
-
         self.first_show: bool = True
         self.ask_invoker: AskInvoker = AskInvoker(self)
 

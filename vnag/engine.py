@@ -10,7 +10,8 @@ from .object import (
     ToolCall,
     ToolResult,
     ToolSchema,
-    Session
+    Session,
+    ModelInfo,
 )
 from .mcp import McpManager
 from .local import LocalManager, LocalTool
@@ -46,7 +47,7 @@ class AgentEngine:
 
         self._profiles: dict[str, Profile] = {}
         self._agents: dict[str, TaskAgent] = {}
-        self._models: list[str] = []
+        self._models: list[ModelInfo] = []
 
     def init(self) -> None:
         """初始化引擎"""
@@ -219,14 +220,14 @@ class AgentEngine:
         else:
             return all_schemas
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型列表"""
         if not self._models:
             try:
                 self._models = self.gateway.list_models()
-            except Exception:
-                # 填入错误提示，避免重复请求
-                self._models = ["获取模型列表失败，请检查API配置"]
+            except Exception as e:
+                self.gateway.write_log(f"查询模型列表失败: {e}")
+                self._models = []
 
         return self._models
 

@@ -9,7 +9,7 @@
 from vnag.utility import load_json
 from vnag.gateways.completion_gateway import CompletionGateway
 from vnag.engine import AgentEngine
-from vnag.object import Profile
+from vnag.object import Profile, ModelInfo
 from vnag.agent import TaskAgent
 
 
@@ -39,7 +39,7 @@ def main() -> None:
     print("="*50)
 
     # 打印已有模型
-    all_models: list[str] = engine.list_models()
+    all_models: list[ModelInfo] = engine.list_models()
     print(f"\n可用模型数量: {len(all_models)}")
     for model in all_models:
         print(f"  - {model}")

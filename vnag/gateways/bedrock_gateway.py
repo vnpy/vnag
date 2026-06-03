@@ -10,7 +10,7 @@ from botocore.config import Config as BotoConfig
 
 from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment, ModelInfo
 
 
 BEDROCK_FINISH_REASON_MAP: dict[str, FinishReason] = {
@@ -619,7 +619,7 @@ class BedrockGateway(BaseGateway):
                     ),
                 )
 
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """通过 Bedrock ListFoundationModels 查询支持文本输出的模型列表"""
         if not self.meta_client:
             self.write_log("LLM客户端未初始化，请检查配置")
@@ -634,9 +634,13 @@ class BedrockGateway(BaseGateway):
             return []
 
         summaries: list[dict[str, Any]] = response.get("modelSummaries", [])
-        model_ids: list[str] = [
-            s["modelId"]
-            for s in summaries
-            if s.get("modelId")
-        ]
-        return sorted(model_ids)
+        infos: list[ModelInfo] = []
+
+        for s in summaries:
+            model_id: str = s.get("modelId", "")
+            if not model_id:
+                continue
+            provider: str = (s.get("providerName") or "").lower()
+            infos.append(ModelInfo(id=model_id, provider=provider, name=model_id))
+
+        return sorted(infos, key=lambda x: x.id)

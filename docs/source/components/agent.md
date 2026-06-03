@@ -210,8 +210,10 @@ local_schemas = engine.get_local_schemas()
 # 获取 MCP 工具
 mcp_schemas = engine.get_mcp_schemas()
 
-# 查询可用模型
+# 查询可用模型（返回 ModelInfo，调用时使用 model.id）
 models = engine.list_models()
+for model in models:
+    print(model.id)
 ```
 
 ### 工具执行

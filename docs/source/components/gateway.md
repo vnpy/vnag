@@ -31,7 +31,7 @@ class BaseGateway(ABC):
         pass
     
     @abstractmethod
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         """查询可用模型"""
         pass
 ```
@@ -277,9 +277,11 @@ print(response.content)
 ### 查询模型
 
 ```python
-models = gateway.list_models()
+from vnag.object import ModelInfo
+
+models: list[ModelInfo] = gateway.list_models()
 for model in models:
-    print(model)
+    print(model.id)  # 调用 API 时使用 id
 ```
 
 ### 工具调用
@@ -405,9 +407,12 @@ class CustomGateway(BaseGateway):
         # 实现流式调用
         pass
     
-    def list_models(self) -> list[str]:
+    def list_models(self) -> list[ModelInfo]:
         # 返回可用模型列表
-        return ["model-1", "model-2"]
+        return [
+            ModelInfo(id="model-1", provider="custom", name="model-1"),
+            ModelInfo(id="model-2", provider="custom", name="model-2"),
+        ]
 ```
 
 ## 下一步

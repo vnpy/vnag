@@ -10,7 +10,7 @@ from typing import cast, NamedTuple
 
 from ..constant import Role, AttachmentKind
 from ..engine import AgentEngine, default_profile
-from ..object import ToolSchema, Segment, Attachment
+from ..object import ToolSchema, Segment, Attachment, ModelInfo
 from ..agent import Profile, TaskAgent
 from ..utility import get_folder_path, read_text_file
 from ..gateways import GATEWAY_CLASSES, get_gateway_class
@@ -945,8 +945,8 @@ class AgentWidget(QtWidgets.QWidget):
         favorite_models: list[str] = load_favorite_models()
 
         # 仅显示当前网关支持的模型
-        available_models: set[str] = set(self.engine.list_models())
-        favorite_models = [m for m in favorite_models if m in available_models]
+        available_ids: set[str] = {m.id for m in self.engine.list_models()}
+        favorite_models = [m for m in favorite_models if m in available_ids]
 
         self.model_combo.addItems(favorite_models)
 
@@ -1581,36 +1581,23 @@ class ModelDialog(QtWidgets.QDialog):
 
     def populate_models(self) -> None:
         """填充所有模型树"""
-        models: list[str] = self._engine.list_models()
+        by_provider: dict[str, list[ModelInfo]] = defaultdict(list)
+        for info in self._engine.list_models():
+            key: str = info.provider or "其他"
+            by_provider[key].append(info)
 
-        separator: str | None = self.detect_separator(models)
-        vendor_models: dict[str, list[str]] = defaultdict(list)
-
-        if separator:
-            for name in models:
-                parts: list[str] = name.split(separator, 1)
-                if len(parts) == 2:
-                    vendor, model = parts
-                    vendor_models[vendor].append(name)
-                else:
-                    vendor_models["其他"].append(name)
-        else:
-            for name in models:
-                vendor_models["其他"].append(name)
-
-        for vendor, model_list in sorted(vendor_models.items()):
+        self.tree_widget.clear()
+        for provider, infos in sorted(by_provider.items()):
             vendor_item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
                 self.tree_widget,
-                [vendor, ""]
+                [provider, ""]
             )
-            for model_name in sorted(model_list):
-                if separator and separator in model_name:
-                    _, model_display = model_name.split(separator, 1)
-                else:
-                    model_display = model_name
-
-                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(vendor_item, ["", model_display])
-                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, model_name)
+            for info in sorted(infos, key=lambda x: x.name or x.id):
+                display: str = info.name or info.id
+                item: QtWidgets.QTreeWidgetItem = QtWidgets.QTreeWidgetItem(
+                    vendor_item, ["", display]
+                )
+                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, info.id)
 
         self.tree_widget.expandAll()
 
@@ -1707,24 +1694,6 @@ class ModelDialog(QtWidgets.QDialog):
         remove_action.triggered.connect(self.remove_model)
 
         menu.exec(self.favorite_list.viewport().mapToGlobal(pos))
-
-    def detect_separator(self, models: list[str]) -> str | None:
-        """检测模型名称中的分隔符"""
-        if not models:
-            return None
-
-        candidates: list[str] = ["/", ":", "\\"]
-        counts: dict[str, int] = defaultdict(int)
-
-        for name in models:
-            for sep in candidates:
-                if sep in name:
-                    counts[sep] += 1
-
-        if not counts:
-            return None
-
-        return max(counts, key=lambda x: counts[x])
 
 
 class GatewayDialog(QtWidgets.QDialog):

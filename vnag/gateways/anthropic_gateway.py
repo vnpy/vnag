@@ -11,7 +11,7 @@ from anthropic.types import Message as AnthropicMessage, MessageStreamEvent
 
 from vnag.constant import FinishReason, Role, AttachmentKind
 from vnag.gateway import BaseGateway
-from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment
+from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment, ModelInfo
 
 
 ANTHROPIC_FINISH_REASON_MAP = {
@@ -20,6 +20,19 @@ ANTHROPIC_FINISH_REASON_MAP = {
     "stop_sequence": FinishReason.STOP,
     "tool_use": FinishReason.TOOL_CALLS,
 }
+
+# Anthropic 当前 Active 模型（Claude API ID）
+# 来源: https://docs.anthropic.com/en/docs/about-claude/models
+ANTHROPIC_MODELS: list[str] = [
+    "claude-opus-4-8",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-sonnet-4-5-20250929",
+    "claude-opus-4-5-20251101",
+    "claude-opus-4-1-20250805",
+]
 
 
 class AnthropicGateway(BaseGateway):
@@ -375,7 +388,9 @@ class AnthropicGateway(BaseGateway):
 
                 yield delta
 
-    def list_models(self) -> list[str]:
-        """查询可用模型列表"""
-        self.write_log("Anthropic API 不支持查询模型列表")
-        return []
+    def list_models(self) -> list[ModelInfo]:
+        """返回 Anthropic 官方当前可用模型（静态列表，无 Models API 客户端查询）"""
+        return [
+            ModelInfo(id=model_id, provider="anthropic", name=model_id)
+            for model_id in ANTHROPIC_MODELS
+        ]
