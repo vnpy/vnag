@@ -271,27 +271,47 @@ class DashscopeGateway(BaseGateway):
                 yield delta
 
     def list_models(self) -> list[ModelInfo]:
-        """查询可用模型列表"""
+        """通过 DashScope GET /api/v1/models 分页查询可用模型列表"""
         if not self.api_key:
             self.write_log("LLM客户端未初始化，请检查配置")
             return []
 
+        page_size: int = 100
+        page_no: int = 1
+        infos: list[ModelInfo] = []
+        seen: set[str] = set()
+
         try:
-            response: DashScopeAPIResponse = Models.list(
-                page_size=100,
-                api_key=self.api_key
-            )
+            while True:
+                response: DashScopeAPIResponse = Models.list(
+                    page_no=page_no,
+                    page_size=page_size,
+                    api_key=self.api_key,
+                )
+                if response.status_code != 200:
+                    self.write_log(f"查询模型列表失败: {response.message}")
+                    return []
+
+                output: dict = response.output or {}
+                models: list = output.get("models") or []
+                for d in models:
+                    name: str = d.get("name") or d.get("model") or ""
+                    if not name or name in seen:
+                        continue
+                    seen.add(name)
+                    provider: str = "qwen" if name.startswith("qwen") else "dashscope"
+                    infos.append(ModelInfo(id=name, provider=provider, name=name))
+
+                total: int = int(output.get("total") or 0)
+                if (
+                    not models
+                    or (total and page_no * page_size >= total)
+                    or len(models) < page_size
+                ):
+                    break
+                page_no += 1
         except Exception as err:
             self.write_log(f"查询模型列表失败: {err}")
             return []
 
-        if response.status_code != 200:
-            self.write_log(f"查询模型列表失败: {response.message}")
-            return []
-
-        infos: list[ModelInfo] = []
-        for d in response.output["models"]:
-            name: str = d["name"]
-            provider: str = "qwen" if name.startswith("qwen") else "dashscope"
-            infos.append(ModelInfo(id=name, provider=provider, name=name))
-        return infos
+        return sorted(infos, key=lambda x: x.id)

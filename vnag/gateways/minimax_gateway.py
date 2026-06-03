@@ -1,21 +1,6 @@
 from typing import Any
 
-from vnag.object import ModelInfo
-
 from .completion_gateway import CompletionGateway
-
-# MiniMax 官方文本模型（Claude API ID）
-# 来源: https://platform.minimax.io/docs/api-reference/api-overview
-MINIMAX_MODELS: list[str] = [
-    "MiniMax-M3",
-    "MiniMax-M2.7",
-    "MiniMax-M2.7-highspeed",
-    "MiniMax-M2.5",
-    "MiniMax-M2.5-highspeed",
-    "MiniMax-M2.1",
-    "MiniMax-M2.1-highspeed",
-    "MiniMax-M2",
-]
 
 
 class MinimaxGateway(CompletionGateway):
@@ -26,6 +11,8 @@ class MinimaxGateway(CompletionGateway):
     - reasoning_details 格式的 thinking 提取
     - 请求中启用 reasoning_split 参数
     - 回传 thinking 内容到后续请求（Interleaved Thinking）
+
+    模型列表由父类 CompletionGateway.list_models() 经 GET /v1/models 获取。
     """
 
     default_name: str = "MiniMax"
@@ -111,10 +98,3 @@ class MinimaxGateway(CompletionGateway):
         并在下一轮传回模型，以确保模型的思维链不被中断。
         """
         return {"reasoning_details": [{"text": thinking}]}
-
-    def list_models(self) -> list[ModelInfo]:
-        """MiniMax 官方 API 不提供模型列表查询，使用文档中的静态模型表"""
-        return [
-            ModelInfo(id=model_id, provider="minimax", name=model_id)
-            for model_id in MINIMAX_MODELS
-        ]

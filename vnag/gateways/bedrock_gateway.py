@@ -640,6 +640,11 @@ class BedrockGateway(BaseGateway):
             model_id: str = s.get("modelId", "")
             if not model_id:
                 continue
+
+            lifecycle: dict[str, Any] = s.get("modelLifecycle") or {}
+            if lifecycle.get("status") == "LEGACY":
+                continue
+
             provider: str = (s.get("providerName") or "").lower()
             infos.append(ModelInfo(id=model_id, provider=provider, name=model_id))
 

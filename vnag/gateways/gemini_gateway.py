@@ -14,34 +14,12 @@ from vnag.gateway import BaseGateway
 from vnag.object import Request, Response, Delta, Usage, Message, ToolCall, Attachment, ModelInfo
 
 
-# Gemini 文本 generateContent 常用模型（API id，不含 models/ 前缀）
-# 来源: https://ai.google.dev/gemini-api/docs/models
-#       https://ai.google.dev/gemini-api/docs/deprecations
-GEMINI_STATIC_MODELS: list[str] = [
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-]
-
 GEMINI_FINISH_REASON_MAP: dict[str, FinishReason] = {
     "STOP": FinishReason.STOP,
     "MAX_TOKENS": FinishReason.LENGTH,
     "SAFETY": FinishReason.STOP,
     "RECITATION": FinishReason.STOP,
 }
-
-GEMINI_MODEL_EXCLUDE_KEYWORDS: list[str] = [
-    "embedding",
-    "imagen",
-    "veo",
-    "aqa",
-    "bisheng",
-]
-
 
 class GeminiGateway(BaseGateway):
     """连接 Google AI Studio Gemini API 的网关，提供统一接口"""
@@ -666,34 +644,28 @@ class GeminiGateway(BaseGateway):
             for name in sorted(names)
         ]
 
+    def _model_supports_chat(self, model: Any) -> bool:
+        """模型是否支持 generateContent（官方推荐的可对话模型判定）"""
+        actions = getattr(model, "supported_actions", None) or []
+        return "generateContent" in actions
+
     def list_models(self) -> list[ModelInfo]:
-        """查询可用 Gemini 模型列表，失败时回退到静态列表"""
+        """通过 Gemini models.list 查询支持 generateContent 的模型列表"""
         if not self.client:
             self.write_log("LLM客户端未初始化，请检查配置")
-            return self._to_model_infos(GEMINI_STATIC_MODELS)
+            return []
 
         try:
-            model_names: list[str] = []
+            model_names: set[str] = set()
             for model in self.client.models.list():
                 name: str = (model.name or "").removeprefix("models/")
-                if not name:
+                if not name or not self._model_supports_chat(model):
                     continue
+                model_names.add(name)
 
-                name_lower: str = name.lower()
-
-                # 必须包含 gemini
-                if "gemini" not in name_lower:
-                    continue
-
-                # 排除不适合的模型类型
-                if any(kw in name_lower for kw in GEMINI_MODEL_EXCLUDE_KEYWORDS):
-                    continue
-
-                model_names.append(name)
-
-            if model_names:
-                return self._to_model_infos(model_names)
-            return self._to_model_infos(GEMINI_STATIC_MODELS)
+            if not model_names:
+                return []
+            return self._to_model_infos(sorted(model_names))
         except Exception as e:
             self.write_log(f"查询模型列表失败: {e}")
-            return self._to_model_infos(GEMINI_STATIC_MODELS)
+            return []

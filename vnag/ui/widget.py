@@ -287,11 +287,14 @@ class HistoryPage(QtWebEngineCore.QWebEnginePage):
 
     def acceptNavigationRequest(
         self,
-        url: QtCore.QUrl,
+        url: QtCore.QUrl | str,
         nav_type: QtWebEngineCore.QWebEnginePage.NavigationType,
         is_main_frame: bool
     ) -> bool:
         """将网络链接点击转发给系统默认浏览器"""
+        if isinstance(url, str):
+            url = QtCore.QUrl(url)
+
         if (
             nav_type == QtWebEngineCore.QWebEnginePage.NavigationType.NavigationTypeLinkClicked
             and url.scheme() in {"http", "https"}

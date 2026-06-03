@@ -21,20 +21,6 @@ ANTHROPIC_FINISH_REASON_MAP = {
     "tool_use": FinishReason.TOOL_CALLS,
 }
 
-# Anthropic 当前 Active 模型（Claude API ID）
-# 来源: https://docs.anthropic.com/en/docs/about-claude/models
-ANTHROPIC_MODELS: list[str] = [
-    "claude-opus-4-8",
-    "claude-sonnet-4-6",
-    "claude-haiku-4-5-20251001",
-    "claude-opus-4-7",
-    "claude-opus-4-6",
-    "claude-sonnet-4-5-20250929",
-    "claude-opus-4-5-20251101",
-    "claude-opus-4-1-20250805",
-]
-
-
 class AnthropicGateway(BaseGateway):
     """连接 Anthropic 官方 SDK 的网关，提供统一接口"""
 
@@ -389,8 +375,20 @@ class AnthropicGateway(BaseGateway):
                 yield delta
 
     def list_models(self) -> list[ModelInfo]:
-        """返回 Anthropic 官方当前可用模型（静态列表，无 Models API 客户端查询）"""
-        return [
-            ModelInfo(id=model_id, provider="anthropic", name=model_id)
-            for model_id in ANTHROPIC_MODELS
-        ]
+        """通过 Anthropic GET /v1/models 查询可用模型列表"""
+        if not self.client:
+            self.write_log("LLM客户端未初始化，请检查配置")
+            return []
+
+        try:
+            infos: list[ModelInfo] = []
+            for model in self.client.models.list(limit=1000):
+                model_id: str = model.id
+                display: str = getattr(model, "display_name", None) or model_id
+                infos.append(
+                    ModelInfo(id=model_id, provider="anthropic", name=display)
+                )
+            return sorted(infos, key=lambda x: x.id)
+        except Exception as e:
+            self.write_log(f"查询模型列表失败: {e}")
+            return []
