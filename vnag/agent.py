@@ -526,6 +526,10 @@ class TaskAgent:
                 self.current_step = step
 
                 for delta in self.engine.stream(request):
+                    # 中止时立即跳出，避免长回复消费完整一轮才交还控制权
+                    if self.aborted:
+                        break
+
                     # 拼接 ID
                     if delta.id and not step.id:
                         step.id = delta.id
@@ -677,8 +681,10 @@ class TaskAgent:
     ) -> Response:
         """阻塞式生成"""
         full_content: str = ""
+        full_thinking: str = ""
         response_id: str = ""
         total_usage: Usage = Usage()
+        finish_reason: FinishReason | None = None
 
         # 遍历 stream 方法返回的生成器，消费所有 Delta 数据
         for delta in self.stream(prompt, attachments=attachments):
@@ -689,15 +695,25 @@ class TaskAgent:
             if delta.content:
                 full_content += delta.content
 
+            # 拼接思考文本
+            if delta.thinking:
+                full_thinking += delta.thinking
+
             # 累加 Token 使用量
             if delta.usage:
                 total_usage.input_tokens += delta.usage.input_tokens
                 total_usage.output_tokens += delta.usage.output_tokens
 
+            # 记录末次结束原因
+            if delta.finish_reason:
+                finish_reason = delta.finish_reason
+
         # 将所有收集到的信息组装成一个 Response 对象并返回
         return Response(
             id=response_id,
             content=full_content,
+            thinking=full_thinking,
+            finish_reason=finish_reason,
             usage=total_usage
         )
 
