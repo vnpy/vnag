@@ -1,8 +1,25 @@
-# 1.0.0
+# 0.9.1
+
+## Add
+
+1. 消息支持图片和任意文件附件
+2. UI支持附件上传和显示
+3. 新增统一网络搜索工具search-tools_search-web
+4. 新增搜索并阅读正文的工具search-tools_search-and-read
+5. 新增通用技能：search-then-read、answer-with-sources、clarify-before-action、plan-and-track、environment-tool-check、mcp-tool-routing
+6. DeepseekGateway增加reasoning_effort参数配置
+7. 新增ModelInfo模型信息对象
 
 ## Mod
 
 1. `list_models()` 返回 `list[ModelInfo]`（含 `id`/`provider`/`name`），各 Gateway 负责解析展示字段；调用与收藏仍使用 `id` 字符串
+2. 完善AI网关对于多模态附件的支持
+3. 完善BedrockGateway对于思维链的支持，兼容只有签名或密文的推理块
+4. 更新部分Gateway模型查询方式
+5. 生成标题和摘要时，将工具调用信息转成普通文字
+6. 增加搜索和Web工具的代理支持
+7. 增加当前选中Profile的存储和恢复
+8. 在外部浏览器中打开回答链接
 
 # 0.9.0
 

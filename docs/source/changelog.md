@@ -2,9 +2,34 @@
 
 本页面记录 VNAG 的版本更新历史。
 
-## v0.9.0
+## v0.9.1
 
 最新版本。
+
+### 新功能
+
+- 消息支持图片和任意文件附件
+- UI 支持附件上传和显示
+- 新增统一网络搜索工具 search-tools_search-web
+- 新增搜索并阅读正文的工具 search-tools_search-and-read
+- 新增通用技能：search-then-read、answer-with-sources、clarify-before-action、plan-and-track、environment-tool-check、mcp-tool-routing
+- DeepseekGateway 增加 reasoning_effort 参数配置
+- 新增 ModelInfo 模型信息对象
+
+### 改进
+
+- `list_models()` 返回 `list[ModelInfo]`（含 `id`/`provider`/`name`），各 Gateway 负责解析展示字段；调用与收藏仍使用 `id` 字符串
+- 完善 AI 网关对于多模态附件的支持
+- 完善 BedrockGateway 对于思维链的支持，兼容只有签名或密文的推理块
+- 更新部分 Gateway 模型查询方式
+- 生成标题和摘要时，将工具调用信息转成普通文字
+- 增加搜索和 Web 工具的代理支持
+- 增加当前选中 Profile 的存储和恢复
+- 在外部浏览器中打开回答链接
+
+---
+
+## v0.9.0
 
 ### 新功能
 
