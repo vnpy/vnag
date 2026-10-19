@@ -1,5 +1,6 @@
 import os
 import json
+import base64
 from typing import Any
 from pathlib import Path
 from collections.abc import Generator
@@ -20,6 +21,26 @@ BEDROCK_FINISH_REASON_MAP: dict[str, FinishReason] = {
     "tool_use": FinishReason.TOOL_CALLS,
 }
 
+# 这些模型只接受 adaptive thinking；budget_tokens 会被拒绝。
+# 子串同时覆盖 4.6/4.7/4.8 以及 5、5.1、5.5。
+_ADAPTIVE_THINKING_MARKERS: tuple[str, ...] = (
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-haiku-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+# Fable / Mythos 连 disabled 也不接受，请求里仍要发 adaptive。
+_ADAPTIVE_ONLY_MARKERS: tuple[str, ...] = (
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
 
 class BedrockGateway(BaseGateway):
     """连接 AWS Bedrock Converse API 的网关，提供统一接口"""
@@ -31,7 +52,7 @@ class BedrockGateway(BaseGateway):
         "api_key": "",
         "proxy": "",
         "thinking_mode": ["adaptive", "enabled", "disabled"],
-        "thinking_effort": ["high", "medium", "low"],
+        "thinking_effort": ["max", "xhigh", "high", "medium", "low"],
         "thinking_budget_tokens": 2000,
     }
 
@@ -154,25 +175,11 @@ class BedrockGateway(BaseGateway):
                 # 回传 reasoningContent（优先使用结构化 reasoning）
                 if msg.reasoning:
                     for item in msg.reasoning:
-                        reasoning_block: dict[str, Any] = {}
-                        reasoning_text: dict[str, Any] = {}
-
-                        if item.get("text"):
-                            reasoning_text["text"] = item["text"]
-                        if item.get("signature"):
-                            reasoning_text["signature"] = item["signature"]
-
-                        if reasoning_text:
-                            reasoning_block["reasoningText"] = reasoning_text
-                        if item.get("redacted_content"):
-                            reasoning_block["redactedContent"] = item[
-                                "redacted_content"
-                            ]
-
+                        reasoning_block = self._build_reasoning_content_block(
+                            item
+                        )
                         if reasoning_block:
-                            content_blocks.append(
-                                {"reasoningContent": reasoning_block}
-                            )
+                            content_blocks.append(reasoning_block)
 
                 if msg.content:
                     content_blocks.append({"text": msg.content})
@@ -200,6 +207,35 @@ class BedrockGateway(BaseGateway):
             })
 
         return system_prompts, bedrock_messages
+
+    def _build_reasoning_content_block(
+        self, item: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """把内部 reasoning item 还原成一个 Converse content block。
+
+        reasoningText.text 在请求侧必填。扩展思考模型会返回只有 signature、
+        或 text 为空的块；回放时补上空字符串，否则 botocore 会拒绝。
+        redactedContent 与 reasoningText 是 tagged union，密文块不能再带 text。
+        """
+        has_signature: bool = bool(item.get("signature"))
+        has_text: bool = "text" in item
+        redacted: Any = item.get("redacted_content")
+        has_redacted: bool = redacted is not None
+
+        if has_redacted and not has_text and not has_signature:
+            return {
+                "reasoningContent": {
+                    "redactedContent": self._decode_redacted(redacted),
+                }
+            }
+
+        if not has_text and not has_signature:
+            return None
+
+        reasoning_text: dict[str, Any] = {"text": item.get("text") or ""}
+        if has_signature:
+            reasoning_text["signature"] = item["signature"]
+        return {"reasoningContent": {"reasoningText": reasoning_text}}
 
     def _extract_reasoning_from_blocks(
         self, content_blocks: list[dict[str, Any]]
@@ -232,20 +268,87 @@ class BedrockGateway(BaseGateway):
                     item["signature"] = signature
 
             redacted: Any = rc.get("redactedContent")
-            if redacted:
-                item["redacted_content"] = redacted
+            if redacted is not None:
+                item["redacted_content"] = self._encode_redacted(redacted)
 
             reasoning.append(item)
 
         return thinking, reasoning
 
+    def _encode_redacted(self, raw: Any) -> str:
+        """密文存成可写入 JSON 的 ASCII 字符串。"""
+        if isinstance(raw, str):
+            return raw
+        return base64.b64encode(bytes(raw)).decode("ascii")
+
+    def _decode_redacted(self, value: Any) -> bytes:
+        """回放时把 base64 还原成 Bedrock 要求的字节。"""
+        if isinstance(value, str):
+            return base64.b64decode(value)
+        return bytes(value)
+
+    def _append_reasoning_delta(
+        self,
+        pending: dict[int, dict[str, Any]],
+        block_index: int,
+        rc_delta: dict[str, Any],
+    ) -> str:
+        """把一段 reasoning 增量攒进未完成的块，并返回需要展示的文本。"""
+        item: dict[str, Any] = pending.setdefault(
+            block_index,
+            {"index": block_index, "type": "reasoning"},
+        )
+        text: str = rc_delta.get("text", "")
+        if text:
+            item["text"] = item.get("text", "") + text
+
+        signature: str = rc_delta.get("signature", "")
+        if signature:
+            item["signature"] = signature
+
+        redacted: Any = rc_delta.get("redactedContent")
+        if redacted is not None:
+            raw: bytes = redacted.encode("utf-8") if isinstance(redacted, str) else bytes(redacted)
+            buffer: bytearray = item.setdefault("_redacted", bytearray())
+            buffer.extend(raw)
+        return text
+
+    def _finish_reasoning_block(
+        self,
+        pending: dict[int, dict[str, Any]],
+        block_index: int,
+    ) -> dict[str, Any] | None:
+        """停块时交出完整推理项。密文只编码一次。"""
+        item: dict[str, Any] | None = pending.pop(block_index, None)
+        if item is None:
+            return None
+
+        raw: Any = item.pop("_redacted", None)
+        if raw is not None:
+            item["redacted_content"] = self._encode_redacted(raw)
+        if any(key in item for key in ("text", "signature", "redacted_content")):
+            return item
+        return None
+
+    def _model_has_marker(self, model_id: str, markers: tuple[str, ...]) -> bool:
+        """判断模型 ID 是否命中任一能力标记。"""
+        normalized_model_id: str = model_id.lower()
+        return any(marker in normalized_model_id for marker in markers)
+
     def _supports_adaptive_thinking(self, model_id: str) -> bool:
         """判断模型是否支持 Claude adaptive thinking。"""
-        normalized_model_id: str = model_id.lower()
-        return (
-            "anthropic.claude-sonnet-4-6" in normalized_model_id
-            or "anthropic.claude-opus-4-6" in normalized_model_id
-        )
+        return self._model_has_marker(model_id, _ADAPTIVE_THINKING_MARKERS)
+
+    def _adaptive_only_thinking(self, model_id: str) -> bool:
+        """Fable / Mythos 不接受 budget_tokens，也不接受 disabled。"""
+        return self._model_has_marker(model_id, _ADAPTIVE_ONLY_MARKERS)
+
+    def _adaptive_request_fields(self, thinking_type: str) -> dict[str, Any]:
+        """构造 adaptive 代际的 thinking 与 effort。effort 必须放在 output_config。"""
+        fields: dict[str, Any] = {"thinking": {"type": thinking_type}}
+        if self.thinking_effort:
+            fields["output_config"] = {"effort": self.thinking_effort}
+        return fields
 
     def _get_additional_model_request_fields(
         self, model_id: str
@@ -255,18 +358,16 @@ class BedrockGateway(BaseGateway):
         if "anthropic" not in normalized_model_id:
             return None
 
+        if self._adaptive_only_thinking(normalized_model_id):
+            return self._adaptive_request_fields("adaptive")
+
+        if self._supports_adaptive_thinking(normalized_model_id):
+            if self.thinking_mode == "disabled":
+                return self._adaptive_request_fields("disabled")
+            return self._adaptive_request_fields("adaptive")
+
         if self.thinking_mode == "disabled":
             return None
-
-        if (
-            self.thinking_mode == "adaptive"
-            and self._supports_adaptive_thinking(normalized_model_id)
-        ):
-            return {
-                "thinking": {
-                    "type": "adaptive",
-                }
-            }
 
         return {
             "thinking": {
@@ -293,10 +394,14 @@ class BedrockGateway(BaseGateway):
         if api_key:
             os.environ["AWS_BEARER_TOKEN_BEDROCK"] = api_key
 
-        # 如果设置了代理，则构建 botocore 配置
-        boto_config: BotoConfig | None = None
+        # 思考模型可能在首个 token 前思考数分钟，默认 60 秒读超时会中断流式响应。
+        config_kwargs: dict[str, Any] = {
+            "connect_timeout": 60,
+            "read_timeout": 600,
+        }
         if proxy:
-            boto_config = BotoConfig(proxies={"https": proxy})
+            config_kwargs["proxies"] = {"https": proxy}
+        boto_config = BotoConfig(**config_kwargs)
 
         try:
             self.client = boto3.client(
@@ -493,8 +598,9 @@ class BedrockGateway(BaseGateway):
             "ResponseMetadata", {}
         ).get("RequestId", "")
 
-        # 按 contentBlockIndex 累积工具调用
+        # 按 contentBlockIndex 累积工具调用和未完成的推理块
         accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+        pending_reasoning: dict[int, dict[str, Any]] = {}
 
         event_stream: Any = response.get("stream", [])
 
@@ -526,40 +632,15 @@ class BedrockGateway(BaseGateway):
                         content=delta_block["text"],
                     )
 
-                # reasoning 增量
+                # reasoning 增量先攒在块内，文本仍实时交给界面
                 elif "reasoningContent" in delta_block:
-                    rc_delta: dict[str, Any] = delta_block[
-                        "reasoningContent"
-                    ]
-                    reasoning_text: str = rc_delta.get("text", "")
-
-                    delta = Delta(id=response_id)
-                    should_yield: bool = False
-                    reasoning_item: dict[str, Any] = {
-                        "index": block_index,
-                        "type": "reasoning",
-                    }
-
-                    if reasoning_text:
-                        delta.thinking = reasoning_text
-                        reasoning_item["text"] = reasoning_text
-                        should_yield = True
-
-                    # signature 通过 reasoning 结构保留
-                    signature: str = rc_delta.get("signature", "")
-                    if signature:
-                        reasoning_item["signature"] = signature
-                        should_yield = True
-
-                    # redactedContent 原样保留
-                    redacted: Any = rc_delta.get("redactedContent")
-                    if redacted:
-                        reasoning_item["redacted_content"] = redacted
-                        should_yield = True
-
-                    if should_yield:
-                        delta.reasoning = [reasoning_item]
-                        yield delta
+                    thinking_text: str = self._append_reasoning_delta(
+                        pending_reasoning,
+                        block_index,
+                        delta_block["reasoningContent"],
+                    )
+                    if thinking_text:
+                        yield Delta(id=response_id, thinking=thinking_text)
 
                 # 工具调用输入增量
                 elif "toolUse" in delta_block:
@@ -568,6 +649,19 @@ class BedrockGateway(BaseGateway):
                         accumulated_tool_calls[block_index][
                             "input"
                         ] += tu_delta.get("input", "")
+
+            # 推理块结束才交出完整项。未收到 stop 的半截块不回放。
+            elif "contentBlockStop" in event:
+                stop_index: int = event["contentBlockStop"].get(
+                    "contentBlockIndex",
+                    0,
+                )
+                finished: dict[str, Any] | None = self._finish_reasoning_block(
+                    pending_reasoning,
+                    stop_index,
+                )
+                if finished:
+                    yield Delta(id=response_id, reasoning=[finished])
 
             # messageStop：包含结束原因
             elif "messageStop" in event:
